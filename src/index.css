@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@keyframes pmScrollUp {
+    0% { transform: translateY(0%); }
+    100% { transform: translateY(-50%); }
+  }
+  
+  @keyframes pmScrollDown {
+    0% { transform: translateY(-50%); }
+    100% { transform: translateY(0%); }
+  }
+  
+  /* Base */
+  .pm-scroll {
+    will-change: transform;
+  }
+  
+  /* Directions */
+  .pm-scroll-up { animation-name: pmScrollUp; animation-timing-function: linear; animation-iteration-count: infinite; }
+  .pm-scroll-down { animation-name: pmScrollDown; animation-timing-function: linear; animation-iteration-count: infinite; }
+  
+  /* Speeds */
+  .pm-scroll-slow { animation-duration: 26s; }
+  .pm-scroll-med { animation-duration: 18s; }
+  .pm-scroll-fast { animation-duration: 12s; }
