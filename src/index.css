@@ -1,4 +1,20 @@
 @import "tailwindcss";
+
+/* Mobile-friendly base styles */
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Touch-friendly: prevent double-tap zoom on buttons */
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
 @keyframes pmScrollUp {
     0% { transform: translateY(0%); }
     100% { transform: translateY(-50%); }
