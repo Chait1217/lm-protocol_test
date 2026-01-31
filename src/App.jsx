@@ -1,5 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import VaultCard from "./components/vault/VaultCard";
+import HowVaultsWorkSteps from "./components/vault/HowVaultsWorkSteps";
+import UtilizationGauge from "./components/vault/UtilizationGauge";
+import ApyBreakdownDonut from "./components/vault/ApyBreakdownDonut";
+import TvlChart from "./components/vault/TvlChart";
 import {
   Area,
   AreaChart,
@@ -205,8 +210,8 @@ const Footer = () => {
           <div>
             <h4 className="text-white font-medium mb-3">Community</h4>
             <div className="space-y-2 text-sm text-gray-400">
-              <div>Twitter</div>
-              <div>Discord</div>
+              <div>X</div>
+              <div>Telegram</div>
               <div>Blog</div>
             </div>
           </div>
@@ -852,28 +857,30 @@ const ProtocolPage = () => {
   );
 };
 
-// Mock vault data
-const mockVaults = [
-  { id: "usdc", name: "USDC Vault", symbol: "USDC", tvl: 1234567, apy: 12.34, utilization: 67.5 },
-  { id: "weth", name: "WETH Vault", symbol: "WETH", tvl: 2456789, apy: 8.56, utilization: 42.3 },
-];
+// USDC Vault data (extend with apyBreakdown when /api/vaults ready)
+const usdcVault = {
+  id: "usdc",
+  name: "USDC Vault",
+  symbol: "USDC",
+  tvl: 1234567,
+  apy: 12.34,
+  utilization: 67.5,
+  logo: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
+  apyBreakdown: { interestPct: 70, feesPct: 30 },
+};
 
-const formatTvl = (n) => "$" + n.toLocaleString();
-const formatApy = (n) => n.toFixed(2) + "%";
-const formatUtil = (n) => Math.max(0, Math.min(100, n)).toFixed(1) + "%";
-
-// Vault Page with USDC and WETH vault cards
+// Vault Page - premium redesign with educational sections
 const VaultPage = ({ walletConnected }) => {
-  const [amounts, setAmounts] = useState({ usdc: "", weth: "" });
-  const [errors, setErrors] = useState({ usdc: "", weth: "" });
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState("");
 
-  const handleAmountChange = (vaultId, val) => {
-    setAmounts((prev) => ({ ...prev, [vaultId]: val }));
+  const handleAmountChange = (val) => {
+    setAmount(val);
     const num = parseFloat(val);
     if (val && (isNaN(num) || num <= 0)) {
-      setErrors((prev) => ({ ...prev, [vaultId]: "Amount must be greater than 0" }));
+      setError("Amount must be greater than 0");
     } else {
-      setErrors((prev) => ({ ...prev, [vaultId]: "" }));
+      setError("");
     }
   };
 
@@ -882,93 +889,67 @@ const VaultPage = ({ walletConnected }) => {
     return !isNaN(num) && num > 0;
   };
 
-  const handleDeposit = (vaultId) => {
-    if (!isValid(amounts[vaultId])) return;
-    console.log("depositVault", vaultId, amounts[vaultId]);
+  const handleDeposit = () => {
+    if (!isValid(amount)) return;
+    console.log("depositVault", "usdc", amount);
   };
 
-  const handleWithdraw = (vaultId) => {
-    if (!isValid(amounts[vaultId])) return;
-    console.log("withdrawVault", vaultId, amounts[vaultId]);
+  const handleWithdraw = () => {
+    if (!isValid(amount)) return;
+    console.log("withdrawVault", "usdc", amount);
   };
 
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-12 sm:pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-10 sm:py-16">
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-16 sm:pb-24">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        {/* A) Hero section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="text-center py-10 sm:py-14"
+        >
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">
-            Liquidity <span className="text-[#00FF99]">Vaults</span>
+            Liquidity <span className="text-[#00FF99]">Vault</span>
           </h1>
           <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">
-            Provide USDC or WETH liquidity and earn real yield from trading fees
+            Provide USDC liquidity and earn real yield from interest and trading fees
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {mockVaults.map((vault) => (
-            <motion.div
-              key={vault.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: vault.id === "usdc" ? 0 : 0.1 }}
-              className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 rounded-xl border border-[#00FF99]/20"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">{vault.name}</h3>
-                <span className="px-2 py-1 text-sm font-medium bg-[#00FF99]/20 text-[#00FF99] rounded">
-                  {vault.symbol}
-                </span>
-              </div>
-
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">TVL</span>
-                  <span className="text-white font-medium">{formatTvl(vault.tvl)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">APY</span>
-                  <span className="text-[#00FF99] font-medium">{formatApy(vault.apy)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Utilization</span>
-                  <span className="text-white font-medium">{formatUtil(vault.utilization)}</span>
-                </div>
-              </div>
-
-              <div className="text-sm text-gray-400 mb-4">
-                Your balance in vault:{" "}
-                <span className="text-white font-medium">0 {vault.symbol}</span>
-              </div>
-
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amounts[vault.id] || ""}
-                onChange={(e) => handleAmountChange(vault.id, e.target.value)}
-                placeholder="0.00"
-                className="w-full bg-black border border-[#00FF99]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF99] mb-2 min-h-[48px] text-base"
-              />
-              {errors[vault.id] && <p className="text-red-400 text-sm mb-2">{errors[vault.id]}</p>}
-
-              <div className="flex gap-2 sm:gap-3">
-                <button
-                  onClick={() => handleDeposit(vault.id)}
-                  disabled={!walletConnected}
-                  className="flex-1 py-3 bg-[#00FF99] text-black font-bold rounded-lg hover:bg-[#00FF99]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[48px]"
-                >
-                  Deposit
-                </button>
-                <button
-                  onClick={() => handleWithdraw(vault.id)}
-                  disabled={!walletConnected}
-                  className="flex-1 py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-gray-700 min-h-[48px]"
-                >
-                  Withdraw
-                </button>
-              </div>
-            </motion.div>
-          ))}
+        {/* B) USDC Vault + How Vaults Work side by side (equal height) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-stretch mb-12 sm:mb-16">
+          <VaultCard
+            vault={usdcVault}
+            amount={amount}
+            error={error}
+            onAmountChange={handleAmountChange}
+            onDeposit={handleDeposit}
+            onWithdraw={handleWithdraw}
+            walletConnected={walletConnected}
+            userBalance={0}
+          />
+          <HowVaultsWorkSteps compact />
         </div>
+
+        {/* C) Vault Health - Utilization Gauge + APY Donut */}
+        <section className="py-8 sm:py-12">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white text-center mb-4">
+            Vault Health
+          </h2>
+          <p className="text-gray-400 text-center text-sm sm:text-base max-w-xl mx-auto mb-10">
+            Key metrics for the USDC vault
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <UtilizationGauge utilization={usdcVault.utilization} />
+            <ApyBreakdownDonut apyBreakdown={usdcVault.apyBreakdown} />
+          </div>
+
+          <div className="mt-6">
+            <TvlChart currentTvl={usdcVault.tvl} />
+          </div>
+        </section>
       </div>
     </div>
   );
