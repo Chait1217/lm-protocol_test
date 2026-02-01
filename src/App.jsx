@@ -1,10 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import VaultCard from "./components/vault/VaultCard";
 import HowVaultsWorkSteps from "./components/vault/HowVaultsWorkSteps";
 import UtilizationGauge from "./components/vault/UtilizationGauge";
 import ApyBreakdownDonut from "./components/vault/ApyBreakdownDonut";
 import TvlChart from "./components/vault/TvlChart";
+import WhitepaperPage from "./components/whitepaper/WhitepaperPage";
+import FAQPage from "./components/faq/FAQPage";
+import DocumentationPage from "./components/documentation/DocumentationPage";
 import {
   Area,
   AreaChart,
@@ -177,7 +180,7 @@ const Navbar = ({ currentPage, setCurrentPage, walletConnected, setWalletConnect
 };
 
 // Footer Component
-const Footer = () => {
+const Footer = ({ setCurrentPage }) => {
   return (
     <footer className="bg-black border-t border-[#00FF99]/10 py-8 pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -194,15 +197,15 @@ const Footer = () => {
           <div>
             <h4 className="text-white font-medium mb-3">Product</h4>
             <div className="space-y-2 text-sm text-gray-400">
-              <div>Markets</div>
-              <div>Vaults</div>
-              <div>Documentation</div>
+              <button onClick={() => setCurrentPage?.("market")} className="block text-left hover:text-[#00FF99] transition-colors">Markets</button>
+              <button onClick={() => setCurrentPage?.("vault")} className="block text-left hover:text-[#00FF99] transition-colors">Vaults</button>
+              <button onClick={() => setCurrentPage?.("documentation")} className="block text-left hover:text-[#00FF99] transition-colors">Documentation</button>
             </div>
           </div>
           <div>
             <h4 className="text-white font-medium mb-3">Resources</h4>
             <div className="space-y-2 text-sm text-gray-400">
-              <div>Whitepaper</div>
+              <button onClick={() => setCurrentPage?.("whitepaper")} className="block text-left hover:text-[#00FF99] transition-colors">Whitepaper</button>
               <div>Audit Reports</div>
               <div>GitHub</div>
             </div>
@@ -210,9 +213,9 @@ const Footer = () => {
           <div>
             <h4 className="text-white font-medium mb-3">Community</h4>
             <div className="space-y-2 text-sm text-gray-400">
-              <div>X</div>
-              <div>Telegram</div>
-              <div>Blog</div>
+              <a href="https://x.com/lm_protocole?s=21" target="_blank" rel="noopener noreferrer" className="block hover:text-[#00FF99] transition-colors">X</a>
+              <a href="#" className="block hover:text-[#00FF99] transition-colors">Telegram</a>
+              <button onClick={() => setCurrentPage?.("faq")} className="block text-left hover:text-[#00FF99] transition-colors">FAQ</button>
             </div>
           </div>
         </div>
@@ -290,9 +293,12 @@ const MarketPage = () => {
           {mockMarkets.map((market) => (
             <motion.div
               key={market.id}
+              role="button"
+              tabIndex={0}
               whileTap={{ scale: 0.99 }}
               onClick={() => setSelectedMarket(market)}
-              className="bg-gradient-to-r from-gray-900 to-black p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 cursor-pointer hover:border-[#00FF99]/50 active:border-[#00FF99]/50 transition-all"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedMarket(market); } }}
+              className="bg-gradient-to-r from-gray-900 to-black p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 cursor-pointer hover:border-[#00FF99]/50 active:border-[#00FF99]/50 active:ring-2 active:ring-[#00FF99]/40 transition-all select-none touch-manipulation"
             >
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -308,7 +314,7 @@ const MarketPage = () => {
                 </div>
                 <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2">
                   <div className="text-2xl sm:text-3xl font-bold text-[#00FF99]">{market.probability}%</div>
-                  <button className="px-4 py-2 bg-[#00FF99]/10 text-[#00FF99] rounded-lg border border-[#00FF99]/30 hover:bg-[#00FF99]/20 transition-all text-sm min-h-[44px]">
+                  <button className="px-4 py-2 bg-[#00FF99]/10 text-[#00FF99] rounded-lg border border-[#00FF99]/30 hover:bg-[#00FF99]/20 active:ring-2 active:ring-[#00FF99]/40 transition-all text-sm min-h-[44px] cursor-pointer select-none touch-manipulation">
                     Trade with Leverage
                   </button>
                 </div>
@@ -547,7 +553,7 @@ const ProtocolPage = () => {
             How It <span className="text-[#00FF99]">Works</span>
           </h1>
           <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">
-            A decentralized leverage layer built for the future of prediction markets
+            Prediction markets, but with leverage
           </p>
         </motion.div>
 
@@ -566,7 +572,7 @@ const ProtocolPage = () => {
               <motion.div
                 key={i}
                 initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
+                animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.2 }}
                 className="relative z-10 bg-black p-6 rounded-xl border border-[#00FF99]/30 text-center"
               >
@@ -960,6 +966,10 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState("protocol");
   const [walletConnected, setWalletConnected] = useState(false);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentPage]);
+
   return (
     <div className="min-h-screen bg-black">
       <Navbar
@@ -972,8 +982,11 @@ export default function App() {
       {currentPage === "market" && <MarketPage />}
       {currentPage === "protocol" && <ProtocolPage />}
       {currentPage === "vault" && <VaultPage walletConnected={walletConnected} />}
+      {currentPage === "whitepaper" && <WhitepaperPage />}
+      {currentPage === "faq" && <FAQPage />}
+      {currentPage === "documentation" && <DocumentationPage setCurrentPage={setCurrentPage} />}
 
-      <Footer />
+      <Footer setCurrentPage={setCurrentPage} />
     </div>
   );
 }

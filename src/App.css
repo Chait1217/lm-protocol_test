@@ -1,7 +1,13 @@
 #root {
   min-height: 100dvh;
   min-height: 100vh;
-  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tap highlight for clickable elements - visible green glow when you touch/slide on buttons */
+button, a, [role="button"], [data-clickable], input[type="submit"], input[type="button"], .cursor-pointer {
+  -webkit-tap-highlight-color: rgba(0, 255, 153, 0.55);
+  tap-highlight-color: rgba(0, 255, 153, 0.55);
+  cursor: pointer;
 }
 
 .logo {

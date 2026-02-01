@@ -11,9 +11,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Touch-friendly: prevent double-tap zoom on buttons */
-button, a, [role="button"] {
+/* Touch-friendly: prevent double-tap zoom, show tap feedback (visible green glow on touch/slide) */
+button, a, [role="button"], [data-clickable], .cursor-pointer {
   touch-action: manipulation;
+  cursor: pointer;
+  -webkit-tap-highlight-color: rgba(0, 255, 153, 0.55);
+  tap-highlight-color: rgba(0, 255, 153, 0.55);
+}
+button, [role="button"], [data-clickable] {
+  user-select: none;
+  -webkit-user-select: none;
 }
 @keyframes pmScrollUp {
     0% { transform: translateY(0%); }
