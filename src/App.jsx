@@ -245,13 +245,13 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
   const isConnecting = status === "connecting" || status === "reconnecting";
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-b border-[#00FF99]/10 safe-area-inset-top">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-black border-b-2 border-[#00FF99]/20 shadow-[0_4px_24px_rgba(0,0,0,0.5)] md:bg-black/90 md:backdrop-blur-xl md:border-b md:border-[#00FF99]/10 safe-area-inset-top">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 min-h-[56px] sm:min-h-[64px]">
         <div className="flex-shrink-0 flex items-center gap-2">
           <button
             type="button"
             onClick={() => setMobileMenuOpen((o) => !o)}
-            className="md:hidden p-2 -ml-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#00FF99]/10 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="md:hidden p-2.5 -ml-1 rounded-xl bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] hover:bg-[#00FF99]/20 hover:border-[#00FF99]/50 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -428,7 +428,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/70 z-40 md:hidden"
+              className="fixed inset-0 bg-black/80 z-40 md:hidden"
               onClick={closeMobileMenu}
               aria-hidden="true"
             />
@@ -437,34 +437,34 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: "100%" }}
               transition={{ type: "tween", duration: 0.25 }}
-              className="fixed top-0 right-0 bottom-0 w-[min(280px,85vw)] bg-black border-l border-[#00FF99]/20 z-50 md:hidden flex flex-col pt-[72px] pb-8 px-4 safe-area-inset"
+              className="fixed top-0 right-0 bottom-0 w-[min(280px,85vw)] bg-[#0c0c0c] border-l-2 border-[#00FF99]/30 shadow-[-8px_0_32px_rgba(0,0,0,0.6)] z-50 md:hidden flex flex-col pt-[72px] pb-8 px-4 safe-area-inset"
             >
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-2">
                 {navLinks.map((link) => (
                   <button
                     key={link.key}
                     onClick={() => handleNavClick(link.key)}
-                    className={`text-left capitalize px-4 py-3 rounded-lg font-medium transition-all min-h-[48px] ${
+                    className={`text-left capitalize px-4 py-3.5 rounded-xl font-semibold transition-all min-h-[48px] border ${
                       link.key === "market"
                         ? currentPage === "market"
-                          ? "bg-[#00FF99] text-black"
-                          : "text-[#00FF99] hover:bg-[#00FF99]/10"
+                          ? "bg-[#00FF99] text-black border-[#00FF99]"
+                          : "text-[#00FF99] border-[#00FF99]/30 hover:bg-[#00FF99]/10 hover:border-[#00FF99]/50"
                         : currentPage === link.key
-                          ? "text-[#00FF99] bg-[#00FF99]/10"
-                          : "text-gray-300 hover:bg-white/5 hover:text-white"
+                          ? "text-[#00FF99] bg-[#00FF99]/10 border-[#00FF99]/30"
+                          : "text-gray-300 border-transparent hover:bg-white/5 hover:text-white hover:border-gray-600"
                     }`}
                   >
                     {link.label}
                   </button>
                 ))}
               </div>
-              <div className="mt-4 pt-4 border-t border-[#00FF99]/20 text-xs text-gray-500">
+              <div className="mt-6 pt-4 border-t border-[#00FF99]/20 text-xs text-gray-500 bg-black/40 rounded-lg px-3 py-3">
                 {status === "connected" && address && (
-                  <p className="font-mono truncate mb-2" title={address}>
+                  <p className="font-mono truncate mb-2 text-gray-400" title={address}>
                     {address.slice(0, 10)}…{address.slice(-8)}
                   </p>
                 )}
-                <p>{status === "connected" ? "Connected" : status === "connecting" || status === "reconnecting" ? "Connecting…" : "Disconnected"}</p>
+                <p className="font-medium">{status === "connected" ? "Connected" : status === "connecting" || status === "reconnecting" ? "Connecting…" : "Disconnected"}</p>
               </div>
             </motion.div>
           </>
