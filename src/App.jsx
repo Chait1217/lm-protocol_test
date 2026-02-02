@@ -42,6 +42,8 @@ import {
   Film,
   ChevronLeft,
   UserCircle,
+  Menu,
+  X,
 } from "lucide-react";
 
 // Chart data centered on the market's actual probability (so graph matches displayed odds)
@@ -150,8 +152,8 @@ const MarketTicker = () => {
   const items = [...baseItems, ...baseItems, ...baseItems];
 
   return (
-    <div className="fixed top-[80px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-4 text-xs md:text-sm">
+    <div className="fixed top-14 sm:top-[72px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-4 text-xs md:text-sm">
         <span className="text-[#00FF99] font-semibold uppercase tracking-wider text-[0.6rem] md:text-[0.7rem]">
           Trending on Polymarket
         </span>
@@ -215,17 +217,24 @@ const MarketTicker = () => {
   );
 };
 
-// Navbar Component
+// Navbar Component (mobile-friendly with hamburger menu)
 const Navbar = ({ currentPage, setCurrentPage }) => {
   const { address, status, chain } = useAccount();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navLinks = [
     { key: "protocol", label: "Protocol" },
     { key: "market", label: "Market" },
     { key: "vault", label: "Vault" },
   ];
 
+  const closeMobileMenu = () => setMobileMenuOpen(false);
+  const handleNavClick = (key) => {
+    setCurrentPage(key);
+    closeMobileMenu();
+  };
+
   const btnBase =
-    "px-4 py-2 rounded-lg font-medium transition-all border min-w-[100px]";
+    "px-4 py-2 rounded-lg font-medium transition-all border min-w-[100px] min-h-[44px] flex items-center justify-center";
   const btnConnect =
     "bg-[#00FF99] text-black hover:bg-[#00FF99]/90 border-transparent";
   const btnConnected =
@@ -236,21 +245,29 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
   const isConnecting = status === "connecting" || status === "reconnecting";
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-b border-[#00FF99]/10">
-      <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-        <div className="flex-shrink-0">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-b border-[#00FF99]/10 safe-area-inset-top">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 min-h-[56px] sm:min-h-[64px]">
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((o) => !o)}
+            className="md:hidden p-2 -ml-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#00FF99]/10 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
           <img
             src="/lm-logo.png"
             alt="LM Protocol"
-            className="h-12 w-auto"
+            className="h-10 sm:h-12 w-auto"
           />
         </div>
-        <div className="hidden md:flex justify-center gap-8">
+        <div className="hidden md:flex justify-center gap-8 flex-1">
           {navLinks.map((link) => (
             <button
               key={link.key}
               onClick={() => setCurrentPage(link.key)}
-              className={`capitalize px-4 py-1 rounded transition-all
+              className={`capitalize px-4 py-2 rounded transition-all min-h-[44px]
                 ${
                   link.key === "market"
                     ? currentPage === "market"
@@ -267,10 +284,10 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3 justify-end flex-wrap">
-          {/* Visible connection status pill */}
+        <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0 min-w-0">
+          {/* Visible connection status pill - compact on small screens */}
           <span
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border
+            className={`inline-flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border
               ${status === "connected"
                 ? "bg-[#00FF99]/10 text-[#00FF99] border-[#00FF99]/30"
                 : isConnecting
@@ -281,29 +298,29 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
           >
             {status === "connected" ? (
               <>
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2 w-2 flex-shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FF99] opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00FF99]" />
                 </span>
                 <span className="hidden sm:inline">Connected</span>
                 {chain?.name && (
-                  <span className="hidden sm:inline text-[#00FF99]/80">• {chain.name}</span>
+                  <span className="hidden lg:inline text-[#00FF99]/80">• {chain.name}</span>
                 )}
                 {address && (
-                  <span className="truncate max-w-[80px] sm:max-w-[100px] font-mono text-xs opacity-90" title={address}>
+                  <span className="truncate max-w-[60px] sm:max-w-[100px] font-mono text-xs opacity-90" title={address}>
                     {address.slice(0, 6)}…{address.slice(-4)}
                   </span>
                 )}
               </>
             ) : isConnecting ? (
               <>
-                <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-ping" />
-                Connecting…
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-ping flex-shrink-0" />
+                <span className="hidden sm:inline">Connecting…</span>
               </>
             ) : (
               <>
-                <span className="inline-block h-2 w-2 rounded-full bg-gray-500" />
-                Disconnected
+                <span className="inline-block h-2 w-2 rounded-full bg-gray-500 flex-shrink-0" />
+                <span className="hidden sm:inline">Disconnected</span>
               </>
             )}
           </span>
@@ -401,6 +418,58 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
           </ConnectButton.Custom>
         </div>
       </div>
+
+      {/* Mobile menu overlay */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/70 z-40 md:hidden"
+              onClick={closeMobileMenu}
+              aria-hidden="true"
+            />
+            <motion.div
+              initial={{ opacity: 0, x: "100%" }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: "100%" }}
+              transition={{ type: "tween", duration: 0.25 }}
+              className="fixed top-0 right-0 bottom-0 w-[min(280px,85vw)] bg-black border-l border-[#00FF99]/20 z-50 md:hidden flex flex-col pt-[72px] pb-8 px-4 safe-area-inset"
+            >
+              <div className="flex flex-col gap-1">
+                {navLinks.map((link) => (
+                  <button
+                    key={link.key}
+                    onClick={() => handleNavClick(link.key)}
+                    className={`text-left capitalize px-4 py-3 rounded-lg font-medium transition-all min-h-[48px] ${
+                      link.key === "market"
+                        ? currentPage === "market"
+                          ? "bg-[#00FF99] text-black"
+                          : "text-[#00FF99] hover:bg-[#00FF99]/10"
+                        : currentPage === link.key
+                          ? "text-[#00FF99] bg-[#00FF99]/10"
+                          : "text-gray-300 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    {link.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-[#00FF99]/20 text-xs text-gray-500">
+                {status === "connected" && address && (
+                  <p className="font-mono truncate mb-2" title={address}>
+                    {address.slice(0, 10)}…{address.slice(-8)}
+                  </p>
+                )}
+                <p>{status === "connected" ? "Connected" : status === "connecting" || status === "reconnecting" ? "Connecting…" : "Disconnected"}</p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </nav>
   );
 };
@@ -538,22 +607,22 @@ const CategoriesCarousel = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 mt-20 mb-8">
-      <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20 mb-8">
+      <h2 className="text-lg sm:text-xl font-semibold text-white mb-4 sm:mb-6 flex items-center gap-2">
         <span className="text-[#00FF99]">Categories</span> Polymarket
       </h2>
       <div className="relative flex items-center gap-2">
         <button
           type="button"
           onClick={() => scroll("prev")}
-          className="flex-shrink-0 z-10 w-12 h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 transition-colors"
+          className="flex-shrink-0 z-10 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
           aria-label="Previous categories"
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
         <div
           ref={scrollRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden flex gap-5 pb-2 scroll-smooth snap-x snap-mandatory"
+          className="flex-1 overflow-x-auto overflow-y-hidden flex gap-4 sm:gap-5 pb-2 scroll-smooth snap-x snap-mandatory -webkit-overflow-scrolling-touch"
           style={{ scrollbarWidth: "thin" }}
         >
           {POLYMARKET_CATEGORIES.map((cat) => {
@@ -594,7 +663,7 @@ const CategoriesCarousel = () => {
         <button
           type="button"
           onClick={() => scroll("next")}
-          className="flex-shrink-0 z-10 w-12 h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 transition-colors"
+          className="flex-shrink-0 z-10 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
           aria-label="Next categories"
         >
           <ChevronRight className="w-6 h-6" />
@@ -899,26 +968,26 @@ const MarketPage = () => {
   }, [featuredMarket?.conditionId, orderBookSide]);
 
   return (
-    <div className="min-h-screen bg-black pt-28 pb-16">
+    <div className="min-h-screen bg-black pt-24 sm:pt-28 pb-12 sm:pb-16 overflow-x-hidden">
       {/* Hero */}
-      <div className="max-w-7xl mx-auto px-6 py-16 text-center relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center relative">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <h1 className="text-5xl md:text-7xl font-bold mb-6">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold mb-4 sm:mb-6">
             <span className="text-white">Institutional-Grade</span>
             <br />
             <span className="text-[#00FF99]">Leverage Trading</span>
           </h1>
-          <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
+          <p className="text-base sm:text-xl text-gray-400 mb-6 sm:mb-8 max-w-2xl mx-auto px-1">
             Powered by Base L2. Trade prediction markets with up to 5x leverage.
           </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="px-8 py-4 bg-[#00FF99] text-black font-bold rounded-lg text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all"
+            className="min-h-[48px] px-6 sm:px-8 py-3 sm:py-4 bg-[#00FF99] text-black font-bold rounded-lg text-base sm:text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all"
           >
             Apply for alpha access<ArrowUpRight className="inline ml-2" />
           </motion.button>
@@ -946,9 +1015,9 @@ const MarketPage = () => {
       </div>
 
       {/* Bloc marché principal – version inspirée de l'interface Polymarket */}
-      <div className="max-w-7xl mx-auto px-6 mt-12">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-3xl font-bold text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 sm:mt-12">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-xl sm:text-3xl font-bold text-white">
             {featuredMarket ? "Live Polymarket integration" : "Loading market..."}
           </h2>
           <span className="hidden md:inline-flex items-center gap-2 text-xs px-3 py-1 rounded-full bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] uppercase tracking-widest">
@@ -963,9 +1032,9 @@ const MarketPage = () => {
           </div>
         ) : (
         <>
-        <div className="grid md:grid-cols-2 gap-8 items-stretch">
+        <div className="grid md:grid-cols-2 gap-6 sm:gap-8 items-stretch">
             {/* Carte marché façon Polymarket */}
-            <div className="bg-gradient-to-br from-gray-900 to-black p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col">
+            <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1 rounded-full text-[0.65rem] bg-[#00FF99]/10 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest">
@@ -986,12 +1055,12 @@ const MarketPage = () => {
                   </a>
                 )}
               </div>
-              <h3 className="text-white font-bold text-2xl mb-3">
+              <h3 className="text-white font-bold text-lg sm:text-2xl mb-3 line-clamp-2">
                 {featuredMarket?.title || "Loading market..."}
               </h3>
-              <div className="flex items-end justify-between mb-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
                 <div className="flex items-baseline gap-3">
-                  <span className="text-5xl font-extrabold text-[#00FF99] leading-none">
+                  <span className="text-4xl sm:text-5xl font-extrabold text-[#00FF99] leading-none">
                     {probability}%
                   </span>
                   <div className="flex flex-col gap-1">
@@ -1067,7 +1136,7 @@ const MarketPage = () => {
             </div>
 
             {/* Ticket d'ordre inspiré de Polymarket avec levier */}
-            <div className="bg-gray-950 p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col">
+            <div className="bg-gray-950 p-4 sm:p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
               {/* En-tête type Polymarket : Buy / Sell + type d'ordre */}
               <div className="flex items-center justify-between mb-4">
                 <div className="inline-flex rounded-lg bg-black/60 border border-gray-800 p-0.5">
@@ -1104,7 +1173,7 @@ const MarketPage = () => {
                 <div className="flex gap-2 mb-3">
                   <button
                     onClick={() => setOrderBookSide("YES")}
-                    className={`flex-1 h-10 rounded-md text-xs font-semibold border transition-all ${
+                    className={`flex-1 min-h-[44px] rounded-md text-xs font-semibold border transition-all ${
                       orderBookSide === "YES"
                         ? "bg-[#00FF99] text-black border-[#00FF99]"
                         : "bg-gray-900 text-gray-300 border-gray-700 hover:border-[#00FF99]/60"
@@ -1117,7 +1186,7 @@ const MarketPage = () => {
                   </button>
                   <button
                     onClick={() => setOrderBookSide("NO")}
-                    className={`flex-1 h-10 rounded-md text-xs font-semibold border transition-all ${
+                    className={`flex-1 min-h-[44px] rounded-md text-xs font-semibold border transition-all ${
                       orderBookSide === "NO"
                         ? "bg-red-500 text-white border-red-400"
                         : "bg-gray-900 text-gray-300 border-gray-700 hover:border-red-400/60"
@@ -1333,7 +1402,7 @@ const MarketPage = () => {
                   </div>
                 </div>
 
-                <button className="w-full py-3.5 bg-[#00FF99] text-black font-bold rounded-lg opacity-70 cursor-not-allowed">
+                <button className="w-full min-h-[48px] py-3.5 bg-[#00FF99] text-black font-bold rounded-lg opacity-70 cursor-not-allowed">
                   Simulated Order (Demo Only)
                 </button>
               </div>
@@ -1344,8 +1413,8 @@ const MarketPage = () => {
       </div>
 
       {/* Value props */}
-      <div className="max-w-7xl mx-auto px-6 mt-20">
-        <div className="grid md:grid-cols-3 gap-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
           {[
             { icon: Activity, title: "Mark-Based Liquidation", desc: "Liquidation follows mark price (probability move). Your liquidation level is shown before you trade. No hidden triggers." },
             { icon: Lock, title: "Isolated Margin", desc: "Margin is per position. One liquidated position does not pull collateral from your other positions; no cross-margin contagion." },
@@ -1687,8 +1756,8 @@ const ProfilePage = () => {
   const displayName = ensName ?? shortAddress;
 
   return (
-    <div className="min-h-screen bg-black pt-20 pb-16">
-      <div className="max-w-5xl mx-auto px-6 py-10">
+    <div className="min-h-screen bg-black pt-20 pb-12 sm:pb-16 overflow-x-hidden">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         {/* Header: photo + pseudo + infos */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -1752,7 +1821,7 @@ const ProfilePage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8"
         >
           {[
             { label: "PnL Total", value: `$${mockProfileStats.pnlTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, change: null, positive: null },
