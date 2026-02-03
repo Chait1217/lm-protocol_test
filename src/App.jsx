@@ -480,10 +480,11 @@ const Footer = ({ setCurrentPage }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           <div>
-            <div className="text-xl font-bold mb-3">
-              <span className="text-white">LM</span>
-              <span className="text-[#00FF99]">Protocol</span>
-            </div>
+            <img
+              src="/lm-logo.png"
+              alt="LM Protocol"
+              className="h-10 sm:h-12 w-auto mb-3"
+            />
             <p className="text-gray-500 text-sm">
               Institutional-grade leverage for prediction markets
             </p>
