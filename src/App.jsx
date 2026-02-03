@@ -9,7 +9,7 @@ import ApyBreakdownDonut from "./components/vault/ApyBreakdownDonut";
 import WhitepaperPage from "./components/whitepaper/WhitepaperPage";
 import FAQPage from "./components/faq/FAQPage";
 import DocumentationPage from "./components/documentation/DocumentationPage";
-import HowVaultWorksDiagram from "./components/HowVaultWorksDiagram";
+import HowLMWorksSixBoxes from "./components/HowLMWorksSixBoxes";
 import {
   Area,
   AreaChart,
@@ -1574,29 +1574,7 @@ const ProtocolPage = () => {
             <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($15.34 total)</h3>
             <InterestSplitChart />
           </div>
-          <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
-            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Protocol Flow</h3>
-            <HowVaultWorksDiagram />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-10 sm:mb-16">
-          {[
-            { title: "Yield Vaults", bullets: ["LPs deposit USDC into vaults to earn yield from borrow interest", "Protocol takes a cut (e.g. 15%); LPs receive the majority (85%)", "Utilization drives APY—higher utilization means higher LP returns"] },
-            { title: "Utilization Curve", bullets: ["Borrow APR increases with vault utilization to balance supply/demand", "Low utilization = lower APR; high utilization = higher APR", "LP APY = Borrow APR × Utilization × (1 − protocol cut)"] },
-            { title: "Liquidation Engine", bullets: ["Auto-closes positions when maintenance margin is breached", "Protects vaults from bad debt; liquidation fee (2–5%) split between liquidators, insurance, treasury", "Real-time oracle monitoring ensures timely execution"] },
-          ].map((box, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.1 }} className="bg-gray-900 p-6 rounded-xl border border-[#00FF99]/20">
-              <h3 className="text-white font-bold text-lg mb-4">{box.title}</h3>
-              <ul className="space-y-2 text-gray-400 text-sm">
-                {box.bullets.map((b, j) => (
-                  <li key={j} className="flex items-start gap-2">
-                    <Circle className="w-2 h-2 mt-1.5 text-[#00FF99] fill-current flex-shrink-0" />
-                    {b}
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
-          ))}
+          <HowLMWorksSixBoxes />
         </div>
         <div className="bg-gradient-to-br from-gray-900 to-black p-6 sm:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 sm:mb-8 text-center">$LMP Tokenomics</h2>
