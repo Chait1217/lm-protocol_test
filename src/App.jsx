@@ -151,7 +151,7 @@ const MarketTicker = () => {
   const items = [...baseItems, ...baseItems, ...baseItems];
 
   return (
-    <div className="fixed top-[56px] sm:top-[64px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
+    <div className="fixed top-[72px] sm:top-[80px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-4 text-xs md:text-sm">
         <span className="text-[#00FF99] font-semibold uppercase tracking-wider text-[0.6rem] md:text-[0.7rem]">
           Trending on Polymarket
@@ -245,7 +245,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black border-b-2 border-[#00FF99]/20 shadow-[0_4px_24px_rgba(0,0,0,0.5)] md:bg-black/90 md:backdrop-blur-xl md:border-b md:border-[#00FF99]/10 safe-area-inset-top">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 min-h-[56px] sm:min-h-[64px]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-3 min-h-[72px] sm:min-h-[80px]">
         <div className="flex-shrink-0 flex items-center gap-2">
           <button
             type="button"
@@ -436,7 +436,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: "100%" }}
               transition={{ type: "tween", duration: 0.25 }}
-              className="fixed top-0 right-0 bottom-0 w-[min(280px,85vw)] bg-[#0c0c0c] border-l-2 border-[#00FF99]/30 shadow-[-8px_0_32px_rgba(0,0,0,0.6)] z-50 md:hidden flex flex-col pt-[72px] pb-8 px-4 safe-area-inset"
+              className="fixed top-0 right-0 bottom-0 w-[min(280px,85vw)] bg-[#0c0c0c] border-l-2 border-[#00FF99]/30 shadow-[-8px_0_32px_rgba(0,0,0,0.6)] z-50 md:hidden flex flex-col pt-[72px] sm:pt-[80px] pb-8 px-4 safe-area-inset"
             >
               <div className="flex flex-col gap-2">
                 {navLinks.map((link) => (
@@ -967,7 +967,7 @@ const MarketPage = () => {
   }, [featuredMarket?.conditionId, orderBookSide]);
 
   return (
-    <div className="min-h-screen bg-black pt-28 sm:pt-32 pb-12 sm:pb-16 overflow-x-hidden">
+    <div className="min-h-screen bg-black pt-32 sm:pt-36 pb-12 sm:pb-16 overflow-x-hidden">
       {/* Hero */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center relative">
         <motion.div
