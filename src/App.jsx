@@ -1537,6 +1537,9 @@ const ProtocolPage = () => {
             ))}
           </div>
         </div>
+        <div className="mb-10 sm:mb-16">
+          <HowLMWorksSixBoxes />
+        </div>
         {/* Example Trade (5x leverage) */}
         <div className="mb-10 sm:mb-16">
           <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 text-center">Example Trade</h2>
@@ -1574,7 +1577,6 @@ const ProtocolPage = () => {
             <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($15.34 total)</h3>
             <InterestSplitChart />
           </div>
-          <HowLMWorksSixBoxes />
         </div>
         <div className="bg-gradient-to-br from-gray-900 to-black p-6 sm:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 sm:mb-8 text-center">$LMP Tokenomics</h2>

@@ -63,7 +63,7 @@ function StepBox({ step }) {
         <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-[#00FF99]/10 border border-[#00FF99]/20 flex items-center justify-center group-hover:shadow-[0_0_16px_rgba(0,255,153,0.2)] transition-shadow">
           <Icon className="w-5 h-5 text-[#00FF99]" aria-hidden="true" />
         </div>
-        <div className="min-w-0 flex-1 pt-0.5">
+        <div className="min-w-0 flex-1 pt-0.5 pr-12 sm:pr-14">
           <h3 id={`step-${step.number}-title`} className="text-white font-bold text-sm sm:text-base mb-2 leading-tight">
             {step.title}
           </h3>
