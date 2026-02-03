@@ -6,7 +6,6 @@ import VaultCard from "./components/vault/VaultCard";
 import HowVaultsWorkSteps from "./components/vault/HowVaultsWorkSteps";
 import UtilizationGauge from "./components/vault/UtilizationGauge";
 import ApyBreakdownDonut from "./components/vault/ApyBreakdownDonut";
-import TvlChart from "./components/vault/TvlChart";
 import WhitepaperPage from "./components/whitepaper/WhitepaperPage";
 import FAQPage from "./components/faq/FAQPage";
 import DocumentationPage from "./components/documentation/DocumentationPage";
@@ -152,7 +151,7 @@ const MarketTicker = () => {
   const items = [...baseItems, ...baseItems, ...baseItems];
 
   return (
-    <div className="fixed top-14 sm:top-[72px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
+    <div className="fixed top-20 sm:top-24 left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-4 text-xs md:text-sm">
         <span className="text-[#00FF99] font-semibold uppercase tracking-wider text-[0.6rem] md:text-[0.7rem]">
           Trending on Polymarket
@@ -968,7 +967,7 @@ const MarketPage = () => {
   }, [featuredMarket?.conditionId, orderBookSide]);
 
   return (
-    <div className="min-h-screen bg-black pt-24 sm:pt-28 pb-12 sm:pb-16 overflow-x-hidden">
+    <div className="min-h-screen bg-black pt-28 sm:pt-32 pb-12 sm:pb-16 overflow-x-hidden">
       {/* Hero */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center relative">
         <motion.div
@@ -1973,9 +1972,6 @@ const VaultPage = ({ walletConnected }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <UtilizationGauge utilization={usdcVault.utilization} />
             <ApyBreakdownDonut apyBreakdown={usdcVault.apyBreakdown} />
-          </div>
-          <div className="mt-6">
-            <TvlChart currentTvl={usdcVault.tvl} />
           </div>
         </section>
       </div>
