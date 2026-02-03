@@ -1446,33 +1446,33 @@ const interestSplitData = [
   { name: "Protocol: $2.30", value: 15, color: "#888888" },
 ];
 const InterestSplitChart = () => (
-  <div className="relative">
-    <div className="h-[180px] sm:h-[200px]">
+  <div className="relative min-w-0">
+    <div className="h-[240px] sm:h-[280px] min-h-[200px]">
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 8, right: 20, bottom: 8, left: 20 }}>
+        <PieChart margin={{ top: 12, right: 24, bottom: 12, left: 24 }}>
           <Pie
             data={interestSplitData}
             cx="50%"
             cy="50%"
-            innerRadius="45%"
-            outerRadius="70%"
+            innerRadius="38%"
+            outerRadius="88%"
             paddingAngle={0}
             dataKey="value"
             stroke="none"
             label={({ name, cx, cy, midAngle, outerRadius, fill }) => {
               const RADIAN = Math.PI / 180;
-              const r = typeof outerRadius === "number" ? outerRadius : 60;
-              const labelRadius = r + 18;
+              const r = typeof outerRadius === "number" ? outerRadius : 80;
+              const labelRadius = r + 14;
               const x = cx + labelRadius * Math.cos(-midAngle * RADIAN);
               const y = cy + labelRadius * Math.sin(-midAngle * RADIAN);
               const textAnchor = x >= cx ? "start" : "end";
               return (
-                <text x={x} y={y} fill={fill === "#00FF99" ? "#00FF99" : "#aaaaaa"} textAnchor={textAnchor} dominantBaseline="middle" fontSize={11} fontWeight={600}>
+                <text x={x} y={y} fill={fill === "#00FF99" ? "#00FF99" : "#aaaaaa"} textAnchor={textAnchor} dominantBaseline="middle" fontSize={12} fontWeight={600}>
                   {name}
                 </text>
               );
             }}
-            labelLine={{ stroke: "#666", strokeWidth: 1, length: 12, lengthType: "straight" }}
+            labelLine={{ stroke: "#666", strokeWidth: 1, length: 10, lengthType: "straight" }}
           >
             {interestSplitData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1505,14 +1505,14 @@ const ProtocolPage = () => {
     { quarter: "Q4 2026", title: "AI Agents", items: ["AI Trading Agents", "Cross-chain Bridge", "DAO Governance"] },
   ];
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-12 sm:pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-12 sm:pb-16 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 min-w-0">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-10 sm:py-16">
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
           <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">Prediction markets, but with leverage</p>
         </motion.div>
-        <div className="bg-gradient-to-br from-gray-900 to-black p-6 sm:p-12 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-8 sm:mb-12 text-center">Protocol Architecture</h2>
+        <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-12 rounded-2xl border border-[#00FF99]/20 mb-8 sm:mb-16">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-6 sm:mb-8 md:mb-12 text-center">Protocol Architecture</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 relative">
             <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-[#00FF99]/0 via-[#00FF99]/50 to-[#00FF99]/0" />
             {[
@@ -1541,9 +1541,9 @@ const ProtocolPage = () => {
           <HowLMWorksSixBoxes />
         </div>
         {/* Example Trade (5x leverage) */}
-        <div className="mb-10 sm:mb-16">
-          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 text-center">Example Trade</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        <div className="mb-8 sm:mb-16">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 text-center px-2">Example Trade</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {[
               { icon: TrendingUp, title: "Position", rows: [["Collateral:", "$1,000 USDC"], ["Side:", "YES"], ["Leverage:", "5x"], ["Entry price:", "$0.60"], ["Exposure:", "$5,000"], ["Approx. shares:", "8,333.33"]] },
               { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee (0.2% of exposure):", "$10"], ["Borrowed from Vaults:", "≈$4,000"], ["APR:", "20%"], ["Duration:", "7 days"], ["Interest paid:", "$15.34"], ["Protocol cut (15%):", "$2.30"], ["LPs receive:", "$13.04"]] },
@@ -1558,7 +1558,7 @@ const ProtocolPage = () => {
                 ],
               },
             ].map((box, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.1 }} className="bg-gray-900 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20">
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.1 }} className="bg-gray-900 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0">
                 <div className="flex items-center gap-2 mb-3 sm:mb-4">
                   <box.icon className="w-5 h-5 text-[#00FF99] flex-shrink-0" />
                   <h3 className="text-[#00FF99] font-bold">{box.title}</h3>
@@ -1578,8 +1578,8 @@ const ProtocolPage = () => {
             <InterestSplitChart />
           </div>
         </div>
-        <div className="bg-gradient-to-br from-gray-900 to-black p-6 sm:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 sm:mb-8 text-center">$LMP Tokenomics</h2>
+        <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16 overflow-x-hidden">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-4 sm:mb-6 md:mb-8 text-center">$LMP Tokenomics</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
             <div>
               <h3 className="text-[#00FF99] font-bold text-xl mb-4">Utility</h3>
@@ -1679,7 +1679,7 @@ const ProfilePage = () => {
 
   if (!isConnected || !address) {
     return (
-      <div className="min-h-screen bg-black pt-20 pb-16 flex items-center justify-center">
+      <div className="min-h-screen bg-black pt-20 pb-16 flex items-center justify-center overflow-x-hidden px-4">
         <div className="text-center text-gray-400">
           <p className="mb-4">Connect your wallet to view your profile.</p>
           <ConnectButton.Custom>
@@ -1888,7 +1888,7 @@ const VaultPage = ({ walletConnected }) => {
   };
 
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-16 sm:pb-24">
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-16 sm:pb-24 overflow-x-hidden">
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="text-center py-10 sm:py-14">
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">
@@ -1936,7 +1936,7 @@ export default function App() {
   }, [currentPage]);
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black overflow-x-hidden">
       <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
 
       {currentPage === "market" && <MarketTicker />}

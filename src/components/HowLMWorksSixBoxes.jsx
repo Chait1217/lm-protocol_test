@@ -51,7 +51,7 @@ function StepBox({ step }) {
   const Icon = step.icon;
   return (
     <article
-      className="group relative rounded-xl border border-[#00FF99]/20 bg-gradient-to-b from-gray-900 to-black p-5 sm:p-6 transition-all duration-300 hover:border-[#00FF99]/35 hover:shadow-[0_0_24px_rgba(0,255,153,0.08)]"
+      className="group relative rounded-xl border border-[#00FF99]/20 bg-gradient-to-b from-gray-900 to-black p-4 sm:p-5 md:p-6 transition-all duration-300 hover:border-[#00FF99]/35 hover:shadow-[0_0_24px_rgba(0,255,153,0.08)] min-h-[88px] sm:min-h-[96px]"
       aria-labelledby={`step-${step.number}-title`}
     >
       <div className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-[#00FF99]/15 border border-[#00FF99]/25 flex items-center justify-center">
@@ -79,19 +79,19 @@ function StepBox({ step }) {
 export default function HowLMWorksSixBoxes() {
   return (
     <section
-      className="rounded-2xl border border-[#00FF99]/15 bg-black/40 p-6 sm:p-8"
+      className="rounded-2xl border border-[#00FF99]/15 bg-black/40 p-4 sm:p-6 md:p-8"
       aria-labelledby="how-lm-works-heading"
     >
-      <header className="text-center mb-8 sm:mb-10">
+      <header className="text-center mb-6 sm:mb-8 md:mb-10">
         <h2 id="how-lm-works-heading" className="text-xl sm:text-2xl font-bold text-white mb-2">
           How LM Works
         </h2>
-        <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto">
+        <p className="text-gray-400 text-sm sm:text-base max-w-2xl mx-auto px-1">
           Vault liquidity powers leverage — fees and interest flow back as real yield.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         {STEPS.map((step) => (
           <StepBox key={step.number} step={step} />
         ))}
