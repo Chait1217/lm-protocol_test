@@ -1569,13 +1569,13 @@ const ProtocolPage = () => {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-10 sm:mb-16">
+        <div className="space-y-4 sm:space-y-6 mb-10 sm:mb-16">
           <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
             <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($15.34 total)</h3>
             <InterestSplitChart />
           </div>
           <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
-            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">How vault flow works</h3>
+            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Protocol Flow</h3>
             <HowVaultWorksDiagram />
           </div>
         </div>

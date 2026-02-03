@@ -141,7 +141,7 @@ export default function HowVaultWorksDiagram() {
       aria-labelledby="how-vault-works-diagram-title"
     >
       <h2 id="how-vault-works-diagram-title" className="sr-only">
-        How the vault flow works
+        Protocol Flow
       </h2>
 
       {/* Mobile: vertical timeline */}
