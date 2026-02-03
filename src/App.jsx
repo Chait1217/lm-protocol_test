@@ -10,6 +10,7 @@ import WhitepaperPage from "./components/whitepaper/WhitepaperPage";
 import FAQPage from "./components/faq/FAQPage";
 import DocumentationPage from "./components/documentation/DocumentationPage";
 import HowLMWorksSixBoxes from "./components/HowLMWorksSixBoxes";
+import AlphaAccessPage from "./components/alpha/AlphaAccessPage";
 import {
   Area,
   AreaChart,
@@ -676,7 +677,7 @@ const CategoriesCarousel = () => {
 let realMarketCache = null;
 
 // Market Page
-const MarketPage = () => {
+const MarketPage = ({ setCurrentPage }) => {
   const [featuredMarket, setFeaturedMarket] = useState(null);
   const [leverage, setLeverage] = useState(2.5);
   const [positionSize, setPositionSize] = useState("1000"); // legacy, now used as collateral helper
@@ -984,11 +985,14 @@ const MarketPage = () => {
             Powered by Base L2. Trade prediction markets with up to 5x leverage.
           </p>
           <motion.button
+            type="button"
+            onClick={() => setCurrentPage?.("alpha")}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="min-h-[48px] px-6 sm:px-8 py-3 sm:py-4 bg-[#00FF99] text-black font-bold rounded-lg text-base sm:text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all"
+            className="min-h-[48px] px-6 sm:px-8 py-3 sm:py-4 bg-[#00FF99] text-black font-bold rounded-lg text-base sm:text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all inline-flex items-center justify-center gap-2"
           >
-            Apply for alpha access<ArrowUpRight className="inline ml-2" />
+            Apply for alpha access
+            <ArrowUpRight className="w-5 h-5" />
           </motion.button>
         </motion.div>
 
@@ -1941,7 +1945,8 @@ export default function App() {
 
       {currentPage === "market" && <MarketTicker />}
 
-      {currentPage === "market" && <MarketPage />}
+      {currentPage === "market" && <MarketPage setCurrentPage={setCurrentPage} />}
+      {currentPage === "alpha" && <AlphaAccessPage setCurrentPage={setCurrentPage} />}
       {currentPage === "protocol" && <ProtocolPage />}
       {currentPage === "vault" && <VaultPage walletConnected={isConnected} />}
       {currentPage === "profile" && <ProfilePage />}
