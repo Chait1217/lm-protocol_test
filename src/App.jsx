@@ -9,11 +9,10 @@ import ApyBreakdownDonut from "./components/vault/ApyBreakdownDonut";
 import WhitepaperPage from "./components/whitepaper/WhitepaperPage";
 import FAQPage from "./components/faq/FAQPage";
 import DocumentationPage from "./components/documentation/DocumentationPage";
+import HowVaultWorksDiagram from "./components/HowVaultWorksDiagram";
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   Cell,
   Pie,
   PieChart,
@@ -1441,17 +1440,10 @@ const MarketPage = () => {
   );
 };
 
-// Protocol page data + charts (from current repo)
+// Protocol page data + charts (5x example trade)
 const interestSplitData = [
-  { name: "LPs: $29.34", value: 85, color: "#00FF99" },
-  { name: "Protocol: $5.18", value: 15, color: "#888888" },
-];
-const exposureVsCollateralData = [
-  { leverage: "1x", collateral: 1000, exposure: 1000 },
-  { leverage: "2x", collateral: 1000, exposure: 2000 },
-  { leverage: "3x", collateral: 1000, exposure: 3000 },
-  { leverage: "5x", collateral: 1000, exposure: 5000 },
-  { leverage: "10x", collateral: 1000, exposure: 10000 },
+  { name: "LPs: $13.04", value: 85, color: "#00FF99" },
+  { name: "Protocol: $2.30", value: 15, color: "#888888" },
 ];
 const InterestSplitChart = () => (
   <div className="relative">
@@ -1493,29 +1485,13 @@ const InterestSplitChart = () => (
       <div className="flex items-center gap-2">
         <div className="w-3 h-3 rounded-sm bg-[#00FF99]" />
         <span className="text-gray-400">LPs:</span>
-        <span className="text-[#00FF99] font-medium">$29.34</span>
+        <span className="text-[#00FF99] font-medium">$13.04</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="w-3 h-3 rounded-sm bg-[#888888]" />
         <span className="text-gray-400">Protocol:</span>
-        <span className="text-gray-400 font-medium">$5.18</span>
+        <span className="text-gray-400 font-medium">$2.30</span>
       </div>
-    </div>
-  </div>
-);
-const ExposureVsCollateralChart = () => (
-  <div className="relative h-[200px] sm:h-[220px]">
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={exposureVsCollateralData} margin={{ top: 5, right: 20, left: 0, bottom: 25 }}>
-        <XAxis dataKey="leverage" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
-        <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
-        <Bar dataKey="exposure" fill="#00FF99" radius={[4, 4, 0, 0]} name="Exposure ($)" />
-        <Bar dataKey="collateral" fill="#888888" radius={[4, 4, 0, 0]} name="Collateral ($)" />
-      </BarChart>
-    </ResponsiveContainer>
-    <div className="flex gap-4 mt-2 justify-center text-xs">
-      <span className="text-[#00FF99]">— Exposure</span>
-      <span className="text-gray-400">— Collateral</span>
     </div>
   </div>
 );
@@ -1561,56 +1537,46 @@ const ProtocolPage = () => {
             ))}
           </div>
         </div>
-        {/* Example Trade */}
+        {/* Example Trade (5x leverage) */}
         <div className="mb-10 sm:mb-16">
           <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 text-center">Example Trade</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {[
-              { icon: TrendingUp, title: "Position", rows: [["Collateral:", "$1,000 USDC"], ["Side:", "YES"], ["Leverage:", "10x"], ["Entry price:", "$0.60"], ["Exposure:", "$10,000"], ["Approx. shares:", "16,666.67"]] },
-              { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee (0.2% of exposure):", "$20"], ["Borrowed from Vaults:", "≈$9,000"], ["APR:", "20%"], ["Duration:", "7 days"], ["Interest paid:", "$34.52"], ["Protocol cut (15%):", "$5.18"], ["LPs receive:", "$29.34"]] },
-              { icon: Lightbulb, title: "Outcomes", desc: "IF PRICE MOVED UP: $0.60 + $0.06 = $0.66. P&L (before fees/interest): +$1,000. IF MAINTENANCE MARGIN HIT: LPs risk protocol debt. Liquidation fee (e.g., 3–8%) split between liquidators, insurance, treasury." },
+              { icon: TrendingUp, title: "Position", rows: [["Collateral:", "$1,000 USDC"], ["Side:", "YES"], ["Leverage:", "5x"], ["Entry price:", "$0.60"], ["Exposure:", "$5,000"], ["Approx. shares:", "8,333.33"]] },
+              { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee (0.2% of exposure):", "$10"], ["Borrowed from Vaults:", "≈$4,000"], ["APR:", "20%"], ["Duration:", "7 days"], ["Interest paid:", "$15.34"], ["Protocol cut (15%):", "$2.30"], ["LPs receive:", "$13.04"]] },
+              {
+                icon: Lightbulb,
+                title: "Outcomes",
+                rows: [
+                  ["If price moves up:", "$0.60 → $0.66"],
+                  ["P&L (before fees/interest):", "+$500"],
+                  ["If maintenance margin hit:", "Position liquidated"],
+                  ["Liquidation fee (3–8%):", "Liquidators, insurance, treasury"],
+                ],
+              },
             ].map((box, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.1 }} className="bg-gray-900 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20">
                 <div className="flex items-center gap-2 mb-3 sm:mb-4">
                   <box.icon className="w-5 h-5 text-[#00FF99] flex-shrink-0" />
                   <h3 className="text-[#00FF99] font-bold">{box.title}</h3>
                 </div>
-                {box.rows ? (
-                  <div className="space-y-2 text-gray-400 text-sm">
-                    {box.rows.map(([k, v], j) => (
-                      <div key={j} className="flex justify-between"><span>{k}</span><span className="text-white">{v}</span></div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 text-sm">{box.desc}</p>
-                )}
+                <div className="space-y-2 text-gray-400 text-sm">
+                  {box.rows.map(([k, v], j) => (
+                    <div key={j} className="flex justify-between gap-2"><span>{k}</span><span className="text-white text-right">{v}</span></div>
+                  ))}
+                </div>
               </motion.div>
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-10 sm:mb-16">
-          {[
-            { label: "1. COLLATERAL", short: "$1,000", red: false },
-            { label: "2. POSITION", short: "10x YES", red: false },
-            { label: "3. FEES", short: "Open $20", red: false },
-            { label: "4. INTEREST", short: "$34.52 total", red: false },
-            { label: "5. OUTCOMES", short: "+$1,000", red: false },
-            { label: "6. LIQUIDATION", short: "3-8% fee", red: true },
-          ].map((step, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className={`p-3 sm:p-4 rounded-lg border text-center min-w-0 ${step.red ? "bg-red-500/10 border-red-500/40" : "bg-black/60 border-[#00FF99]/25"}`}>
-              <div className={`font-semibold text-xs sm:text-sm mb-1 ${step.red ? "text-red-400" : "text-[#00FF99]"}`}>{step.label}</div>
-              <div className="text-gray-400 text-[10px] sm:text-xs break-words">{step.short}</div>
-            </motion.div>
-          ))}
-        </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-10 sm:mb-16">
           <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
-            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($34.52 total)</h3>
+            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($15.34 total)</h3>
             <InterestSplitChart />
           </div>
           <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
-            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Exposure vs Collateral</h3>
-            <ExposureVsCollateralChart />
+            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">How vault flow works</h3>
+            <HowVaultWorksDiagram />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-10 sm:mb-16">
