@@ -11,6 +11,7 @@ import FAQPage from "./components/faq/FAQPage";
 import DocumentationPage from "./components/documentation/DocumentationPage";
 import HowLMWorksSixBoxes from "./components/HowLMWorksSixBoxes";
 import AlphaAccessPage from "./components/alpha/AlphaAccessPage";
+import PolymarketLivePrediction from "./components/market/PolymarketLivePrediction";
 import {
   Area,
   AreaChart,
@@ -1017,126 +1018,25 @@ const MarketPage = ({ setCurrentPage }) => {
         </div>
       </div>
 
-      {/* Bloc marché principal – version inspirée de l'interface Polymarket */}
+      {/* Bloc marché principal – Live Polymarket Integration */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 sm:mt-12">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h2 className="text-xl sm:text-3xl font-bold text-white">
-            {featuredMarket ? "Live Polymarket integration" : "Loading market..."}
+            Live Polymarket Integration
           </h2>
-          <span className="hidden md:inline-flex items-center gap-2 text-xs px-3 py-1 rounded-full bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] uppercase tracking-widest">
+          <span className="hidden md:inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
             Powered by LM Protocol
           </span>
         </div>
 
-        {!featuredMarket ? (
-          <div className="bg-gray-900 border border-[#00FF99]/10 rounded-xl p-6 text-gray-400 text-center">
-            Fetching live market data from Polymarket...
-          </div>
-        ) : (
-        <>
         <div className="grid md:grid-cols-2 gap-6 sm:gap-8 items-stretch">
-            {/* Carte marché façon Polymarket */}
-            <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 rounded-full text-[0.65rem] bg-[#00FF99]/10 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest">
-                    Polymarket Market
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    Settlement by Dec 31, 2026
-                  </span>
-                </div>
-                {featuredMarket?.url && (
-                  <a
-                    href={featuredMarket.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-gray-400 hover:text-[#00FF99] underline underline-offset-4"
-                  >
-                    Open on Polymarket
-                  </a>
-                )}
-              </div>
-              <h3 className="text-white font-bold text-lg sm:text-2xl mb-3 line-clamp-2">
-                {featuredMarket?.title || "Loading market..."}
-              </h3>
-              <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-4xl sm:text-5xl font-extrabold text-[#00FF99] leading-none">
-                    {probability}%
-                  </span>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-gray-400 text-xs uppercase tracking-widest">
-                      Implied chance
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#00FF99]" />
-                      <span>YES outcome</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-gray-400 text-xs uppercase tracking-widest">
-                    24h Volume
-                  </div>
-                  <div className="text-white text-lg font-semibold">
-                    ${Number(featuredMarket?.volume || 0).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-56 mt-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorProbExample" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00FF99" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#00FF99" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="time" stroke="#666" />
-                    <YAxis stroke="#666" domain={[0, Math.max(20, Math.min(100, Math.ceil(probability * 2.5)))]} />
-                    <Area
-                      type="monotone"
-                      dataKey="probability"
-                      stroke="#00FF99"
-                      strokeWidth={2}
-                      fill="url(#colorProbExample)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Commentaires directement sous le graphique – occupe le reste de la hauteur */}
-              <div className="mt-4 border-t border-[#00FF99]/15 pt-4 flex-1 min-h-0 flex flex-col">
-                <h3 className="text-white font-semibold text-sm mb-3">
-                  Recent Comments
-                </h3>
-                <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
-                  {commentsToRender.map((comment) => (
-                    <div
-                      key={comment.id}
-                      className="bg-black/50 p-3 rounded-lg border border-[#00FF99]/10"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-[#00FF99] font-mono">
-                          {comment.author || `User ${comment.id}`}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {comment.timestamp || "recently"}
-                        </span>
-                      </div>
-                      <p className="text-gray-300 text-xs">
-                        {comment.text ||
-                          comment.content ||
-                          comment.body ||
-                          "No comment text"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* Carte marché – Composant réutilisable avec données live Polymarket */}
+            <PolymarketLivePrediction
+              slug="will-jesus-christ-return-before-2027"
+              settlementDate="Dec 31, 2026"
+              refreshInterval={30000}
+            />
 
             {/* Ticket d'ordre inspiré de Polymarket avec levier */}
             <div className="bg-gray-950 p-4 sm:p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
@@ -1411,8 +1311,6 @@ const MarketPage = ({ setCurrentPage }) => {
               </div>
             </div>
         </div>
-        </>
-        )}
       </div>
 
       {/* Value props */}
