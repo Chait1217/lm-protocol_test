@@ -65,15 +65,18 @@ export default function PolymarketLivePrediction({
   const [dataSource, setDataSource] = useState(null);
 
   // Fetch market data from server-side endpoint (fetches directly from Polymarket)
-  const fetchMarket = useCallback(async () => {
+  const fetchMarket = useCallback(async (retryCount = 0) => {
+    const maxRetries = 3;
+    
     try {
-      console.log('[PolymarketLivePrediction] Fetching from /api/polymarket-live...');
+      console.log('[PolymarketLivePrediction] Fetching from /api/polymarket-live... (attempt', retryCount + 1, ')');
       
       // Use server-side endpoint that fetches directly from Polymarket
       const response = await fetch('/api/polymarket-live', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
         },
       });
       
@@ -82,6 +85,13 @@ export default function PolymarketLivePrediction({
       if (!response.ok) {
         const text = await response.text();
         console.error('[PolymarketLivePrediction] Error response:', text);
+        
+        // Retry on server errors
+        if (retryCount < maxRetries) {
+          console.log('[PolymarketLivePrediction] Retrying in 2 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return fetchMarket(retryCount + 1);
+        }
         throw new Error(`Server error: ${response.status}`);
       }
       
@@ -92,14 +102,30 @@ export default function PolymarketLivePrediction({
         console.log('[PolymarketLivePrediction] Got live data:', result.market.question);
         console.log('[PolymarketLivePrediction] outcomePrices:', result.market.outcomePrices);
         console.log('[PolymarketLivePrediction] volume:', result.market.volume);
+        console.log('[PolymarketLivePrediction] volume24hr:', result.market.volume24hr);
         setDataSource('live');
-        setError(null);
+        setError(null); // Clear any previous errors
         return parseMarketData(result.market);
+      }
+      
+      // Retry if result is not successful
+      if (retryCount < maxRetries) {
+        console.log('[PolymarketLivePrediction] No data, retrying in 2 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return fetchMarket(retryCount + 1);
       }
       
       throw new Error(result.error || "Failed to fetch market data");
     } catch (err) {
       console.error("[PolymarketLivePrediction] Failed to fetch market:", err);
+      
+      // Retry on network errors
+      if (retryCount < maxRetries) {
+        console.log('[PolymarketLivePrediction] Network error, retrying in 2 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return fetchMarket(retryCount + 1);
+      }
+      
       setError(err.message);
       setDataSource('fallback');
       return getFallbackData();
@@ -108,6 +134,8 @@ export default function PolymarketLivePrediction({
 
   // Parse market data from API response
   const parseMarketData = (m) => {
+    console.log('[parseMarketData] Parsing market data:', m);
+    
     // Parse outcomePrices - can be string or array
     let outcomePrices = [];
     try {
@@ -117,28 +145,34 @@ export default function PolymarketLivePrediction({
         outcomePrices = m.outcomePrices;
       }
     } catch (e) {
+      console.warn('[parseMarketData] Failed to parse outcomePrices:', e);
       outcomePrices = [];
     }
     
     // YES price is the first outcome
     const yesPrice = outcomePrices[0] ? parseFloat(outcomePrices[0]) : null;
+    console.log('[parseMarketData] yesPrice:', yesPrice);
     
-    // Calculate probability
+    // Calculate probability - convert decimal to percentage
     let probability;
     if (yesPrice !== null && yesPrice > 0 && yesPrice <= 1) {
       probability = Math.round(yesPrice * 100);
     } else if (m.lastTradePrice && parseFloat(m.lastTradePrice) <= 1) {
       probability = Math.round(parseFloat(m.lastTradePrice) * 100);
     } else {
-      probability = 4; // Current approximate value
+      probability = null; // Will show N/A
     }
+    console.log('[parseMarketData] probability:', probability);
 
-    // Parse volume
-    const volume = parseFloat(m.volume) || parseFloat(m.volumeNum) || 0;
-    const volume24h = parseFloat(m.volume24hr) || 0;
+    // Parse volume - prioritize 24h volume for display, keep total for reference
+    const totalVolume = parseFloat(m.volume) || parseFloat(m.volumeNum) || parseFloat(m.volumeClob) || 0;
+    const volume24h = parseFloat(m.volume24hr) || parseFloat(m.volume24hrClob) || 0;
+    console.log('[parseMarketData] totalVolume:', totalVolume, 'volume24h:', volume24h);
     
-    // Parse traders count
-    const traders = parseInt(m.uniqueBettors) || parseInt(m.uniqueTraders) || 0;
+    // Parse traders count - this field might not always be available
+    // Try multiple possible field names
+    const traders = parseInt(m.uniqueBettors) || parseInt(m.uniqueTraders) || parseInt(m.traders) || null;
+    console.log('[parseMarketData] traders:', traders);
 
     // Parse clobTokenIds for price history
     let clobTokenIds = [];
@@ -152,19 +186,22 @@ export default function PolymarketLivePrediction({
       clobTokenIds = [];
     }
 
-    return {
+    const parsed = {
       conditionId: m.conditionId || m.id,
       slug: m.slug || slug,
       title: m.question || "Will Jesus Christ return before 2027?",
       probability,
-      volume,
+      volume: totalVolume,
       volume24h,
-      liquidity: parseFloat(m.liquidity) || 0,
+      liquidity: parseFloat(m.liquidity) || parseFloat(m.liquidityNum) || 0,
       traders,
       url: `https://polymarket.com/event/${slug}`,
       lastPrice: yesPrice || parseFloat(m.lastTradePrice) || 0.04,
       clobTokenIds,
     };
+    
+    console.log('[parseMarketData] Final parsed data:', parsed);
+    return parsed;
   };
 
   // Fallback data - only used when API completely fails
@@ -377,18 +414,18 @@ export default function PolymarketLivePrediction({
           <div className="flex gap-6">
             <div className="text-right">
               <div className="text-gray-400 text-xs uppercase tracking-widest mb-1">
-                Volume
+                24h Volume
               </div>
               <div className="text-white text-xl sm:text-2xl font-bold">
-                {formatVolume(market?.volume)}
+                {market?.volume24h ? formatVolume(market.volume24h) : formatVolume(market?.volume)}
               </div>
             </div>
             <div className="text-right hidden sm:block">
               <div className="text-gray-400 text-xs uppercase tracking-widest mb-1">
-                Traders
+                Total Volume
               </div>
               <div className="text-white text-xl sm:text-2xl font-bold">
-                {formatNumber(market?.traders)}
+                {formatVolume(market?.volume)}
               </div>
             </div>
           </div>
