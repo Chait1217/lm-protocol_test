@@ -35,4 +35,22 @@ export default defineConfig({
       },
     },
   ],
+  server: {
+    proxy: {
+      // Proxy Polymarket Gamma API (events, markets data)
+      '/polymarket-gamma': {
+        target: 'https://gamma-api.polymarket.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/polymarket-gamma/, ''),
+        secure: true,
+      },
+      // Proxy Polymarket CLOB API (prices, orderbook)
+      '/polymarket-clob': {
+        target: 'https://clob.polymarket.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/polymarket-clob/, ''),
+        secure: true,
+      },
+    },
+  },
 })
