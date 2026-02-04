@@ -67,17 +67,31 @@ export default function PolymarketLivePrediction({
   // Fetch market data from server-side endpoint (fetches directly from Polymarket)
   const fetchMarket = useCallback(async () => {
     try {
+      console.log('[PolymarketLivePrediction] Fetching from /api/polymarket-live...');
+      
       // Use server-side endpoint that fetches directly from Polymarket
-      const response = await fetch('/api/polymarket-live');
+      const response = await fetch('/api/polymarket-live', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      console.log('[PolymarketLivePrediction] Response status:', response.status);
       
       if (!response.ok) {
+        const text = await response.text();
+        console.error('[PolymarketLivePrediction] Error response:', text);
         throw new Error(`Server error: ${response.status}`);
       }
       
       const result = await response.json();
+      console.log('[PolymarketLivePrediction] Result:', result);
       
       if (result.success && result.market) {
         console.log('[PolymarketLivePrediction] Got live data:', result.market.question);
+        console.log('[PolymarketLivePrediction] outcomePrices:', result.market.outcomePrices);
+        console.log('[PolymarketLivePrediction] volume:', result.market.volume);
         setDataSource('live');
         setError(null);
         return parseMarketData(result.market);
@@ -85,7 +99,7 @@ export default function PolymarketLivePrediction({
       
       throw new Error(result.error || "Failed to fetch market data");
     } catch (err) {
-      console.error("Failed to fetch market:", err);
+      console.error("[PolymarketLivePrediction] Failed to fetch market:", err);
       setError(err.message);
       setDataSource('fallback');
       return getFallbackData();
