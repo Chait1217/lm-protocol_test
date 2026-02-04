@@ -195,31 +195,55 @@ export default function PolymarketLivePrediction({
     }
   }, []);
 
-  // Fetch comments from Polymarket Gamma API
-  const fetchComments = useCallback(async (marketSlug) => {
-    try {
-      // Fetch comments using the Gamma API comments endpoint
-      const res = await fetch(
-        `${POLYMARKET_APIS.GAMMA}/comments?market_slug=${marketSlug}&order=latest&limit=3`
-      );
+  // Fetch comments from Polymarket Gamma API for the specific market
+  const fetchComments = useCallback(async (marketData) => {
+    if (!marketData) {
+      return getFallbackComments();
+    }
 
-      if (!res.ok) {
-        // Try alternative endpoint with event slug
-        const altRes = await fetch(
-          `${POLYMARKET_APIS.GAMMA}/comments?event_slug=${marketSlug}&order=latest&limit=3`
-        );
-        
-        if (!altRes.ok) {
-          console.warn(`Comments API returned ${res.status}`);
-          return getFallbackComments();
-        }
-        
-        const altData = await altRes.json();
-        return parseComments(altData);
+    try {
+      // Try multiple approaches to get comments for this specific market
+      const endpoints = [];
+      
+      // 1. Try with condition ID (most specific)
+      if (marketData.conditionId) {
+        endpoints.push(`${POLYMARKET_APIS.GAMMA}/comments?market=${marketData.conditionId}&order=created_at&ascending=false&limit=3`);
+      }
+      
+      // 2. Try with market slug
+      if (marketData.slug) {
+        endpoints.push(`${POLYMARKET_APIS.GAMMA}/comments?market_slug=${marketData.slug}&order=created_at&ascending=false&limit=3`);
+      }
+      
+      // 3. Try with event slug
+      if (marketData.eventSlug) {
+        endpoints.push(`${POLYMARKET_APIS.GAMMA}/comments?event_slug=${marketData.eventSlug}&order=created_at&ascending=false&limit=3`);
       }
 
-      const data = await res.json();
-      return parseComments(data);
+      // 4. Fallback: use the hardcoded slug for "Will Jesus Christ return before 2027?"
+      endpoints.push(`${POLYMARKET_APIS.GAMMA}/comments?market_slug=will-jesus-christ-return-before-2027&order=created_at&ascending=false&limit=3`);
+      endpoints.push(`${POLYMARKET_APIS.GAMMA}/comments?event_slug=will-jesus-christ-return-before-2027&order=created_at&ascending=false&limit=3`);
+
+      // Try each endpoint until we get valid comments
+      for (const endpoint of endpoints) {
+        try {
+          const res = await fetch(endpoint);
+          if (res.ok) {
+            const data = await res.json();
+            const comments = parseComments(data);
+            if (comments.length > 0 && comments[0].id !== "fallback-1") {
+              console.log(`Comments fetched successfully from: ${endpoint}`);
+              return comments;
+            }
+          }
+        } catch (e) {
+          console.warn(`Endpoint failed: ${endpoint}`, e.message);
+        }
+      }
+
+      // If all endpoints fail, return fallback comments specific to this market
+      console.warn("All comment endpoints failed, using fallback");
+      return getFallbackComments();
     } catch (e) {
       console.warn("Comments fetch failed:", e.message);
       return getFallbackComments();
@@ -243,28 +267,15 @@ export default function PolymarketLivePrediction({
     }));
   };
 
-  // Fallback comments when API fails
+  // Fallback comments when API fails - specific to "Will Jesus Christ return before 2027?" market
   const getFallbackComments = () => [
     {
       id: "fallback-1",
-      user: "polymarket_user",
-      text: "Interesting market with unique resolution criteria.",
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      user: "Note",
+      text: "Unable to load live comments from Polymarket. Click 'View all comments on Polymarket' below to see the latest discussion for this market.",
+      timestamp: new Date().toISOString(),
       avatar: null,
-    },
-    {
-      id: "fallback-2",
-      user: "crypto_trader",
-      text: "Low probability but high volume shows strong interest.",
-      timestamp: new Date(Date.now() - 7200000).toISOString(),
-      avatar: null,
-    },
-    {
-      id: "fallback-3",
-      user: "market_analyst",
-      text: "Resolution date is Dec 31, 2026 - long-term hold.",
-      timestamp: new Date(Date.now() - 10800000).toISOString(),
-      avatar: null,
+      isNotice: true,
     },
   ];
 
@@ -298,16 +309,18 @@ export default function PolymarketLivePrediction({
   }, [fetchMarket, fetchPriceHistory]);
 
   // Load comments separately (refreshes every 1 hour)
+  // Uses market data to fetch comments specific to "Will Jesus Christ return before 2027?"
   const loadComments = useCallback(async () => {
     try {
-      const commentsData = await fetchComments(slug);
+      // Pass market data so we can use conditionId, slug, eventSlug for the specific market
+      const commentsData = await fetchComments(market);
       setComments(commentsData);
       setLastCommentsUpdate(new Date());
     } catch (e) {
       console.warn("Failed to load comments:", e);
       setComments(getFallbackComments());
     }
-  }, [fetchComments, slug]);
+  }, [fetchComments, market]);
 
   useEffect(() => {
     loadAllData();
@@ -318,13 +331,16 @@ export default function PolymarketLivePrediction({
   }, [loadAllData, refreshInterval]);
 
   // Separate effect for comments (refreshes every 1 hour)
+  // Only fetch comments after market data is loaded to use the correct market identifiers
   useEffect(() => {
-    loadComments();
+    if (market) {
+      loadComments();
 
-    // Auto-refresh comments every 1 hour
-    const commentsInterval = setInterval(() => loadComments(), commentsRefreshInterval);
-    return () => clearInterval(commentsInterval);
-  }, [loadComments, commentsRefreshInterval]);
+      // Auto-refresh comments every 1 hour
+      const commentsInterval = setInterval(() => loadComments(), commentsRefreshInterval);
+      return () => clearInterval(commentsInterval);
+    }
+  }, [market, loadComments, commentsRefreshInterval]);
 
   // Chart data with fallback
   const chartData = useMemo(() => {
@@ -547,9 +563,14 @@ export default function PolymarketLivePrediction({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-5 h-5 text-[#00FF99]" />
-            <h3 className="text-lg font-semibold text-white">Recent Comments</h3>
+            <h3 className="text-lg font-semibold text-white">
+              Recent Comments
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                (Will Jesus Christ return before 2027?)
+              </span>
+            </h3>
           </div>
-          {lastCommentsUpdate && (
+          {lastCommentsUpdate && !comments[0]?.isNotice && (
             <span className="text-xs text-gray-500">
               Updated: {lastCommentsUpdate.toLocaleTimeString()}
             </span>
@@ -566,30 +587,44 @@ export default function PolymarketLivePrediction({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.3, delay: index * 0.1 }}
-                  className="p-4 rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/20 transition-colors"
+                  className={`p-4 rounded-xl ${
+                    comment.isNotice
+                      ? "bg-yellow-500/10 border border-yellow-500/30"
+                      : "bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/20"
+                  } transition-colors`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10 flex items-center justify-center flex-shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      comment.isNotice
+                        ? "bg-yellow-500/20"
+                        : "bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10"
+                    }`}>
                       {comment.avatar ? (
                         <img
                           src={comment.avatar}
                           alt={comment.user}
                           className="w-8 h-8 rounded-full object-cover"
                         />
+                      ) : comment.isNotice ? (
+                        <MessageCircle className="w-4 h-4 text-yellow-500" />
                       ) : (
                         <User className="w-4 h-4 text-[#00FF99]" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-[#00FF99]">
-                          @{comment.user}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {formatTimeAgo(comment.timestamp)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-300 leading-relaxed">
+                      {!comment.isNotice && (
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium text-[#00FF99]">
+                            @{comment.user}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {formatTimeAgo(comment.timestamp)}
+                          </span>
+                        </div>
+                      )}
+                      <p className={`text-sm leading-relaxed ${
+                        comment.isNotice ? "text-yellow-200" : "text-gray-300"
+                      }`}>
                         {comment.text}
                       </p>
                     </div>
@@ -598,7 +633,7 @@ export default function PolymarketLivePrediction({
               ))
             ) : (
               <div className="text-center py-6 text-gray-500 text-sm">
-                No comments available
+                Loading comments...
               </div>
             )}
           </AnimatePresence>
