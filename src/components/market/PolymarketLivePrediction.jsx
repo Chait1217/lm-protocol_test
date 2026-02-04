@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -9,7 +9,7 @@ import {
   Tooltip,
   Label,
 } from "recharts";
-import { ExternalLink, RefreshCw, MessageCircle, User } from "lucide-react";
+import { ExternalLink, RefreshCw, MessageCircle } from "lucide-react";
 
 // Polymarket API endpoints (using Vite proxy to bypass CORS)
 // In development, requests go through /polymarket-gamma/* and /polymarket-clob/*
@@ -58,15 +58,12 @@ export default function PolymarketLivePrediction({
   slug = "will-jesus-christ-return-before-2027",
   settlementDate = "Dec 31, 2026",
   refreshInterval = 30000, // 30 seconds for market data
-  commentsRefreshInterval = 3600000, // 1 hour for comments
 }) {
   const [market, setMarket] = useState(null);
   const [priceHistory, setPriceHistory] = useState(null);
-  const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [lastCommentsUpdate, setLastCommentsUpdate] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch event data from Gamma API using the correct endpoint
@@ -195,34 +192,6 @@ export default function PolymarketLivePrediction({
     }
   }, []);
 
-  // Fetch comments by scraping Polymarket directly via server-side endpoint
-  // This fetches ONLY comments for "Will Jesus Christ return before 2027?" market
-  const fetchComments = useCallback(async () => {
-    try {
-      // Use server-side scraper endpoint to bypass CORS and get real comments
-      const marketSlug = "will-jesus-christ-return-before-2027";
-      const res = await fetch(`/api/polymarket-comments?slug=${marketSlug}`);
-      
-      if (!res.ok) {
-        console.warn(`Comments scraper returned ${res.status}`);
-        return [];
-      }
-
-      const data = await res.json();
-      
-      if (data.success && data.comments && data.comments.length > 0) {
-        console.log(`[Comments] Fetched ${data.comments.length} comments from Polymarket (source: ${data.source})`);
-        return data.comments;
-      }
-      
-      console.warn("[Comments] No comments found from scraper");
-      return [];
-    } catch (e) {
-      console.warn("Comments fetch failed:", e.message);
-      return [];
-    }
-  }, []);
-
   // Initial load and refresh market data
   const loadAllData = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setIsRefreshing(true);
@@ -252,19 +221,6 @@ export default function PolymarketLivePrediction({
     }
   }, [fetchMarket, fetchPriceHistory]);
 
-  // Load comments separately (refreshes every 1 hour)
-  // Scrapes comments directly from Polymarket for "Will Jesus Christ return before 2027?"
-  const loadComments = useCallback(async () => {
-    try {
-      const commentsData = await fetchComments();
-      setComments(commentsData);
-      setLastCommentsUpdate(new Date());
-    } catch (e) {
-      console.warn("Failed to load comments:", e);
-      setComments([]);
-    }
-  }, [fetchComments]);
-
   useEffect(() => {
     loadAllData();
 
@@ -272,16 +228,6 @@ export default function PolymarketLivePrediction({
     const interval = setInterval(() => loadAllData(true), refreshInterval);
     return () => clearInterval(interval);
   }, [loadAllData, refreshInterval]);
-
-  // Separate effect for comments (refreshes every 1 hour)
-  // Scrapes comments directly from Polymarket website
-  useEffect(() => {
-    loadComments();
-
-    // Auto-refresh comments every 1 hour
-    const commentsInterval = setInterval(() => loadComments(), commentsRefreshInterval);
-    return () => clearInterval(commentsInterval);
-  }, [loadComments, commentsRefreshInterval]);
 
   // Chart data with fallback
   const chartData = useMemo(() => {
@@ -499,118 +445,30 @@ export default function PolymarketLivePrediction({
         </div>
       </div>
 
-      {/* Comments Section - Scraped directly from Polymarket */}
+      {/* Comments Section - Link to Polymarket */}
       <div className="p-4 sm:p-6 border-t border-[#00FF99]/10">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-5 h-5 text-[#00FF99]" />
-            <h3 className="text-lg font-semibold text-white">
-              Recent Comments
-              <span className="ml-2 text-xs font-normal text-gray-500">
-                (Will Jesus Christ return before 2027?)
-              </span>
-            </h3>
+        <a
+          href="https://polymarket.com/event/will-jesus-christ-return-before-2027"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between p-4 rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/30 hover:bg-gray-800/70 transition-all group cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10 flex items-center justify-center">
+              <MessageCircle className="w-5 h-5 text-[#00FF99]" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold group-hover:text-[#00FF99] transition-colors">
+                View Comments & Discussion
+              </h3>
+              <p className="text-sm text-gray-400">
+                Join the conversation on Polymarket
+              </p>
+            </div>
           </div>
-          {lastCommentsUpdate && comments.length > 0 && (
-            <span className="text-xs text-gray-500">
-              Updated: {lastCommentsUpdate.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <AnimatePresence mode="popLayout">
-            {comments.length > 0 ? (
-              comments.map((comment, index) => (
-                <motion.div
-                  key={comment.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                  className="p-4 rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/20 transition-colors"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10">
-                      {comment.avatar ? (
-                        <img
-                          src={comment.avatar}
-                          alt={comment.user}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <User className="w-4 h-4 text-[#00FF99]" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-[#00FF99]">
-                          @{comment.user}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {formatTimeAgo(comment.timestamp)}
-                        </span>
-                      </div>
-                      <p className="text-sm leading-relaxed text-gray-300">
-                        {comment.text}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))
-            ) : (
-              <div className="text-center py-6">
-                <p className="text-gray-500 text-sm mb-2">
-                  No comments available at this time
-                </p>
-                <a
-                  href={`https://polymarket.com/event/will-jesus-christ-return-before-2027`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-[#00FF99] hover:underline"
-                >
-                  View discussion on Polymarket
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Link to see all comments */}
-        {market?.url && (
-          <div className="mt-4 pt-4 border-t border-gray-800">
-            <a
-              href={market.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-[#00FF99] transition-colors"
-            >
-              <span>View all comments on Polymarket</span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-            <p className="text-xs text-gray-600 mt-2">
-              Comments refresh every hour from Polymarket
-            </p>
-          </div>
-        )}
+          <ExternalLink className="w-5 h-5 text-gray-500 group-hover:text-[#00FF99] transition-colors" />
+        </a>
       </div>
     </motion.div>
   );
-}
-
-// Helper function to format time ago
-function formatTimeAgo(timestamp) {
-  if (!timestamp) return "";
-  
-  const now = new Date();
-  const date = new Date(timestamp);
-  const seconds = Math.floor((now - date) / 1000);
-  
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-  
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
