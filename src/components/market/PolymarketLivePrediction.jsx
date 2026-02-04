@@ -262,15 +262,24 @@ export default function PolymarketLivePrediction({
 
     try {
       const marketData = await fetchMarket();
-      setMarket(marketData);
+      
+      // Only update if we got valid data
+      if (marketData) {
+        setMarket(marketData);
+        
+        // Clear error if we got valid data with probability
+        if (marketData.probability !== null) {
+          setError(null);
+        }
 
-      // Try to fetch price history if we have token IDs
-      if (marketData.clobTokenIds && marketData.clobTokenIds.length > 0) {
-        const history = await fetchPriceHistory(marketData.clobTokenIds[0]);
-        setPriceHistory(history);
+        // Try to fetch price history if we have token IDs
+        if (marketData.clobTokenIds && marketData.clobTokenIds.length > 0) {
+          const history = await fetchPriceHistory(marketData.clobTokenIds[0]);
+          setPriceHistory(history);
+        }
+
+        setLastUpdate(new Date());
       }
-
-      setLastUpdate(new Date());
     } catch (e) {
       console.error("Failed to load data:", e);
       setError(e.message);
@@ -377,8 +386,8 @@ export default function PolymarketLivePrediction({
           </div>
         </div>
 
-        {/* Error message */}
-        {error && (
+        {/* Error message - only show if we don't have live data */}
+        {error && dataSource !== 'live' && (
           <div className="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
             ⚠️ Could not fetch live data from Polymarket. Please try refreshing or visit Polymarket directly.
           </div>
