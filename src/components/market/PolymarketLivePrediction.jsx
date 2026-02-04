@@ -64,44 +64,26 @@ export default function PolymarketLivePrediction({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dataSource, setDataSource] = useState(null);
 
-  // Fetch market data from Gamma API
+  // Fetch market data from server-side endpoint (fetches directly from Polymarket)
   const fetchMarket = useCallback(async () => {
     try {
-      // Try to get all markets and find the Jesus Christ one
-      const response = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?closed=false&limit=500`);
+      // Use server-side endpoint that fetches directly from Polymarket
+      const response = await fetch('/api/polymarket-live');
       
       if (!response.ok) {
-        throw new Error(`Gamma API error: ${response.status}`);
+        throw new Error(`Server error: ${response.status}`);
       }
       
-      const data = await response.json();
-      const markets = Array.isArray(data) ? data : [];
+      const result = await response.json();
       
-      // Find the Jesus Christ market by searching the question text
-      const jesusMarket = markets.find(m => {
-        const question = (m.question || '').toLowerCase();
-        return question.includes('jesus') && question.includes('christ') && question.includes('2027');
-      });
-      
-      if (jesusMarket) {
+      if (result.success && result.market) {
+        console.log('[PolymarketLivePrediction] Got live data:', result.market.question);
         setDataSource('live');
         setError(null);
-        return parseMarketData(jesusMarket);
+        return parseMarketData(result.market);
       }
       
-      // If not found, try searching with different terms
-      const altMarket = markets.find(m => {
-        const question = (m.question || '').toLowerCase();
-        return question.includes('jesus') && question.includes('return');
-      });
-      
-      if (altMarket) {
-        setDataSource('live');
-        setError(null);
-        return parseMarketData(altMarket);
-      }
-      
-      throw new Error("Market not found in Polymarket API");
+      throw new Error(result.error || "Failed to fetch market data");
     } catch (err) {
       console.error("Failed to fetch market:", err);
       setError(err.message);
@@ -171,19 +153,21 @@ export default function PolymarketLivePrediction({
     };
   };
 
-  // Fallback data - should match current Polymarket values approximately
+  // Fallback data - only used when API completely fails
+  // Shows "N/A" values to indicate data couldn't be fetched
   const getFallbackData = () => ({
     conditionId: null,
     slug,
     title: "Will Jesus Christ return before 2027?",
-    probability: 4,
-    volume: 450000,
-    volume24h: 2500,
-    liquidity: 18000,
-    traders: 1400,
+    probability: null, // Will show "N/A" in UI
+    volume: null,
+    volume24h: null,
+    liquidity: null,
+    traders: null,
     url: `https://polymarket.com/event/${slug}`,
-    lastPrice: 0.04,
+    lastPrice: null,
     clobTokenIds: [],
+    isFallback: true,
   });
 
   // Fetch price history
@@ -256,19 +240,24 @@ export default function PolymarketLivePrediction({
     if (priceHistory && priceHistory.length > 0) {
       return priceHistory;
     }
-    return generateChartData(market?.probability ?? 4);
+    // Only generate chart if we have a probability value
+    const prob = market?.probability;
+    if (prob !== null && prob !== undefined) {
+      return generateChartData(prob);
+    }
+    return generateChartData(5); // Default chart centered around 5%
   }, [priceHistory, market?.probability]);
 
   // Format helpers
   const formatVolume = (v) => {
-    if (!v || isNaN(v)) return "$0";
+    if (v === null || v === undefined || isNaN(v)) return "N/A";
     if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
     if (v >= 1000) return `$${Math.round(v / 1000)}K`;
     return `$${Math.round(v).toLocaleString()}`;
   };
 
   const formatNumber = (n) => {
-    if (!n || isNaN(n)) return "0";
+    if (n === null || n === undefined || isNaN(n)) return "N/A";
     if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
     return n.toLocaleString();
   };
@@ -340,7 +329,7 @@ export default function PolymarketLivePrediction({
         {/* Error message */}
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
-            ⚠️ Could not fetch live data. Showing approximate values.
+            ⚠️ Could not fetch live data from Polymarket. Please try refreshing or visit Polymarket directly.
           </div>
         )}
 
@@ -358,7 +347,7 @@ export default function PolymarketLivePrediction({
               animate={{ scale: 1, opacity: 1 }}
               className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-[#00FF99] leading-none"
             >
-              {market?.probability ?? 4}%
+              {market?.probability !== null ? `${market.probability}%` : 'N/A'}
             </motion.span>
             <div className="flex flex-col gap-1">
               <span className="text-gray-400 text-xs uppercase tracking-widest">
