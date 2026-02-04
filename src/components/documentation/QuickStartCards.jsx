@@ -5,7 +5,7 @@ import { TrendingUp, Wallet } from "lucide-react";
 const TRADER_STEPS = [
   "Connect your wallet",
   "Deposit USDC as collateral",
-  "Choose a market and select leverage (x2–x10)",
+  "Choose a market and select leverage (x2–x5)",
   "Open a position and track your liquidation price",
   "Close anytime to realize profit or loss",
 ];
