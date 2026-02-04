@@ -109,13 +109,13 @@ export default function WhitepaperPage() {
 
                 {/* Definition boxes */}
                 <div className="grid gap-4 mt-8">
-                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm">
+                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm text-white">
                     <span className="text-[#00FF99]">Utilization</span> = borrowed liquidity ÷ total vault liquidity
                   </div>
-                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm">
+                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm text-white">
                     <span className="text-[#00FF99]">Collateral</span> = USDC deposited as margin for leveraged positions
                   </div>
-                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm">
+                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm text-white">
                     <span className="text-[#00FF99]">Liquidation</span> = automatic position close when margin falls below maintenance threshold
                   </div>
                 </div>
