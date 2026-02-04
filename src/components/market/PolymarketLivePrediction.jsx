@@ -9,22 +9,12 @@ import {
   Tooltip,
   Label,
 } from "recharts";
-import { ExternalLink, RefreshCw, MessageCircle, TrendingUp, TrendingDown } from "lucide-react";
+import { ExternalLink, RefreshCw, MessageCircle } from "lucide-react";
 
 // Polymarket API endpoints (using Vite proxy to bypass CORS)
 const POLYMARKET_APIS = {
   GAMMA: "/polymarket-gamma",
   CLOB: "/polymarket-clob",
-};
-
-// Known market data for "Will Jesus Christ return before 2027?"
-// Condition ID from Polymarket: 0x...
-const JESUS_MARKET = {
-  conditionId: "0x5f65177b394277fd294cd75650044e32ba009a95022ce4e7ad52dfe9c6c5c2c2",
-  questionId: "0x5f65177b394277fd294cd75650044e32ba009a95022ce4e7ad52dfe9c6c5c2c2",
-  // YES token ID for CLOB API
-  yesTokenId: "71321045679252212594626385532706912750332728571942532289631379312455583992563",
-  noTokenId: "48331043336612883890938759509493159234755048973500640148014422747788308965310",
 };
 
 // Generate fallback chart data
@@ -36,7 +26,6 @@ const generateChartData = (centerProbability = 50, points = 50) => {
   for (let i = 0; i < points; i++) {
     const variation = Math.sin(i / 5) * spread * 0.5 + (Math.random() - 0.5) * spread;
     const value = Math.max(0, Math.min(100, centerProbability + variation));
-    // Generate a date for each point going backwards from today
     const datePoint = new Date(now.getTime() - (points - i) * 24 * 60 * 60 * 1000);
     const dateStr = datePoint.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     data.push({
@@ -65,277 +54,209 @@ const CustomTooltip = ({ active, payload }) => {
 export default function PolymarketLivePrediction({
   slug = "will-jesus-christ-return-before-2027",
   settlementDate = "Dec 31, 2026",
-  refreshInterval = 10000, // 10 seconds for real-time updates
+  refreshInterval = 15000, // 15 seconds for updates
 }) {
   const [market, setMarket] = useState(null);
   const [priceHistory, setPriceHistory] = useState(null);
-  const [orderbook, setOrderbook] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dataSource, setDataSource] = useState(null);
 
-  // Fetch event data from Gamma API using multiple approaches
+  // Fetch market data from Gamma API
   const fetchMarket = useCallback(async () => {
     try {
-      // Approach 1: Try searching by title/question
-      let marketData = null;
+      // Try to get all markets and find the Jesus Christ one
+      const response = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?closed=false&limit=500`);
       
-      // Try searching for the market
-      const searchRes = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?_limit=100&active=true`);
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        const markets = Array.isArray(searchData) ? searchData : searchData.markets || [];
-        // Find the Jesus Christ market
-        const jesusMarket = markets.find(m => 
-          m.question?.toLowerCase().includes("jesus christ") ||
-          m.question?.toLowerCase().includes("jesus") && m.question?.toLowerCase().includes("2027")
-        );
-        if (jesusMarket) {
-          marketData = parseMarketData(jesusMarket);
-        }
+      if (!response.ok) {
+        throw new Error(`Gamma API error: ${response.status}`);
       }
-
-      // Approach 2: Try events endpoint with slug
-      if (!marketData) {
-        const eventRes = await fetch(`${POLYMARKET_APIS.GAMMA}/events?slug=${slug}`);
-        if (eventRes.ok) {
-          const eventData = await eventRes.json();
-          const events = Array.isArray(eventData) ? eventData : [eventData];
-          if (events.length > 0 && events[0].markets?.length > 0) {
-            marketData = {
-              ...parseMarketData(events[0].markets[0]),
-              eventTitle: events[0].title,
-              eventSlug: events[0].slug,
-            };
-          }
-        }
-      }
-
-      // Approach 3: Try condition ID directly
-      if (!marketData) {
-        const conditionRes = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?condition_id=${JESUS_MARKET.conditionId}`);
-        if (conditionRes.ok) {
-          const conditionData = await conditionRes.json();
-          const markets = Array.isArray(conditionData) ? conditionData : [conditionData];
-          if (markets.length > 0) {
-            marketData = parseMarketData(markets[0]);
-          }
-        }
-      }
-
-      // If we found market data, return it
-      if (marketData) {
+      
+      const data = await response.json();
+      const markets = Array.isArray(data) ? data : [];
+      
+      // Find the Jesus Christ market by searching the question text
+      const jesusMarket = markets.find(m => {
+        const question = (m.question || '').toLowerCase();
+        return question.includes('jesus') && question.includes('christ') && question.includes('2027');
+      });
+      
+      if (jesusMarket) {
+        setDataSource('live');
         setError(null);
-        return marketData;
+        return parseMarketData(jesusMarket);
       }
-
-      // Fallback to static data if all API calls fail
-      console.warn("All API approaches failed, using fallback data");
-      return getFallbackData();
-    } catch (error) {
-      console.error("Failed to fetch market:", error);
-      setError(error.message);
-      return getFallbackData();
-    }
-  }, [slug]);
-
-  // Fetch live orderbook data for buy/sell quotes
-  const fetchOrderbook = useCallback(async () => {
-    try {
-      // Fetch orderbook for YES token
-      const res = await fetch(`${POLYMARKET_APIS.CLOB}/book?token_id=${JESUS_MARKET.yesTokenId}`);
       
-      if (!res.ok) {
-        console.warn(`Orderbook API returned ${res.status}`);
-        return null;
+      // If not found, try searching with different terms
+      const altMarket = markets.find(m => {
+        const question = (m.question || '').toLowerCase();
+        return question.includes('jesus') && question.includes('return');
+      });
+      
+      if (altMarket) {
+        setDataSource('live');
+        setError(null);
+        return parseMarketData(altMarket);
       }
-
-      const data = await res.json();
       
-      // Parse best bid and ask
-      const bids = data.bids || [];
-      const asks = data.asks || [];
-      
-      const bestBid = bids.length > 0 ? parseFloat(bids[0].price) : null;
-      const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : null;
-      
-      return {
-        bestBid: bestBid ? Math.round(bestBid * 100) / 100 : null,
-        bestAsk: bestAsk ? Math.round(bestAsk * 100) / 100 : null,
-        bidSize: bids.length > 0 ? parseFloat(bids[0].size) : 0,
-        askSize: asks.length > 0 ? parseFloat(asks[0].size) : 0,
-        spread: bestBid && bestAsk ? Math.round((bestAsk - bestBid) * 100) / 100 : null,
-      };
-    } catch (e) {
-      console.warn("Orderbook fetch failed:", e.message);
-      return null;
+      throw new Error("Market not found in Polymarket API");
+    } catch (err) {
+      console.error("Failed to fetch market:", err);
+      setError(err.message);
+      setDataSource('fallback');
+      return getFallbackData();
     }
   }, []);
 
   // Parse market data from API response
   const parseMarketData = (m) => {
-    // Get the YES outcome price (outcomePrices can be array or JSON string)
+    // Parse outcomePrices - can be string or array
     let outcomePrices = [];
     try {
-      outcomePrices = typeof m.outcomePrices === 'string' 
-        ? JSON.parse(m.outcomePrices) 
-        : (m.outcomePrices || []);
+      if (typeof m.outcomePrices === 'string') {
+        outcomePrices = JSON.parse(m.outcomePrices);
+      } else if (Array.isArray(m.outcomePrices)) {
+        outcomePrices = m.outcomePrices;
+      }
     } catch (e) {
       outcomePrices = [];
     }
     
+    // YES price is the first outcome
     const yesPrice = outcomePrices[0] ? parseFloat(outcomePrices[0]) : null;
     
-    // Parse clobTokenIds
+    // Calculate probability
+    let probability;
+    if (yesPrice !== null && yesPrice > 0 && yesPrice <= 1) {
+      probability = Math.round(yesPrice * 100);
+    } else if (m.lastTradePrice && parseFloat(m.lastTradePrice) <= 1) {
+      probability = Math.round(parseFloat(m.lastTradePrice) * 100);
+    } else {
+      probability = 4; // Current approximate value
+    }
+
+    // Parse volume
+    const volume = parseFloat(m.volume) || parseFloat(m.volumeNum) || 0;
+    const volume24h = parseFloat(m.volume24hr) || 0;
+    
+    // Parse traders count
+    const traders = parseInt(m.uniqueBettors) || parseInt(m.uniqueTraders) || 0;
+
+    // Parse clobTokenIds for price history
     let clobTokenIds = [];
     try {
-      clobTokenIds = typeof m.clobTokenIds === 'string'
-        ? JSON.parse(m.clobTokenIds)
-        : (m.clobTokenIds || []);
+      if (typeof m.clobTokenIds === 'string') {
+        clobTokenIds = JSON.parse(m.clobTokenIds);
+      } else if (Array.isArray(m.clobTokenIds)) {
+        clobTokenIds = m.clobTokenIds;
+      }
     } catch (e) {
       clobTokenIds = [];
     }
-    
-    // Use known token IDs if not available from API
-    if (clobTokenIds.length === 0) {
-      clobTokenIds = [JESUS_MARKET.yesTokenId, JESUS_MARKET.noTokenId];
-    }
-    
-    // Calculate probability from various sources
-    let probability;
-    if (yesPrice !== null && yesPrice > 0) {
-      probability = Math.round(yesPrice * 100);
-    } else if (m.bestBid || m.bestAsk) {
-      // Use mid price from orderbook
-      const mid = ((m.bestBid || 0) + (m.bestAsk || 0)) / 2;
-      probability = Math.round(mid * 100);
-    } else if (m.lastTradePrice) {
-      probability = Math.round(parseFloat(m.lastTradePrice) * 100);
-    } else {
-      probability = 3; // Default for this market
-    }
 
     return {
-      conditionId: m.conditionId || m.condition_id || JESUS_MARKET.conditionId,
+      conditionId: m.conditionId || m.id,
       slug: m.slug || slug,
-      title: m.question || m.title || "Will Jesus Christ return before 2027?",
+      title: m.question || "Will Jesus Christ return before 2027?",
       probability,
-      volume: parseFloat(m.volume) || parseFloat(m.volumeNum) || 0,
-      volume24h: parseFloat(m.volume24hr) || parseFloat(m.volume24h) || 0,
+      volume,
+      volume24h,
       liquidity: parseFloat(m.liquidity) || 0,
-      traders: parseInt(m.uniqueBettors) || parseInt(m.uniqueTraders) || 0,
-      url: `https://polymarket.com/event/${m.slug || slug}`,
-      lastPrice: yesPrice || parseFloat(m.lastTradePrice) || 0.03,
+      traders,
+      url: `https://polymarket.com/event/${slug}`,
+      lastPrice: yesPrice || parseFloat(m.lastTradePrice) || 0.04,
       clobTokenIds,
-      outcomes: m.outcomes || ['Yes', 'No'],
-      endDate: m.endDate || m.endDateIso || m.end_date_iso,
     };
   };
 
-  // Fallback data when API fails - still shows meaningful data
+  // Fallback data - should match current Polymarket values approximately
   const getFallbackData = () => ({
-    conditionId: JESUS_MARKET.conditionId,
+    conditionId: null,
     slug,
     title: "Will Jesus Christ return before 2027?",
-    probability: 3,
-    volume: 445000,
-    volume24h: 1200,
-    liquidity: 15000,
-    traders: 1350,
+    probability: 4,
+    volume: 450000,
+    volume24h: 2500,
+    liquidity: 18000,
+    traders: 1400,
     url: `https://polymarket.com/event/${slug}`,
-    lastPrice: 0.03,
-    clobTokenIds: [JESUS_MARKET.yesTokenId, JESUS_MARKET.noTokenId],
-    outcomes: ['Yes', 'No'],
+    lastPrice: 0.04,
+    clobTokenIds: [],
   });
 
-  // Fetch price history from CLOB API
+  // Fetch price history
   const fetchPriceHistory = useCallback(async (tokenId) => {
-    // Use known token ID if not provided
-    const token = tokenId || JESUS_MARKET.yesTokenId;
+    if (!tokenId) return null;
     
     try {
-      // Try multiple endpoints for price history
-      const endpoints = [
-        `${POLYMARKET_APIS.CLOB}/prices-history?market=${token}&interval=1d&fidelity=60`,
-        `${POLYMARKET_APIS.CLOB}/prices-history?token_id=${token}&interval=1d`,
-      ];
+      const response = await fetch(
+        `${POLYMARKET_APIS.CLOB}/prices-history?market=${tokenId}&interval=1d&fidelity=60`
+      );
 
-      for (const endpoint of endpoints) {
-        try {
-          const res = await fetch(endpoint);
-          if (res.ok) {
-            const data = await res.json();
-            const raw = data.history || data || [];
-
-            if (Array.isArray(raw) && raw.length > 0) {
-              // Sort by timestamp and map to chart format
-              const sorted = [...raw].sort((a, b) => (a.t || 0) - (b.t || 0));
-              return sorted.map((point, i) => {
-                const p = point.p != null ? point.p : point.price;
-                const prob = typeof p === "number" ? (p <= 1 ? p * 100 : p) : 0;
-                const timestamp = point.t ? new Date(point.t * 1000) : new Date();
-                const dateStr = timestamp.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                return { time: i + 1, probability: Math.round(prob * 10) / 10, date: dateStr };
-              });
-            }
-          }
-        } catch (e) {
-          continue;
-        }
+      if (!response.ok) {
+        return null;
       }
-      
-      return null;
+
+      const data = await response.json();
+      const history = data.history || data || [];
+
+      if (!Array.isArray(history) || history.length === 0) {
+        return null;
+      }
+
+      // Sort by timestamp and convert to chart format
+      const sorted = [...history].sort((a, b) => (a.t || 0) - (b.t || 0));
+      return sorted.map((point, i) => {
+        const p = point.p != null ? point.p : point.price;
+        const prob = typeof p === "number" ? (p <= 1 ? p * 100 : p) : 0;
+        const timestamp = point.t ? new Date(point.t * 1000) : new Date();
+        const dateStr = timestamp.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return { time: i + 1, probability: Math.round(prob * 10) / 10, date: dateStr };
+      });
     } catch (e) {
       console.warn("Price history fetch failed:", e.message);
       return null;
     }
   }, []);
 
-  // Initial load and refresh market data
+  // Load all data
   const loadAllData = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setIsRefreshing(true);
 
     try {
-      // Fetch all data in parallel for faster loading
-      const [marketData, orderbookData, historyData] = await Promise.all([
-        fetchMarket(),
-        fetchOrderbook(),
-        fetchPriceHistory(JESUS_MARKET.yesTokenId),
-      ]);
-
+      const marketData = await fetchMarket();
       setMarket(marketData);
-      setOrderbook(orderbookData);
-      setPriceHistory(historyData);
-      setLastUpdate(new Date());
-      
-      // Clear error if data loaded successfully
-      if (marketData && !marketData.error) {
-        setError(null);
+
+      // Try to fetch price history if we have token IDs
+      if (marketData.clobTokenIds && marketData.clobTokenIds.length > 0) {
+        const history = await fetchPriceHistory(marketData.clobTokenIds[0]);
+        setPriceHistory(history);
       }
+
+      setLastUpdate(new Date());
     } catch (e) {
-      console.error("Failed to load market data:", e);
+      console.error("Failed to load data:", e);
       setError(e.message);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [fetchMarket, fetchOrderbook, fetchPriceHistory]);
+  }, [fetchMarket, fetchPriceHistory]);
 
   useEffect(() => {
     loadAllData();
-
-    // Auto-refresh market data
     const interval = setInterval(() => loadAllData(true), refreshInterval);
     return () => clearInterval(interval);
   }, [loadAllData, refreshInterval]);
 
-  // Chart data with fallback
+  // Chart data
   const chartData = useMemo(() => {
     if (priceHistory && priceHistory.length > 0) {
       return priceHistory;
     }
-    return generateChartData(market?.probability ?? 3);
+    return generateChartData(market?.probability ?? 4);
   }, [priceHistory, market?.probability]);
 
   // Format helpers
@@ -352,7 +273,6 @@ export default function PolymarketLivePrediction({
     return n.toLocaleString();
   };
 
-  // Manual refresh handler
   const handleManualRefresh = () => {
     loadAllData(true);
   };
@@ -385,18 +305,17 @@ export default function PolymarketLivePrediction({
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <span className="px-3 py-1.5 rounded-full text-[0.7rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold">
-              Polymarket Market
+              {dataSource === 'live' ? '● Live' : 'Polymarket'}
             </span>
             <span className="text-xs text-gray-500">
               Settlement by {settlementDate}
             </span>
           </div>
           <div className="flex items-center gap-3">
-            {/* Manual refresh button */}
             <button
               onClick={handleManualRefresh}
               disabled={isRefreshing}
-              className="p-2 rounded-lg hover:bg-[#00FF99]/10 transition-colors disabled:opacity-50"
+              className="p-2 rounded-lg hover:bg-[#00FF99]/10 transition-colors disabled:opacity-50 cursor-pointer"
               title="Refresh data"
             >
               <motion.div
@@ -406,30 +325,28 @@ export default function PolymarketLivePrediction({
                 <RefreshCw className="w-4 h-4 text-[#00FF99]" />
               </motion.div>
             </button>
-            {market?.url && (
-              <a
-                href={market.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00FF99] transition-colors underline underline-offset-4"
-              >
-                Open on Polymarket
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            )}
+            <a
+              href="https://polymarket.com/event/will-jesus-christ-return-before-2027"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00FF99] transition-colors underline underline-offset-4 cursor-pointer"
+            >
+              Open on Polymarket
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-            ⚠️ Using cached data. API error: {error}
+          <div className="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
+            ⚠️ Could not fetch live data. Showing approximate values.
           </div>
         )}
 
         {/* Market Question */}
         <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-6">
-          {market?.title || "Loading..."}
+          {market?.title || "Will Jesus Christ return before 2027?"}
         </h2>
 
         {/* Stats Row */}
@@ -441,14 +358,14 @@ export default function PolymarketLivePrediction({
               animate={{ scale: 1, opacity: 1 }}
               className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-[#00FF99] leading-none"
             >
-              {market?.probability ?? 0}%
+              {market?.probability ?? 4}%
             </motion.span>
             <div className="flex flex-col gap-1">
               <span className="text-gray-400 text-xs uppercase tracking-widest">
                 Implied Chance
               </span>
               <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-                <span className="w-2 h-2 rounded-full bg-[#00FF99] animate-pulse" />
+                <span className={`w-2 h-2 rounded-full ${dataSource === 'live' ? 'bg-[#00FF99] animate-pulse' : 'bg-yellow-500'}`} />
                 YES outcome
               </span>
             </div>
@@ -460,51 +377,17 @@ export default function PolymarketLivePrediction({
                 Volume
               </div>
               <div className="text-white text-xl sm:text-2xl font-bold">
-                {formatVolume(market?.volume || market?.volume24h)}
+                {formatVolume(market?.volume)}
               </div>
             </div>
-            {market?.traders > 0 && (
-              <div className="text-right hidden sm:block">
-                <div className="text-gray-400 text-xs uppercase tracking-widest mb-1">
-                  Traders
-                </div>
-                <div className="text-white text-xl sm:text-2xl font-bold">
-                  {formatNumber(market.traders)}
-                </div>
+            <div className="text-right hidden sm:block">
+              <div className="text-gray-400 text-xs uppercase tracking-widest mb-1">
+                Traders
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Buy/Sell Quotes */}
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <div className="p-4 rounded-xl bg-[#00FF99]/5 border border-[#00FF99]/20">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="w-4 h-4 text-[#00FF99]" />
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Buy Yes</span>
-            </div>
-            <div className="text-2xl font-bold text-[#00FF99]">
-              {orderbook?.bestAsk ? `${(orderbook.bestAsk * 100).toFixed(1)}¢` : `${market?.probability || 3}¢`}
-            </div>
-            {orderbook?.askSize > 0 && (
-              <div className="text-xs text-gray-500 mt-1">
-                ${Math.round(orderbook.askSize).toLocaleString()} available
+              <div className="text-white text-xl sm:text-2xl font-bold">
+                {formatNumber(market?.traders)}
               </div>
-            )}
-          </div>
-          <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingDown className="w-4 h-4 text-red-400" />
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Sell Yes</span>
             </div>
-            <div className="text-2xl font-bold text-red-400">
-              {orderbook?.bestBid ? `${(orderbook.bestBid * 100).toFixed(1)}¢` : `${Math.max(1, (market?.probability || 3) - 1)}¢`}
-            </div>
-            {orderbook?.bidSize > 0 && (
-              <div className="text-xs text-gray-500 mt-1">
-                ${Math.round(orderbook.bidSize).toLocaleString()} available
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -568,7 +451,7 @@ export default function PolymarketLivePrediction({
         {/* Data source note */}
         <div className="mt-4 pt-4 border-t border-[#00FF99]/10 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-gray-500">
-            Data from Polymarket API • {priceHistory ? "Live chart data" : "Simulated chart"}
+            {dataSource === 'live' ? '● Live data from Polymarket' : '○ Approximate data'} • {priceHistory ? "Live chart" : "Simulated chart"}
           </p>
           {lastUpdate && (
             <p className="text-xs text-gray-500">
