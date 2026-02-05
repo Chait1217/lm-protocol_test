@@ -12,11 +12,16 @@ import { config } from "./web3";
 
 const queryClient = new QueryClient();
 
+// Mobile-friendly: compact modal and allow WalletConnect to work on touch devices
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={darkTheme()}>
+        <RainbowKitProvider
+          theme={darkTheme()}
+          modalSize="compact"
+          coolMode
+        >
           <App />
         </RainbowKitProvider>
       </QueryClientProvider>

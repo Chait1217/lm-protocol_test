@@ -365,8 +365,9 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                 return (
                   <button
                     type="button"
-                    onClick={openConnectModal}
-                    className={`${btnBase} ${btnConnect}`}
+                    onClick={() => setTimeout(() => openConnectModal?.(), 0)}
+                    className={`${btnBase} ${btnConnect} min-h-[44px] touch-manipulation`}
+                    style={{ touchAction: 'manipulation' }}
                   >
                     Connect Wallet
                   </button>
@@ -459,7 +460,36 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                   </button>
                 ))}
               </div>
-              <div className="mt-6 pt-4 border-t border-[#00FF99]/20 text-xs text-gray-500 bg-black/40 rounded-lg px-3 py-3">
+              <div className="mt-6 pt-4 border-t border-[#00FF99]/20">
+                <ConnectButton.Custom>
+                  {({ account, openConnectModal, openAccountModal, mounted }) => {
+                    if (!mounted) return null;
+                    if (account) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => { closeMobileMenu(); setTimeout(() => openAccountModal?.(), 0); }}
+                          className="w-full min-h-[48px] px-4 py-3 rounded-xl font-semibold bg-[#00FF99]/10 text-[#00FF99] border border-[#00FF99]/30 hover:bg-[#00FF99]/20 touch-manipulation"
+                          style={{ touchAction: 'manipulation' }}
+                        >
+                          {account.displayName ?? `${account.address?.slice(0, 6)}…${account.address?.slice(-4)}`}
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => { closeMobileMenu(); setTimeout(() => openConnectModal?.(), 0); }}
+                        className="w-full min-h-[48px] px-4 py-3 rounded-xl font-semibold bg-[#00FF99] text-black border border-[#00FF99] hover:bg-[#00FF99]/90 touch-manipulation"
+                        style={{ touchAction: 'manipulation' }}
+                      >
+                        Connect Wallet
+                      </button>
+                    );
+                  }}
+                </ConnectButton.Custom>
+              </div>
+              <div className="mt-4 text-xs text-gray-500 bg-black/40 rounded-lg px-3 py-3">
                 {status === "connected" && address && (
                   <p className="font-mono truncate mb-2 text-gray-400" title={address}>
                     {address.slice(0, 10)}…{address.slice(-8)}
@@ -589,10 +619,10 @@ const POLYMARKET_CATEGORIES = [
   { id: "politics", label: "Politique", slug: "politics", icon: Landmark, image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
   { id: "crypto", label: "Crypto", slug: "crypto", icon: Bitcoin, image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400&h=560&fit=crop" },
   { id: "finance", label: "Finance", slug: "finance", icon: DollarSign, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=560&fit=crop" },
-  { id: "elections", label: "Élections", slug: "elections", icon: Vote, image: "https://images.unsplash.com/photo-1580128660010-fd027e1e587a?w=400&h=560&fit=crop" },
+  { id: "elections", label: "Elections", slug: "elections", icon: Vote, image: "https://images.unsplash.com/photo-1580128660010-fd027e1e587a?w=400&h=560&fit=crop" },
   { id: "esports", label: "Esports", slug: "esports", icon: Gamepad2, image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=560&fit=crop" },
   { id: "culture", label: "Culture", slug: "pop-culture", icon: Film, image: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=560&fit=crop" },
-  { id: "economy", label: "Économie", slug: "economy", icon: TrendingUp, image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=560&fit=crop" },
+  { id: "economy", label: "Economy", slug: "economy", icon: TrendingUp, image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=560&fit=crop" },
 ];
 
 // Carrousel des catégories Polymarket sur la page Market
@@ -1322,8 +1352,9 @@ const ProfilePage = () => {
             {({ openConnectModal }) => (
               <button
                 type="button"
-                onClick={openConnectModal}
-                className="px-6 py-2 rounded-lg bg-[#00FF99] text-black font-medium hover:bg-[#00FF99]/90"
+                onClick={() => setTimeout(() => openConnectModal?.(), 0)}
+                className="px-6 py-3 min-h-[48px] rounded-lg bg-[#00FF99] text-black font-medium hover:bg-[#00FF99]/90 touch-manipulation"
+                style={{ touchAction: 'manipulation' }}
               >
                 Connect Wallet
               </button>
