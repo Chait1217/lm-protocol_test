@@ -353,24 +353,48 @@ export default function PolymarketLivePredictionBoxLeverage({
         </div>
       </div>
 
-      {/* Best Bid/Ask Display */}
-      {(market?.bestBid || market?.bestAsk) && (
+      {/* Best Bid/Ask Display - updates by selected outcome (YES vs NO) */}
+      {(market?.bestBid != null || market?.bestAsk != null) && (
         <div className="bg-black/40 rounded-lg p-3 border border-gray-800/50 mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-400 text-xs">
+              Order book for <span className={selectedOutcome === "YES" ? "text-[#00FF99] font-medium" : "text-red-400 font-medium"}>{selectedOutcome}</span>
+            </span>
+          </div>
           <div className="flex justify-between items-center">
             <div>
               <span className="text-gray-400 text-xs">Best Bid</span>
-              <div className="text-[#00FF99] font-mono font-bold">
-                {market.bestBid ? `${(market.bestBid * 100).toFixed(1)}¢` : '--'}
-              </div>
+              <motion.div
+                key={`bid-${selectedOutcome}`}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={selectedOutcome === "YES" ? "text-[#00FF99] font-mono font-bold" : "text-red-400 font-mono font-bold"}
+              >
+                {selectedOutcome === "YES"
+                  ? (market.bestBid != null ? `${(market.bestBid * 100).toFixed(1)}¢` : '--')
+                  : (market.bestAsk != null ? `${((1 - market.bestAsk) * 100).toFixed(1)}¢` : '--')}
+              </motion.div>
             </div>
             <div className="h-8 w-px bg-gray-700" />
             <div className="text-right">
               <span className="text-gray-400 text-xs">Best Ask</span>
-              <div className="text-red-400 font-mono font-bold">
-                {market.bestAsk ? `${(market.bestAsk * 100).toFixed(1)}¢` : '--'}
-              </div>
+              <motion.div
+                key={`ask-${selectedOutcome}`}
+                initial={{ opacity: 0, x: 4 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={selectedOutcome === "YES" ? "text-[#00FF99] font-mono font-bold" : "text-red-400 font-mono font-bold"}
+              >
+                {selectedOutcome === "YES"
+                  ? (market.bestAsk != null ? `${(market.bestAsk * 100).toFixed(1)}¢` : '--')
+                  : (market.bestBid != null ? `${((1 - market.bestBid) * 100).toFixed(1)}¢` : '--')}
+              </motion.div>
             </div>
           </div>
+          <p className="text-[10px] text-gray-500 mt-1.5">
+            {selectedOutcome === "YES"
+              ? "Bid = buy YES · Ask = sell YES"
+              : "Bid = buy NO · Ask = sell NO (inverted from YES)"}
+          </p>
         </div>
       )}
 
