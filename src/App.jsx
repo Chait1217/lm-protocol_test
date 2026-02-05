@@ -586,7 +586,7 @@ const fetchRealMarket = async (slug = "will-jesus-christ-return-before-2027") =>
 // Catégories Polymarket pour le carrousel (label FR → URL predictions + images)
 const POLYMARKET_CATEGORIES = [
   { id: "sports", label: "Sport", slug: "sports", icon: Trophy, image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=560&fit=crop" },
-  { id: "politics", label: "Politique", slug: "politics", icon: Landmark, image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
+  { id: "politics", label: "Politics", slug: "politics", icon: Landmark, image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
   { id: "crypto", label: "Crypto", slug: "crypto", icon: Bitcoin, image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400&h=560&fit=crop" },
   { id: "finance", label: "Finance", slug: "finance", icon: DollarSign, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=560&fit=crop" },
   { id: "elections", label: "Elections", slug: "elections", icon: Vote, image: "https://images.unsplash.com/photo-1580128660010-fd027e1e587a?w=400&h=560&fit=crop" },
