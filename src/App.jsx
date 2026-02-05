@@ -1042,7 +1042,7 @@ const MarketPage = ({ setCurrentPage }) => {
             {/* Live Market Data Box with Leverage Info */}
             <PolymarketLivePredictionBoxLeverage
               slug="will-jesus-christ-return-before-2027"
-              refreshInterval={10000}
+              refreshInterval={5000}
             />
         </div>
       </div>

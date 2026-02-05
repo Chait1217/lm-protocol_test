@@ -42,7 +42,7 @@ const AnimatedValue = ({ value, format, className, prefix = "", suffix = "" }) =
 
 export default function PolymarketLivePredictionBoxLeverage({
   slug = "will-jesus-christ-return-before-2027",
-  refreshInterval = 10000,
+  refreshInterval = 5000, // 5s for real-time feel
 }) {
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -62,10 +62,11 @@ export default function PolymarketLivePredictionBoxLeverage({
     const maxRetries = 3;
     
     try {
-      const response = await fetch('/api/polymarket-live', {
+      const response = await fetch(`/api/polymarket-live?t=${Date.now()}`, {
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
       });
       
@@ -474,23 +475,23 @@ export default function PolymarketLivePredictionBoxLeverage({
           </div>
         </div>
 
-        {/* Summary: Entry, Position, Liquidation, Max win */}
+        {/* Summary: Entry, Position, Liquidation, Max win (all update with live market) */}
         <div className="bg-black/50 rounded-lg p-3 border border-[#00FF99]/10 space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-400">Entry price</span>
-            <span className="text-white font-mono">{entryPriceCents.toFixed(1)}¢</span>
+            <AnimatedValue value={entryPriceCents} format={(v) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" />
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Position size</span>
-            <span className="text-white font-medium">${positionSize.toFixed(2)}</span>
+            <AnimatedValue value={positionSize} format={(v) => (v ?? 0).toFixed(2)} className="text-white font-medium" prefix="$" />
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Liquidation price</span>
-            <span className="text-red-400 font-semibold font-mono">{liquidationCents.toFixed(1)}¢</span>
+            <AnimatedValue value={liquidationCents} format={(v) => (v ?? 0).toFixed(1)} className="text-red-400 font-semibold font-mono" suffix="¢" />
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">To win (max)</span>
-            <span className="text-[#00FF99] font-semibold">${maxWin.toFixed(2)}</span>
+            <AnimatedValue value={maxWin} format={(v) => (v ?? 0).toFixed(2)} className="text-[#00FF99] font-semibold" prefix="$" />
           </div>
         </div>
       </div>
@@ -502,7 +503,7 @@ export default function PolymarketLivePredictionBoxLeverage({
       <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
-          <span>Updates every 10s</span>
+          <span>Real-time · every 5s</span>
         </div>
         {lastUpdate && (
           <span className="font-mono">{lastUpdate.toLocaleTimeString()}</span>
