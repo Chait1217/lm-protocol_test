@@ -9,7 +9,6 @@ import {
   DollarSign,
   Activity,
   Zap,
-  ChevronRight
 } from "lucide-react";
 
 // Animated number component
@@ -498,17 +497,6 @@ export default function PolymarketLivePredictionBoxLeverage({
 
       {/* Spacer to push button to bottom */}
       <div className="flex-1" />
-
-      {/* CTA Link to Polymarket */}
-      <a
-        href={`https://polymarket.com/event/${slug}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#00FF99] hover:bg-[#00FF99]/90 text-black font-bold rounded-xl transition-all hover:shadow-[0_0_30px_rgba(0,255,153,0.3)] cursor-pointer group"
-      >
-        <span>Trade on Polymarket</span>
-        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-      </a>
 
       {/* Footer with last update */}
       <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
