@@ -7,15 +7,24 @@ import {
 import { base } from "wagmi/chains";
 
 // projectId: get a free one at https://cloud.walletconnect.com/
-// WalletConnect first so mobile users can connect to MetaMask via WalletConnect (no injection in mobile browser)
+// Mobile: MetaMask uses WalletConnect protocol to open the app via deep link
+const projectId = "7ec54a62f398c9a05d4132334a6acd1d";
+
 export const config = getDefaultConfig({
   appName: "LM Protocol",
-  projectId: "7ec54a62f398c9a05d4132334a6acd1d",
+  projectId,
   chains: [base],
   wallets: [
     {
       groupName: "Recommended",
-      wallets: [walletConnectWallet, metaMaskWallet, injectedWallet],
+      wallets: [
+        // MetaMask - handles mobile deep linking automatically via WalletConnect
+        metaMaskWallet({ projectId }),
+        // WalletConnect - universal mobile wallet connector
+        walletConnectWallet({ projectId }),
+        // Injected - for browser extensions
+        injectedWallet(),
+      ],
     },
   ],
   ssr: false,
