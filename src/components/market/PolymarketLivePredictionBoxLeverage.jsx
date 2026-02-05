@@ -54,6 +54,9 @@ export default function PolymarketLivePredictionBoxLeverage({
   const [selectedOutcome, setSelectedOutcome] = useState("YES");
   const [priceChange, setPriceChange] = useState(0);
   const prevProbability = useRef(null);
+  // Demo leverage section
+  const [leverage, setLeverage] = useState(2);
+  const [amount, setAmount] = useState("100");
 
   // Fetch market data
   const fetchMarket = useCallback(async (retryCount = 0) => {
@@ -180,6 +183,20 @@ export default function PolymarketLivePredictionBoxLeverage({
     if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
     return n.toLocaleString();
   };
+
+  // Demo leverage calculations (entry = live best ask for selected outcome)
+  const amountNum = parseFloat(amount) || 0;
+  const entryPriceDecimal = selectedOutcome === "YES"
+    ? (market?.bestAsk ?? (market?.yesProbability != null ? market.yesProbability / 100 : 0.04))
+    : (market?.bestBid != null ? 1 - market.bestBid : (market?.noProbability != null ? market.noProbability / 100 : 0.96));
+  const entryPriceCents = Math.round(entryPriceDecimal * 1000) / 10;
+  const positionSize = amountNum * leverage;
+  const shares = entryPriceDecimal > 0 ? positionSize / entryPriceDecimal : 0;
+  const liquidationDecimal = entryPriceDecimal * (1 - 1 / leverage);
+  const liquidationCents = Math.max(0, Math.round(liquidationDecimal * 1000) / 10);
+  const maxWin = entryPriceDecimal > 0 && entryPriceDecimal < 1
+    ? shares * (1 - entryPriceDecimal)
+    : 0;
 
   if (loading) {
     return (
@@ -397,6 +414,87 @@ export default function PolymarketLivePredictionBoxLeverage({
           </p>
         </div>
       )}
+
+      {/* Demo: Leverage, Amount, Liquidation */}
+      <div className="border border-[#00FF99]/20 rounded-xl p-4 bg-black/30 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Leverage demo</span>
+          <span className="text-[10px] text-gray-500">Simulation only</span>
+        </div>
+
+        {/* Leverage 1x–5x */}
+        <div className="space-y-2 mb-4">
+          <div className="flex justify-between items-center">
+            <label className="text-gray-400 text-sm">Leverage</label>
+            <span className="text-[#00FF99] font-bold">{leverage.toFixed(1)}x</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="5"
+            step="0.5"
+            value={leverage}
+            onChange={(e) => setLeverage(parseFloat(e.target.value))}
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#00FF99]"
+            style={{
+              background: `linear-gradient(to right, #00FF99 0%, #00FF99 ${((leverage - 1) / 4) * 100}%, #333 ${((leverage - 1) / 4) * 100}%, #333 100%)`,
+            }}
+          />
+          <div className="flex justify-between gap-1">
+            {[1, 2, 3, 4, 5].map((x) => (
+              <button
+                key={x}
+                type="button"
+                onClick={() => setLeverage(x)}
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                  Math.round(leverage) === x
+                    ? "bg-[#00FF99] text-black border-[#00FF99]"
+                    : "bg-gray-900 text-gray-300 border-gray-700 hover:border-[#00FF99]/60"
+                }`}
+              >
+                {x}x
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Amount (margin) */}
+        <div className="mb-4">
+          <label className="text-gray-400 text-sm block mb-1">Amount (margin)</label>
+          <div className="flex rounded-lg border border-gray-700 bg-black overflow-hidden">
+            <span className="px-3 py-2.5 text-gray-400 text-sm border-r border-gray-700">$</span>
+            <input
+              type="number"
+              min="0"
+              step="10"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0"
+              className="flex-1 bg-transparent px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-0"
+            />
+          </div>
+        </div>
+
+        {/* Summary: Entry, Position, Liquidation, Max win */}
+        <div className="bg-black/50 rounded-lg p-3 border border-[#00FF99]/10 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-400">Entry price</span>
+            <span className="text-white font-mono">{entryPriceCents.toFixed(1)}¢</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Position size</span>
+            <span className="text-white font-medium">${positionSize.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Liquidation price</span>
+            <span className="text-red-400 font-semibold font-mono">{liquidationCents.toFixed(1)}¢</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">To win (max)</span>
+            <span className="text-[#00FF99] font-semibold">${maxWin.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Spacer to push button to bottom */}
       <div className="flex-1" />
