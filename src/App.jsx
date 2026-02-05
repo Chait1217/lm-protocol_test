@@ -218,10 +218,24 @@ const MarketTicker = () => {
   );
 };
 
+// Open current site in MetaMask in-app browser (works on mobile when MetaMask is installed)
+const getMetaMaskDappUrl = () => {
+  if (typeof window === "undefined") return "https://metamask.app.link/dapp/levermarket.app";
+  const host = window.location.hostname;
+  return `https://metamask.app.link/dapp/${host}`;
+};
+
 // Navbar Component (mobile-friendly with hamburger menu)
 const Navbar = ({ currentPage, setCurrentPage }) => {
   const { address, status, chain } = useAccount();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(/iPhone|iPad|iPod|Android|webOS|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   const navLinks = [
     { key: "protocol", label: "Protocol" },
     { key: "market", label: "Market" },
@@ -325,6 +339,21 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
               </>
             )}
           </span>
+          {isMobile && status !== "connected" ? (
+            <>
+              <div className="flex flex-col items-end gap-1">
+                <ConnectButton />
+                <a
+                  href={getMetaMaskDappUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] sm:text-xs text-[#00FF99]/80 hover:text-[#00FF99] underline underline-offset-1"
+                >
+                  Open in MetaMask app
+                </a>
+              </div>
+            </>
+          ) : (
           <ConnectButton.Custom>
             {({
               account,
@@ -418,6 +447,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
               );
             }}
           </ConnectButton.Custom>
+          )}
         </div>
       </div>
 
@@ -460,7 +490,18 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                   </button>
                 ))}
               </div>
-              <div className="mt-6 pt-4 border-t border-[#00FF99]/20">
+              <div className="mt-6 pt-4 border-t border-[#00FF99]/20 space-y-3">
+                <p className="text-xs text-gray-400 px-1">Connect with MetaMask on mobile: open this site in the MetaMask app, then tap Connect Wallet.</p>
+                <a
+                  href={getMetaMaskDappUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeMobileMenu}
+                  className="w-full min-h-[48px] px-4 py-3 rounded-xl font-semibold bg-[#00FF99] text-black border border-[#00FF99] hover:bg-[#00FF99]/90 touch-manipulation flex items-center justify-center gap-2"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  Open in MetaMask app
+                </a>
                 <ConnectButton.Custom>
                   {({ account, openConnectModal, openAccountModal, mounted }) => {
                     if (!mounted) return null;
@@ -480,10 +521,10 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                       <button
                         type="button"
                         onClick={() => { closeMobileMenu(); setTimeout(() => openConnectModal?.(), 0); }}
-                        className="w-full min-h-[48px] px-4 py-3 rounded-xl font-semibold bg-[#00FF99] text-black border border-[#00FF99] hover:bg-[#00FF99]/90 touch-manipulation"
+                        className="w-full min-h-[48px] px-4 py-3 rounded-xl font-semibold bg-gray-800 text-white border border-gray-600 hover:bg-gray-700 touch-manipulation"
                         style={{ touchAction: 'manipulation' }}
                       >
-                        Connect Wallet
+                        Connect Wallet (WalletConnect)
                       </button>
                     );
                   }}
@@ -616,7 +657,7 @@ const fetchRealMarket = async (slug = "will-jesus-christ-return-before-2027") =>
 // Catégories Polymarket pour le carrousel (label FR → URL predictions + images)
 const POLYMARKET_CATEGORIES = [
   { id: "sports", label: "Sport", slug: "sports", icon: Trophy, image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=560&fit=crop" },
-  { id: "politics", label: "Politique", slug: "politics", icon: Landmark, image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
+  { id: "politics", label: "Politics", slug: "politics", icon: Landmark, image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
   { id: "crypto", label: "Crypto", slug: "crypto", icon: Bitcoin, image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400&h=560&fit=crop" },
   { id: "finance", label: "Finance", slug: "finance", icon: DollarSign, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=560&fit=crop" },
   { id: "elections", label: "Elections", slug: "elections", icon: Vote, image: "https://images.unsplash.com/photo-1580128660010-fd027e1e587a?w=400&h=560&fit=crop" },
