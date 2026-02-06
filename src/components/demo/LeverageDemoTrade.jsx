@@ -135,21 +135,21 @@ const LeverageDemoTrade = () => {
 
     // Step 1: Take collateral from user
     setTradeStep(1);
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 4000));
     setUserBalance(prev => prev - collateral);
 
     // Step 2: Borrow from vault
     setTradeStep(2);
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 4000));
     setVaultBalance(prev => prev - borrowedAmount);
 
     // Step 3: Execute trade (position open)
     setTradeStep(3);
-    await new Promise(r => setTimeout(r, 3500));
+    await new Promise(r => setTimeout(r, 6000));
 
     // Step 4: Close trade, return borrowed + fees
     setTradeStep(4);
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 4000));
     
     const profit = totalExposure * 0.10;
     const netProfit = profit - totalFees - interest;
@@ -161,7 +161,7 @@ const LeverageDemoTrade = () => {
     setTradeStep(5);
     setShowSuccess(true);
     
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 5000));
     setIsTrading(false);
   };
 
