@@ -169,8 +169,10 @@ const LeverageDemoTrade = () => {
   const executeTrade = async () => {
     if (collateral > userBalance) return;
     
-    // Scroll to top of page
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Scroll to top of page only on desktop (screen width > 768px)
+    if (window.innerWidth >= 768) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     
     setIsTrading(true);
     setShowSuccess(false);
@@ -732,16 +734,16 @@ const LeverageDemoTrade = () => {
                     <div className="bg-black/40 rounded-lg md:rounded-xl p-2 md:p-4 mb-3 md:mb-6 border border-gray-700">
                       <p className="text-[10px] md:text-sm text-gray-300 leading-relaxed">
                         <span className="text-white font-semibold">{selectedOutcome}</span> @ <span className="text-[#00FF99] font-mono">{leverage}x</span>
-                        <span className="hidden md:inline">
-                          {" • "}
-                          <span className="text-gray-400">Open:</span> <span className="text-white font-mono">{openPrice?.toFixed(2)}¢</span>
-                          {" → "}
-                          <span className="text-gray-400">Close:</span> <span className="text-[#00FF99] font-mono">{closePrice?.toFixed(2)}¢</span>
-                        </span>
                         {" • "}
-                        <span className="text-gray-400">Fees:</span> <span className="text-yellow-400 font-mono">${(totalFees + interest).toFixed(2)}</span>
+                        <span className="text-white font-mono">{openPrice?.toFixed(1)}¢</span>
+                        <span className="text-gray-400">→</span>
+                        <span className="text-[#00FF99] font-mono">{closePrice?.toFixed(1)}¢</span>
                         {" • "}
-                        <span className="text-gray-400">P&L:</span> <span className="text-[#00FF99] font-mono">+${(totalExposure * 0.10 - totalFees - interest).toFixed(2)}</span>
+                        <span className="text-yellow-400 font-mono">${(totalFees + interest).toFixed(0)}</span>
+                        <span className="text-gray-500 text-[8px] md:text-xs"> fees</span>
+                        {" • "}
+                        <span className="text-[#00FF99] font-mono">+${(totalExposure * 0.10 - totalFees - interest).toFixed(0)}</span>
+                        <span className="text-gray-500 text-[8px] md:text-xs"> profit</span>
                       </p>
                     </div>
                     
@@ -768,13 +770,20 @@ const LeverageDemoTrade = () => {
               </AnimatePresence>
             </div>
 
-            {/* Educational Note - Hidden on mobile */}
-            <div className="hidden md:block bg-gray-900/30 border border-gray-800 rounded-2xl p-6">
-              <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
-                <Info className="w-5 h-5 text-[#00FF99]" />
+            {/* Educational Note - Compressed on mobile */}
+            <div className="bg-gray-900/30 border border-gray-800 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <h4 className="text-white font-semibold mb-2 md:mb-3 flex items-center gap-2 text-sm md:text-base">
+                <Info className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
                 How It Works
               </h4>
-              <div className="grid md:grid-cols-3 gap-4 text-sm">
+              {/* Mobile: Compressed single line */}
+              <div className="md:hidden text-[10px] text-gray-400 leading-relaxed">
+                <span className="text-[#00FF99]">1.</span> Collateral + borrowed = leverage → 
+                <span className="text-[#00FF99]"> 2.</span> Pay interest, monitor risk → 
+                <span className="text-[#00FF99]"> 3.</span> Close & return funds + fees to LPs (85%)
+              </div>
+              {/* Desktop: Full version */}
+              <div className="hidden md:grid md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-[#00FF99] font-semibold mb-1">1. Open Position</p>
                   <p className="text-gray-400">
