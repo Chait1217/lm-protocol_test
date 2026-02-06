@@ -51,6 +51,8 @@ const LeverageDemoTrade = () => {
   const [chartData, setChartData] = useState([]);
   const [selectedOutcome, setSelectedOutcome] = useState("YES");
   const chartInterval = useRef(null);
+  const tradeStartPrice = useRef(null);
+  const tickCount = useRef(0);
 
   // Initialize chart data
   useEffect(() => {
@@ -68,30 +70,52 @@ const LeverageDemoTrade = () => {
     setAsk(baseProb + 1 + Math.random() * 0.5);
   }, [selectedMarket]);
 
-  // Animate chart and bid/ask during trading
+  // Animate chart and bid/ask during trading - move towards 10% profit
   useEffect(() => {
     if (tradeStep >= 2 && tradeStep <= 4) {
+      // Store starting price when trade begins
+      if (tradeStep === 2 && tradeStartPrice.current === null) {
+        tradeStartPrice.current = currentProb;
+        tickCount.current = 0;
+      }
+      
+      const totalTicks = 75; // ~30 seconds of trading at 400ms intervals
+      
       chartInterval.current = setInterval(() => {
+        tickCount.current += 1;
+        const progress = Math.min(tickCount.current / totalTicks, 1);
+        
+        // Calculate target price for 10% profit
+        // YES: price needs to go UP for profit
+        // NO: price needs to go DOWN for profit
+        const startPrice = tradeStartPrice.current || currentProb;
+        const profitMove = startPrice * 0.10; // 10% move
+        const targetPrice = selectedOutcome === "YES" 
+          ? startPrice + profitMove 
+          : startPrice - profitMove;
+        
+        // Gradually move towards target with some noise
+        const basePrice = startPrice + (targetPrice - startPrice) * progress;
+        const noise = (Math.random() - 0.5) * 2;
+        const newPrice = Math.max(5, Math.min(95, basePrice + noise));
+        
         setChartData(prev => {
-          const lastPrice = prev[prev.length - 1]?.price || currentProb;
-          const trend = tradeStep === 3 ? 0.3 : 0; // Upward trend during active trading
-          const newPrice = lastPrice + (Math.random() - 0.5 + trend) * 2;
-          const clampedPrice = Math.max(5, Math.min(95, newPrice));
-          return [...prev.slice(-29), { time: prev.length, price: clampedPrice }];
+          return [...prev.slice(-29), { time: prev.length, price: newPrice }];
         });
         
-        // Update bid/ask with slight variations
-        setCurrentProb(prev => {
-          const change = (Math.random() - 0.5) * 1.5;
-          const newProb = Math.max(5, Math.min(95, prev + change));
-          setBid(newProb - 1 - Math.random() * 0.5);
-          setAsk(newProb + 1 + Math.random() * 0.5);
-          return newProb;
-        });
+        // Update current prob and bid/ask to follow the profitable direction
+        setCurrentProb(newPrice);
+        setBid(newPrice - 1 - Math.random() * 0.5);
+        setAsk(newPrice + 1 + Math.random() * 0.5);
       }, 400);
     } else {
       if (chartInterval.current) {
         clearInterval(chartInterval.current);
+      }
+      // Reset when trade completes
+      if (tradeStep === 0 || tradeStep === 5) {
+        tradeStartPrice.current = null;
+        tickCount.current = 0;
       }
     }
     
@@ -100,7 +124,7 @@ const LeverageDemoTrade = () => {
         clearInterval(chartInterval.current);
       }
     };
-  }, [tradeStep]);
+  }, [tradeStep, selectedOutcome]);
 
   // Calculations
   const totalExposure = collateral * leverage;
