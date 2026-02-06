@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Info,
   AlertTriangle,
+  Activity,
 } from "lucide-react";
 
 const LeverageDemoTrade = () => {
