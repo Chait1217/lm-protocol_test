@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+} from "recharts";
 import {
   DollarSign,
   TrendingUp,
@@ -13,30 +20,99 @@ import {
   Info,
   AlertTriangle,
   Activity,
+  Target,
 } from "lucide-react";
+
+// Fake prediction market questions
+const FAKE_MARKETS = [
+  { question: "Will Bitcoin reach $200K by end of 2026?", baseProb: 42 },
+  { question: "Will SpaceX land humans on Mars before 2030?", baseProb: 28 },
+  { question: "Will AI pass the Turing test by 2027?", baseProb: 65 },
+  { question: "Will the US have a female president by 2028?", baseProb: 35 },
+  { question: "Will Ethereum flip Bitcoin in market cap?", baseProb: 18 },
+  { question: "Will Apple release AR glasses in 2026?", baseProb: 55 },
+];
 
 const LeverageDemoTrade = () => {
   // State
   const [collateral, setCollateral] = useState(1000);
   const [leverage, setLeverage] = useState(3);
   const [isTrading, setIsTrading] = useState(false);
-  const [tradeStep, setTradeStep] = useState(0); // 0: idle, 1: taking collateral, 2: borrowing, 3: trading, 4: returning, 5: complete
+  const [tradeStep, setTradeStep] = useState(0);
   const [vaultBalance, setVaultBalance] = useState(100000);
   const [userBalance, setUserBalance] = useState(5000);
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Market simulation state
+  const [selectedMarket, setSelectedMarket] = useState(FAKE_MARKETS[0]);
+  const [currentProb, setCurrentProb] = useState(FAKE_MARKETS[0].baseProb);
+  const [bid, setBid] = useState(FAKE_MARKETS[0].baseProb - 1);
+  const [ask, setAsk] = useState(FAKE_MARKETS[0].baseProb + 1);
+  const [chartData, setChartData] = useState([]);
+  const [selectedOutcome, setSelectedOutcome] = useState("YES");
+  const chartInterval = useRef(null);
+
+  // Initialize chart data
+  useEffect(() => {
+    const initialData = [];
+    const baseProb = selectedMarket.baseProb;
+    for (let i = 0; i < 20; i++) {
+      initialData.push({
+        time: i,
+        price: baseProb + (Math.random() - 0.5) * 6,
+      });
+    }
+    setChartData(initialData);
+    setCurrentProb(baseProb);
+    setBid(baseProb - 1 - Math.random() * 0.5);
+    setAsk(baseProb + 1 + Math.random() * 0.5);
+  }, [selectedMarket]);
+
+  // Animate chart and bid/ask during trading
+  useEffect(() => {
+    if (tradeStep >= 2 && tradeStep <= 4) {
+      chartInterval.current = setInterval(() => {
+        setChartData(prev => {
+          const lastPrice = prev[prev.length - 1]?.price || currentProb;
+          const trend = tradeStep === 3 ? 0.3 : 0; // Upward trend during active trading
+          const newPrice = lastPrice + (Math.random() - 0.5 + trend) * 2;
+          const clampedPrice = Math.max(5, Math.min(95, newPrice));
+          return [...prev.slice(-29), { time: prev.length, price: clampedPrice }];
+        });
+        
+        // Update bid/ask with slight variations
+        setCurrentProb(prev => {
+          const change = (Math.random() - 0.5) * 1.5;
+          const newProb = Math.max(5, Math.min(95, prev + change));
+          setBid(newProb - 1 - Math.random() * 0.5);
+          setAsk(newProb + 1 + Math.random() * 0.5);
+          return newProb;
+        });
+      }, 400);
+    } else {
+      if (chartInterval.current) {
+        clearInterval(chartInterval.current);
+      }
+    }
+    
+    return () => {
+      if (chartInterval.current) {
+        clearInterval(chartInterval.current);
+      }
+    };
+  }, [tradeStep]);
 
   // Calculations
   const totalExposure = collateral * leverage;
   const borrowedAmount = totalExposure - collateral;
-  const tradingFee = totalExposure * 0.002; // 0.2% trading fee
-  const borrowFee = borrowedAmount * 0.001; // 0.1% borrow fee
+  const tradingFee = totalExposure * 0.002;
+  const borrowFee = borrowedAmount * 0.001;
   const totalFees = tradingFee + borrowFee;
-  const interestRate = 0.20; // 20% APR
+  const interestRate = 0.20;
   const daysHeld = 7;
   const interest = (borrowedAmount * interestRate * daysHeld) / 365;
-  const liquidationPrice = collateral > 0 ? (collateral * 0.1) / (totalExposure / 100) : 0; // Simplified liquidation calc
+  const liquidationPrice = collateral > 0 ? (collateral * 0.1) / (totalExposure / 100) : 0;
   
-  // Fee split (85% to LPs, 15% to protocol)
   const lpShare = (totalFees + interest) * 0.85;
   const protocolShare = (totalFees + interest) * 0.15;
 
@@ -46,6 +122,9 @@ const LeverageDemoTrade = () => {
     setVaultBalance(100000);
     setUserBalance(5000);
     setShowSuccess(false);
+    // Pick a new random market
+    const newMarket = FAKE_MARKETS[Math.floor(Math.random() * FAKE_MARKETS.length)];
+    setSelectedMarket(newMarket);
   };
 
   const executeTrade = async () => {
@@ -72,7 +151,6 @@ const LeverageDemoTrade = () => {
     setTradeStep(4);
     await new Promise(r => setTimeout(r, 2500));
     
-    // Simulate profitable trade (10% gain)
     const profit = totalExposure * 0.10;
     const netProfit = profit - totalFees - interest;
     
@@ -98,7 +176,7 @@ const LeverageDemoTrade = () => {
 
   return (
     <div className="min-h-screen bg-black pt-24 pb-20 px-4">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -122,6 +200,73 @@ const LeverageDemoTrade = () => {
             animate={{ opacity: 1, x: 0 }}
             className="lg:col-span-1 space-y-6"
           >
+            {/* Market Question Card */}
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
+              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5 text-[#00FF99]" />
+                Market Question
+              </h3>
+              <p className="text-white text-lg font-medium mb-4">{selectedMarket.question}</p>
+              
+              {/* Outcome buttons */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  onClick={() => setSelectedOutcome("YES")}
+                  disabled={isTrading}
+                  className={`flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer ${
+                    selectedOutcome === "YES"
+                      ? "bg-[#00FF99] text-black"
+                      : "bg-gray-800 text-[#00FF99] border border-[#00FF99]/30 hover:bg-[#00FF99]/10"
+                  } disabled:opacity-50`}
+                >
+                  YES {currentProb.toFixed(1)}¢
+                </button>
+                <button
+                  onClick={() => setSelectedOutcome("NO")}
+                  disabled={isTrading}
+                  className={`flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer ${
+                    selectedOutcome === "NO"
+                      ? "bg-red-500 text-white"
+                      : "bg-gray-800 text-red-400 border border-red-500/30 hover:bg-red-500/10"
+                  } disabled:opacity-50`}
+                >
+                  NO {(100 - currentProb).toFixed(1)}¢
+                </button>
+              </div>
+              
+              {/* Bid/Ask Display */}
+              <div className="bg-black/30 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-400 text-sm">Best Bid</span>
+                  <motion.span 
+                    key={bid}
+                    initial={{ color: "#00FF99" }}
+                    animate={{ color: "#ffffff" }}
+                    className="text-white font-mono font-semibold"
+                  >
+                    {selectedOutcome === "YES" ? bid.toFixed(2) : (100 - ask).toFixed(2)}¢
+                  </motion.span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Best Ask</span>
+                  <motion.span 
+                    key={ask}
+                    initial={{ color: "#00FF99" }}
+                    animate={{ color: "#ffffff" }}
+                    className="text-white font-mono font-semibold"
+                  >
+                    {selectedOutcome === "YES" ? ask.toFixed(2) : (100 - bid).toFixed(2)}¢
+                  </motion.span>
+                </div>
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
+                  <span className="text-gray-400 text-sm">Spread</span>
+                  <span className="text-yellow-400 font-mono text-sm">
+                    {(ask - bid).toFixed(2)}¢
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Collateral Input */}
             <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
               <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
@@ -163,7 +308,6 @@ const LeverageDemoTrade = () => {
                 <span>3x</span>
                 <span>5x</span>
               </div>
-              {/* Preset buttons */}
               <div className="flex gap-2 mt-4">
                 {[1, 2, 3, 4, 5].map((l) => (
                   <button
@@ -242,7 +386,6 @@ const LeverageDemoTrade = () => {
               </p>
             )}
 
-            {/* Reset Button */}
             {(showSuccess || tradeStep > 0) && (
               <button
                 onClick={resetDemo}
@@ -254,21 +397,20 @@ const LeverageDemoTrade = () => {
             )}
           </motion.div>
 
-          {/* Right: Visual Flow */}
+          {/* Right: Visual Flow & Chart */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="lg:col-span-2"
+            className="lg:col-span-2 space-y-6"
           >
             {/* Status Bar */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-4 mb-6">
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Status:</span>
                 <span className={`font-semibold ${tradeStep === 5 ? "text-[#00FF99]" : tradeStep > 0 ? "text-yellow-400" : "text-gray-400"}`}>
                   {stepLabels[tradeStep]}
                 </span>
               </div>
-              {/* Progress bar */}
               <div className="mt-3 h-2 bg-gray-800 rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-[#00FF99]"
@@ -279,9 +421,76 @@ const LeverageDemoTrade = () => {
               </div>
             </div>
 
+            {/* Live Chart (shows during trading) */}
+            <AnimatePresence>
+              {(tradeStep >= 2 && tradeStep <= 4) && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-semibold">Live Market Price</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-[#00FF99] rounded-full animate-pulse" />
+                      <span className="text-[#00FF99] text-sm">LIVE</span>
+                    </div>
+                  </div>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#00FF99" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#00FF99" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis 
+                          dataKey="time" 
+                          stroke="#444" 
+                          tick={{ fill: '#666', fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis 
+                          domain={['auto', 'auto']}
+                          stroke="#444" 
+                          tick={{ fill: '#666', fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v) => `${v.toFixed(0)}¢`}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="price"
+                          stroke="#00FF99"
+                          strokeWidth={2}
+                          fill="url(#chartGradient)"
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex justify-between mt-4 text-sm">
+                    <div>
+                      <span className="text-gray-400">Current Price: </span>
+                      <span className="text-[#00FF99] font-mono font-semibold">{currentProb.toFixed(2)}¢</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Position: </span>
+                      <span className={selectedOutcome === "YES" ? "text-[#00FF99]" : "text-red-400"}>
+                        {selectedOutcome} @ {leverage}x
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Visual Flow Diagram */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6 min-h-[500px]">
-              <div className="grid md:grid-cols-3 gap-6 h-full">
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
+              <div className="grid md:grid-cols-3 gap-6">
                 {/* User Wallet */}
                 <div className="flex flex-col items-center">
                   <motion.div
@@ -304,7 +513,6 @@ const LeverageDemoTrade = () => {
                     <p className="text-gray-500 text-sm mt-1">Available Balance</p>
                   </motion.div>
 
-                  {/* Arrow down to trade */}
                   <AnimatePresence>
                     {tradeStep === 1 && (
                       <motion.div
@@ -349,7 +557,6 @@ const LeverageDemoTrade = () => {
                     </p>
                     <p className="text-gray-500 text-sm mt-1">{leverage}x Leverage</p>
 
-                    {/* Trade animation */}
                     <AnimatePresence>
                       {tradeStep === 3 && (
                         <motion.div
@@ -372,7 +579,6 @@ const LeverageDemoTrade = () => {
                     </AnimatePresence>
                   </motion.div>
 
-                  {/* Fee breakdown during trade */}
                   <AnimatePresence>
                     {(tradeStep >= 3 && tradeStep <= 4) && (
                       <motion.div
@@ -419,7 +625,6 @@ const LeverageDemoTrade = () => {
                     <p className="text-gray-500 text-sm mt-1">Total Liquidity</p>
                   </motion.div>
 
-                  {/* Arrow indicators */}
                   <AnimatePresence>
                     {tradeStep === 2 && (
                       <motion.div
@@ -503,7 +708,7 @@ const LeverageDemoTrade = () => {
             </div>
 
             {/* Educational Note */}
-            <div className="mt-6 bg-gray-900/30 border border-gray-800 rounded-2xl p-6">
+            <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-6">
               <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                 <Info className="w-5 h-5 text-[#00FF99]" />
                 How It Works
