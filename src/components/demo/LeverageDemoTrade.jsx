@@ -554,7 +554,7 @@ const LeverageDemoTrade = () => {
                       animate={{ scale: 1, color: "#ffffff" }}
                       className="text-sm md:text-2xl font-mono font-bold"
                     >
-                      ${userBalance >= 1000 ? `${(userBalance/1000).toFixed(1)}k` : userBalance.toLocaleString()}
+                      ${userBalance.toLocaleString()}
                     </motion.p>
                     <p className="text-gray-500 text-[10px] md:text-sm mt-0.5 md:mt-1 hidden md:block">Available</p>
                   </motion.div>
@@ -578,7 +578,7 @@ const LeverageDemoTrade = () => {
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                         >
-                          -${collateral >= 1000 ? `${(collateral/1000).toFixed(1)}k` : collateral}
+                          -${collateral.toLocaleString()}
                         </motion.div>
                       </motion.div>
                     )}
@@ -599,7 +599,7 @@ const LeverageDemoTrade = () => {
                     <TrendingUp className="w-6 h-6 md:w-12 md:h-12 text-[#00FF99] mx-auto mb-1 md:mb-3" />
                     <h4 className="text-white font-semibold text-xs md:text-base mb-1 md:mb-2">Position</h4>
                     <p className="text-sm md:text-3xl font-mono font-bold text-[#00FF99]">
-                      ${totalExposure >= 1000 ? `${(totalExposure/1000).toFixed(1)}k` : totalExposure}
+                      ${totalExposure.toLocaleString()}
                     </p>
                     <p className="text-gray-500 text-[10px] md:text-sm mt-0.5 md:mt-1">{leverage}x</p>
 
@@ -665,7 +665,7 @@ const LeverageDemoTrade = () => {
                       animate={{ scale: 1, color: "#ffffff" }}
                       className="text-sm md:text-2xl font-mono font-bold"
                     >
-                      ${vaultBalance >= 1000 ? `${(vaultBalance/1000).toFixed(0)}k` : vaultBalance}
+                      ${vaultBalance.toLocaleString()}
                     </motion.p>
                     <p className="text-gray-500 text-[10px] md:text-sm mt-0.5 md:mt-1 hidden md:block">Liquidity</p>
                   </motion.div>
@@ -687,7 +687,7 @@ const LeverageDemoTrade = () => {
                         <motion.div
                           className="text-[#00FF99] text-[10px] md:text-sm font-semibold mt-1 md:mt-2 bg-[#00FF99]/10 px-2 md:px-3 py-0.5 md:py-1 rounded-full"
                         >
-                          ${borrowedAmount >= 1000 ? `${(borrowedAmount/1000).toFixed(1)}k` : borrowedAmount}
+                          ${borrowedAmount.toLocaleString()}
                         </motion.div>
                       </motion.div>
                     )}
@@ -707,7 +707,7 @@ const LeverageDemoTrade = () => {
                         <motion.div
                           className="text-[#00FF99] text-[10px] md:text-sm font-semibold mt-1 md:mt-2 bg-[#00FF99]/10 px-2 md:px-3 py-0.5 md:py-1 rounded-full"
                         >
-                          +${((borrowedAmount + totalFees + interest)/1000).toFixed(1)}k
+                          +${(borrowedAmount + totalFees + interest).toLocaleString(undefined, {maximumFractionDigits: 0})}
                         </motion.div>
                       </motion.div>
                     )}
