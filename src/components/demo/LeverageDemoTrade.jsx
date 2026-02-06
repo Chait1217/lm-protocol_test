@@ -111,7 +111,18 @@ const LeverageDemoTrade = () => {
   const interestRate = 0.20;
   const daysHeld = 7;
   const interest = (borrowedAmount * interestRate * daysHeld) / 365;
-  const liquidationPrice = collateral > 0 ? (collateral * 0.1) / (totalExposure / 100) : 0;
+  
+  // Liquidation price calculation based on leverage and entry price (bid/ask)
+  // Entry price depends on selected outcome
+  const entryPrice = selectedOutcome === "YES" ? ask : (100 - bid);
+  const maintenanceMargin = 0.05; // 5% maintenance margin
+  
+  // For YES: liquidation when price drops - you get liquidated when losses exceed (1 - maintenance) of collateral
+  // For NO: liquidation when price rises
+  // Liquidation threshold = Entry Price - (Entry Price / leverage) * (1 - maintenance margin)
+  const liquidationPrice = selectedOutcome === "YES"
+    ? Math.max(0, entryPrice - (entryPrice / leverage) * (1 - maintenanceMargin))
+    : Math.min(100, entryPrice + ((100 - entryPrice) / leverage) * (1 - maintenanceMargin));
   
   const lpShare = (totalFees + interest) * 0.85;
   const protocolShare = (totalFees + interest) * 0.15;
@@ -358,8 +369,12 @@ const LeverageDemoTrade = () => {
                   <span className="text-yellow-400 font-mono font-semibold">${(totalFees + interest).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-gray-400">Entry Price ({selectedOutcome})</span>
+                  <span className="text-white font-mono">{entryPrice.toFixed(2)}¢</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-gray-400">Liquidation Price</span>
-                  <span className="text-red-400 font-mono">${liquidationPrice.toFixed(4)}</span>
+                  <span className="text-red-400 font-mono">{liquidationPrice.toFixed(2)}¢</span>
                 </div>
               </div>
             </div>
