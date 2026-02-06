@@ -227,45 +227,45 @@ const LeverageDemoTrade = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-black pt-24 pb-20 px-4">
+    <div className="min-h-screen bg-black pt-20 md:pt-24 pb-12 md:pb-20 px-3 md:px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
+          className="text-center mb-6 md:mb-12"
         >
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+          <h1 className="text-2xl md:text-5xl font-bold text-white mb-2 md:mb-4">
             Demo <span className="text-[#00FF99]">Trade</span>
           </h1>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+          <p className="text-gray-400 text-sm md:text-lg max-w-2xl mx-auto">
             Watch how leveraged trading works: collateral flows from your wallet, 
             borrowed funds come from the Vault, and fees return to LPs.
           </p>
         </motion.div>
 
         {/* Main Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-3 gap-3 md:gap-6">
           {/* Left: Input Controls */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="lg:col-span-1 space-y-6"
+            className="lg:col-span-1 space-y-3 md:space-y-6"
           >
             {/* Market Question Card */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
-              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5 text-[#00FF99]" />
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <h3 className="text-white font-semibold mb-2 md:mb-4 flex items-center gap-2 text-sm md:text-base">
+                <Target className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
                 Market Question
               </h3>
-              <p className="text-white text-lg font-medium mb-4">{selectedMarket.question}</p>
+              <p className="text-white text-sm md:text-lg font-medium mb-3 md:mb-4">{selectedMarket.question}</p>
               
               {/* Outcome buttons */}
-              <div className="flex gap-3 mb-4">
+              <div className="flex gap-2 md:gap-3 mb-3 md:mb-4">
                 <button
                   onClick={() => setSelectedOutcome("YES")}
                   disabled={isTrading}
-                  className={`flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer ${
+                  className={`flex-1 py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-sm md:text-base transition-all cursor-pointer ${
                     selectedOutcome === "YES"
                       ? "bg-[#00FF99] text-black"
                       : "bg-gray-800 text-[#00FF99] border border-[#00FF99]/30 hover:bg-[#00FF99]/10"
@@ -276,7 +276,7 @@ const LeverageDemoTrade = () => {
                 <button
                   onClick={() => setSelectedOutcome("NO")}
                   disabled={isTrading}
-                  className={`flex-1 py-3 rounded-xl font-bold transition-all cursor-pointer ${
+                  className={`flex-1 py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-sm md:text-base transition-all cursor-pointer ${
                     selectedOutcome === "NO"
                       ? "bg-red-500 text-white"
                       : "bg-gray-800 text-red-400 border border-red-500/30 hover:bg-red-500/10"
@@ -287,32 +287,32 @@ const LeverageDemoTrade = () => {
               </div>
               
               {/* Bid/Ask Display */}
-              <div className="bg-black/30 rounded-xl p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-400 text-sm">Best Bid</span>
+              <div className="bg-black/30 rounded-lg md:rounded-xl p-2.5 md:p-4">
+                <div className="flex justify-between items-center mb-1.5 md:mb-2">
+                  <span className="text-gray-400 text-xs md:text-sm">Best Bid</span>
                   <motion.span 
                     key={bid}
                     initial={{ color: "#00FF99" }}
                     animate={{ color: "#ffffff" }}
-                    className="text-white font-mono font-semibold"
+                    className="text-white font-mono font-semibold text-sm md:text-base"
                   >
                     {selectedOutcome === "YES" ? bid.toFixed(2) : (100 - ask).toFixed(2)}¢
                   </motion.span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Best Ask</span>
+                  <span className="text-gray-400 text-xs md:text-sm">Best Ask</span>
                   <motion.span 
                     key={ask}
                     initial={{ color: "#00FF99" }}
                     animate={{ color: "#ffffff" }}
-                    className="text-white font-mono font-semibold"
+                    className="text-white font-mono font-semibold text-sm md:text-base"
                   >
                     {selectedOutcome === "YES" ? ask.toFixed(2) : (100 - bid).toFixed(2)}¢
                   </motion.span>
                 </div>
-                <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
-                  <span className="text-gray-400 text-sm">Spread</span>
-                  <span className="text-yellow-400 font-mono text-sm">
+                <div className="flex justify-between items-center mt-1.5 md:mt-2 pt-1.5 md:pt-2 border-t border-gray-700">
+                  <span className="text-gray-400 text-xs md:text-sm">Spread</span>
+                  <span className="text-yellow-400 font-mono text-xs md:text-sm">
                     {(ask - bid).toFixed(2)}¢
                   </span>
                 </div>
@@ -320,39 +320,39 @@ const LeverageDemoTrade = () => {
             </div>
 
             {/* Collateral & Leverage */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-6">
               {/* Collateral Section */}
-              <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-[#00FF99]" />
+              <h3 className="text-white font-semibold mb-2 md:mb-3 flex items-center gap-2 text-sm md:text-base">
+                <Wallet className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
                 Collateral
               </h3>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                <span className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm md:text-base">$</span>
                 <input
                   type="number"
                   value={collateral}
                   onChange={(e) => setCollateral(Math.max(0, Number(e.target.value)))}
                   disabled={isTrading}
-                  className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-8 pr-4 text-white text-xl font-mono focus:border-[#00FF99] focus:outline-none disabled:opacity-50"
+                  className="w-full bg-black/50 border border-gray-700 rounded-lg md:rounded-xl py-2 md:py-3 pl-7 md:pl-8 pr-3 md:pr-4 text-white text-lg md:text-xl font-mono focus:border-[#00FF99] focus:outline-none disabled:opacity-50"
                 />
               </div>
-              <p className="text-gray-500 text-sm mt-2 mb-5">
+              <p className="text-gray-500 text-xs md:text-sm mt-1.5 md:mt-2 mb-3 md:mb-5">
                 Your balance: ${userBalance.toLocaleString()}
               </p>
               
               {/* Leverage Section */}
-              <div className="border-t border-gray-700 pt-5">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-[#00FF99]" />
+              <div className="border-t border-gray-700 pt-3 md:pt-5">
+                <h3 className="text-white font-semibold mb-2 md:mb-3 flex items-center gap-2 text-sm md:text-base">
+                  <Zap className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
                   Leverage: {leverage}x
                 </h3>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 md:gap-2">
                   {[1, 2, 3, 4, 5].map((l) => (
                     <button
                       key={l}
                       onClick={() => setLeverage(l)}
                       disabled={isTrading}
-                      className={`flex-1 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
+                      className={`flex-1 py-1.5 md:py-2 rounded-md md:rounded-lg font-semibold text-sm md:text-base transition-all cursor-pointer ${
                         leverage === l
                           ? "bg-[#00FF99] text-black"
                           : "bg-gray-800 text-gray-400 hover:bg-gray-700"
@@ -366,12 +366,12 @@ const LeverageDemoTrade = () => {
             </div>
 
             {/* Trade Details */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
-              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <Info className="w-5 h-5 text-[#00FF99]" />
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <h3 className="text-white font-semibold mb-2 md:mb-4 flex items-center gap-2 text-sm md:text-base">
+                <Info className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
                 Trade Details
               </h3>
-              <div className="space-y-3 text-sm">
+              <div className="space-y-1.5 md:space-y-3 text-xs md:text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Total Exposure</span>
                   <span className="text-white font-mono">${totalExposure.toLocaleString()}</span>
@@ -388,11 +388,11 @@ const LeverageDemoTrade = () => {
                   <span className="text-gray-400">Borrow Fee (0.1%)</span>
                   <span className="text-yellow-400 font-mono">${borrowFee.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="hidden md:flex justify-between">
                   <span className="text-gray-400">Interest (7 days @ 20% APR)</span>
                   <span className="text-yellow-400 font-mono">${interest.toFixed(2)}</span>
                 </div>
-                <div className="border-t border-gray-700 pt-3 flex justify-between">
+                <div className="border-t border-gray-700 pt-2 md:pt-3 flex justify-between">
                   <span className="text-gray-400">Total Fees</span>
                   <span className="text-yellow-400 font-mono font-semibold">${(totalFees + interest).toFixed(2)}</span>
                 </div>
@@ -411,7 +411,7 @@ const LeverageDemoTrade = () => {
             <button
               onClick={isTrading ? undefined : executeTrade}
               disabled={isTrading || collateral > userBalance || collateral <= 0}
-              className={`w-full py-4 rounded-xl font-bold text-lg transition-all cursor-pointer ${
+              className={`w-full py-3 md:py-4 rounded-lg md:rounded-xl font-bold text-base md:text-lg transition-all cursor-pointer ${
                 isTrading
                   ? "bg-gray-700 text-gray-400"
                   : collateral > userBalance || collateral <= 0
@@ -423,8 +423,8 @@ const LeverageDemoTrade = () => {
             </button>
 
             {collateral > userBalance && (
-              <p className="text-red-400 text-sm text-center flex items-center justify-center gap-1">
-                <AlertTriangle className="w-4 h-4" />
+              <p className="text-red-400 text-xs md:text-sm text-center flex items-center justify-center gap-1">
+                <AlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
                 Insufficient balance
               </p>
             )}
@@ -432,9 +432,9 @@ const LeverageDemoTrade = () => {
             {(showSuccess || tradeStep > 0) && (
               <button
                 onClick={resetDemo}
-                className="w-full py-3 rounded-xl font-semibold text-gray-400 bg-gray-800 hover:bg-gray-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2 md:py-3 rounded-lg md:rounded-xl font-semibold text-sm md:text-base text-gray-400 bg-gray-800 hover:bg-gray-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
                 Reset Demo
               </button>
             )}
@@ -444,17 +444,17 @@ const LeverageDemoTrade = () => {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="lg:col-span-2 space-y-6"
+            className="lg:col-span-2 space-y-3 md:space-y-6"
           >
             {/* Status Bar */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-4">
+              <div className="flex items-center justify-between text-sm md:text-base">
                 <span className="text-gray-400">Status:</span>
                 <span className={`font-semibold ${tradeStep === 5 ? "text-[#00FF99]" : tradeStep > 0 ? "text-yellow-400" : "text-gray-400"}`}>
                   {stepLabels[tradeStep]}
                 </span>
               </div>
-              <div className="mt-3 h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div className="mt-2 md:mt-3 h-1.5 md:h-2 bg-gray-800 rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-[#00FF99]"
                   initial={{ width: "0%" }}
@@ -471,16 +471,16 @@ const LeverageDemoTrade = () => {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6"
+                  className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-6"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-semibold">Live Market Price</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-[#00FF99] rounded-full animate-pulse" />
-                      <span className="text-[#00FF99] text-sm">LIVE</span>
+                  <div className="flex items-center justify-between mb-2 md:mb-4">
+                    <h3 className="text-white font-semibold text-sm md:text-base">Live Market Price</h3>
+                    <div className="flex items-center gap-1.5 md:gap-2">
+                      <span className="w-1.5 h-1.5 md:w-2 md:h-2 bg-[#00FF99] rounded-full animate-pulse" />
+                      <span className="text-[#00FF99] text-xs md:text-sm">LIVE</span>
                     </div>
                   </div>
-                  <div className="h-48">
+                  <div className="h-32 md:h-48">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData}>
                         <defs>
@@ -492,17 +492,19 @@ const LeverageDemoTrade = () => {
                         <XAxis 
                           dataKey="time" 
                           stroke="#444" 
-                          tick={{ fill: '#666', fontSize: 10 }}
+                          tick={{ fill: '#666', fontSize: 8 }}
                           axisLine={false}
                           tickLine={false}
+                          hide={true}
                         />
                         <YAxis 
                           domain={['auto', 'auto']}
                           stroke="#444" 
-                          tick={{ fill: '#666', fontSize: 10 }}
+                          tick={{ fill: '#666', fontSize: 8 }}
                           axisLine={false}
                           tickLine={false}
                           tickFormatter={(v) => `${v.toFixed(0)}¢`}
+                          width={30}
                         />
                         <Area
                           type="monotone"
@@ -515,13 +517,12 @@ const LeverageDemoTrade = () => {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex justify-between mt-4 text-sm">
+                  <div className="flex justify-between mt-2 md:mt-4 text-xs md:text-sm">
                     <div>
-                      <span className="text-gray-400">Current Price: </span>
+                      <span className="text-gray-400">Price: </span>
                       <span className="text-[#00FF99] font-mono font-semibold">{currentProb.toFixed(2)}¢</span>
                     </div>
                     <div>
-                      <span className="text-gray-400">Position: </span>
                       <span className={selectedOutcome === "YES" ? "text-[#00FF99]" : "text-red-400"}>
                         {selectedOutcome} @ {leverage}x
                       </span>
@@ -532,28 +533,28 @@ const LeverageDemoTrade = () => {
             </AnimatePresence>
 
             {/* Visual Flow Diagram */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
-              <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-6">
+              <div className="grid grid-cols-3 gap-2 md:gap-6">
                 {/* User Wallet */}
                 <div className="flex flex-col items-center">
                   <motion.div
-                    className={`w-full bg-black/50 border-2 rounded-2xl p-6 text-center transition-all ${
+                    className={`w-full bg-black/50 border-2 rounded-xl md:rounded-2xl p-2 md:p-6 text-center transition-all ${
                       tradeStep === 1 ? "border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.3)]" : "border-gray-700"
                     }`}
                     animate={tradeStep === 1 ? { scale: [1, 1.02, 1] } : {}}
                     transition={{ repeat: tradeStep === 1 ? Infinity : 0, duration: 1 }}
                   >
-                    <Wallet className="w-12 h-12 text-[#00FF99] mx-auto mb-3" />
-                    <h4 className="text-white font-semibold mb-2">Your Wallet</h4>
+                    <Wallet className="w-6 h-6 md:w-12 md:h-12 text-[#00FF99] mx-auto mb-1 md:mb-3" />
+                    <h4 className="text-white font-semibold text-xs md:text-base mb-1 md:mb-2">Wallet</h4>
                     <motion.p
                       key={userBalance}
                       initial={{ scale: 1.2, color: "#00FF99" }}
                       animate={{ scale: 1, color: "#ffffff" }}
-                      className="text-2xl font-mono font-bold"
+                      className="text-sm md:text-2xl font-mono font-bold"
                     >
-                      ${userBalance.toLocaleString()}
+                      ${userBalance >= 1000 ? `${(userBalance/1000).toFixed(1)}k` : userBalance.toLocaleString()}
                     </motion.p>
-                    <p className="text-gray-500 text-sm mt-1">Available Balance</p>
+                    <p className="text-gray-500 text-[10px] md:text-sm mt-0.5 md:mt-1 hidden md:block">Available</p>
                   </motion.div>
 
                   <AnimatePresence>
@@ -562,20 +563,20 @@ const LeverageDemoTrade = () => {
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
-                        className="my-4"
+                        className="my-2 md:my-4"
                       >
                         <motion.div
-                          animate={{ y: [0, 10, 0] }}
+                          animate={{ y: [0, 5, 0] }}
                           transition={{ repeat: Infinity, duration: 0.8 }}
                         >
-                          <ArrowDown className="w-8 h-8 text-yellow-400" />
+                          <ArrowDown className="w-5 h-5 md:w-8 md:h-8 text-yellow-400" />
                         </motion.div>
                         <motion.div
-                          className="text-yellow-400 text-sm font-semibold mt-2 bg-yellow-400/10 px-3 py-1 rounded-full"
+                          className="text-yellow-400 text-[10px] md:text-sm font-semibold mt-1 md:mt-2 bg-yellow-400/10 px-2 md:px-3 py-0.5 md:py-1 rounded-full"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                         >
-                          -${collateral.toLocaleString()}
+                          -${collateral >= 1000 ? `${(collateral/1000).toFixed(1)}k` : collateral}
                         </motion.div>
                       </motion.div>
                     )}
@@ -585,7 +586,7 @@ const LeverageDemoTrade = () => {
                 {/* Center: Trade Position */}
                 <div className="flex flex-col items-center justify-center">
                   <motion.div
-                    className={`w-full bg-black/50 border-2 rounded-2xl p-6 text-center transition-all ${
+                    className={`w-full bg-black/50 border-2 rounded-xl md:rounded-2xl p-2 md:p-6 text-center transition-all ${
                       tradeStep >= 2 && tradeStep <= 4
                         ? "border-[#00FF99] shadow-[0_0_30px_rgba(0,255,153,0.3)]"
                         : "border-gray-700"
@@ -593,12 +594,12 @@ const LeverageDemoTrade = () => {
                     animate={tradeStep >= 2 && tradeStep <= 4 ? { scale: [1, 1.02, 1] } : {}}
                     transition={{ repeat: tradeStep >= 2 && tradeStep <= 4 ? Infinity : 0, duration: 1.5 }}
                   >
-                    <TrendingUp className="w-12 h-12 text-[#00FF99] mx-auto mb-3" />
-                    <h4 className="text-white font-semibold mb-2">Leveraged Position</h4>
-                    <p className="text-3xl font-mono font-bold text-[#00FF99]">
-                      ${totalExposure.toLocaleString()}
+                    <TrendingUp className="w-6 h-6 md:w-12 md:h-12 text-[#00FF99] mx-auto mb-1 md:mb-3" />
+                    <h4 className="text-white font-semibold text-xs md:text-base mb-1 md:mb-2">Position</h4>
+                    <p className="text-sm md:text-3xl font-mono font-bold text-[#00FF99]">
+                      ${totalExposure >= 1000 ? `${(totalExposure/1000).toFixed(1)}k` : totalExposure}
                     </p>
-                    <p className="text-gray-500 text-sm mt-1">{leverage}x Leverage</p>
+                    <p className="text-gray-500 text-[10px] md:text-sm mt-0.5 md:mt-1">{leverage}x</p>
 
                     <AnimatePresence>
                       {tradeStep === 3 && (
@@ -606,17 +607,16 @@ const LeverageDemoTrade = () => {
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0 }}
-                          className="mt-4 bg-[#00FF99]/10 rounded-xl p-3"
+                          className="mt-2 md:mt-4 bg-[#00FF99]/10 rounded-lg md:rounded-xl p-1.5 md:p-3"
                         >
                           <motion.div
                             animate={{ rotate: 360 }}
                             transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
                             className="inline-block"
                           >
-                            <Activity className="w-6 h-6 text-[#00FF99]" />
+                            <Activity className="w-4 h-4 md:w-6 md:h-6 text-[#00FF99]" />
                           </motion.div>
-                          <p className="text-[#00FF99] text-sm mt-1">Position Active</p>
-                          <p className="text-gray-400 text-xs">Simulating 10% profit...</p>
+                          <p className="text-[#00FF99] text-[10px] md:text-sm mt-0.5 md:mt-1">Active</p>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -628,9 +628,9 @@ const LeverageDemoTrade = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
-                        className="mt-4 bg-gray-800/50 rounded-xl p-4 w-full text-sm"
+                        className="mt-2 md:mt-4 bg-gray-800/50 rounded-lg md:rounded-xl p-2 md:p-4 w-full text-[10px] md:text-sm hidden md:block"
                       >
-                        <p className="text-gray-400 mb-2">Fee Distribution:</p>
+                        <p className="text-gray-400 mb-1 md:mb-2">Fee Distribution:</p>
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-500">LPs (85%)</span>
                           <span className="text-[#00FF99]">${lpShare.toFixed(2)}</span>
@@ -647,7 +647,7 @@ const LeverageDemoTrade = () => {
                 {/* Vault */}
                 <div className="flex flex-col items-center">
                   <motion.div
-                    className={`w-full bg-black/50 border-2 rounded-2xl p-6 text-center transition-all ${
+                    className={`w-full bg-black/50 border-2 rounded-xl md:rounded-2xl p-2 md:p-6 text-center transition-all ${
                       tradeStep === 2 || tradeStep === 4
                         ? "border-[#00FF99] shadow-[0_0_20px_rgba(0,255,153,0.3)]"
                         : "border-gray-700"
@@ -655,17 +655,17 @@ const LeverageDemoTrade = () => {
                     animate={tradeStep === 2 || tradeStep === 4 ? { scale: [1, 1.02, 1] } : {}}
                     transition={{ repeat: tradeStep === 2 || tradeStep === 4 ? Infinity : 0, duration: 1 }}
                   >
-                    <Database className="w-12 h-12 text-[#00FF99] mx-auto mb-3" />
-                    <h4 className="text-white font-semibold mb-2">USDC Vault</h4>
+                    <Database className="w-6 h-6 md:w-12 md:h-12 text-[#00FF99] mx-auto mb-1 md:mb-3" />
+                    <h4 className="text-white font-semibold text-xs md:text-base mb-1 md:mb-2">Vault</h4>
                     <motion.p
                       key={vaultBalance}
                       initial={{ scale: 1.2, color: "#00FF99" }}
                       animate={{ scale: 1, color: "#ffffff" }}
-                      className="text-2xl font-mono font-bold"
+                      className="text-sm md:text-2xl font-mono font-bold"
                     >
-                      ${vaultBalance.toLocaleString()}
+                      ${vaultBalance >= 1000 ? `${(vaultBalance/1000).toFixed(0)}k` : vaultBalance}
                     </motion.p>
-                    <p className="text-gray-500 text-sm mt-1">Total Liquidity</p>
+                    <p className="text-gray-500 text-[10px] md:text-sm mt-0.5 md:mt-1 hidden md:block">Liquidity</p>
                   </motion.div>
 
                   <AnimatePresence>
@@ -674,18 +674,18 @@ const LeverageDemoTrade = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="my-4 text-center"
+                        className="my-2 md:my-4 text-center"
                       >
                         <motion.div
-                          animate={{ x: [-10, 0, -10] }}
+                          animate={{ x: [-5, 0, -5] }}
                           transition={{ repeat: Infinity, duration: 0.8 }}
                         >
-                          <ArrowRight className="w-8 h-8 text-[#00FF99] rotate-180" />
+                          <ArrowRight className="w-5 h-5 md:w-8 md:h-8 text-[#00FF99] rotate-180" />
                         </motion.div>
                         <motion.div
-                          className="text-[#00FF99] text-sm font-semibold mt-2 bg-[#00FF99]/10 px-3 py-1 rounded-full"
+                          className="text-[#00FF99] text-[10px] md:text-sm font-semibold mt-1 md:mt-2 bg-[#00FF99]/10 px-2 md:px-3 py-0.5 md:py-1 rounded-full"
                         >
-                          Lending ${borrowedAmount.toLocaleString()}
+                          ${borrowedAmount >= 1000 ? `${(borrowedAmount/1000).toFixed(1)}k` : borrowedAmount}
                         </motion.div>
                       </motion.div>
                     )}
@@ -694,18 +694,18 @@ const LeverageDemoTrade = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="my-4 text-center"
+                        className="my-2 md:my-4 text-center"
                       >
                         <motion.div
-                          animate={{ x: [10, 0, 10] }}
+                          animate={{ x: [5, 0, 5] }}
                           transition={{ repeat: Infinity, duration: 0.8 }}
                         >
-                          <ArrowRight className="w-8 h-8 text-[#00FF99]" />
+                          <ArrowRight className="w-5 h-5 md:w-8 md:h-8 text-[#00FF99]" />
                         </motion.div>
                         <motion.div
-                          className="text-[#00FF99] text-sm font-semibold mt-2 bg-[#00FF99]/10 px-3 py-1 rounded-full"
+                          className="text-[#00FF99] text-[10px] md:text-sm font-semibold mt-1 md:mt-2 bg-[#00FF99]/10 px-2 md:px-3 py-0.5 md:py-1 rounded-full"
                         >
-                          +${(borrowedAmount + totalFees + interest).toFixed(2)}
+                          +${((borrowedAmount + totalFees + interest)/1000).toFixed(1)}k
                         </motion.div>
                       </motion.div>
                     )}
@@ -720,45 +720,47 @@ const LeverageDemoTrade = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="mt-8 bg-[#00FF99]/10 border border-[#00FF99]/30 rounded-2xl p-6 text-center"
+                    className="mt-4 md:mt-8 bg-[#00FF99]/10 border border-[#00FF99]/30 rounded-xl md:rounded-2xl p-3 md:p-6 text-center"
                   >
-                    <CheckCircle className="w-16 h-16 text-[#00FF99] mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-white mb-2">Trade Executed Successfully!</h3>
-                    <p className="text-gray-400 mb-4">
-                      Fees collected and returned to the Vault. LPs earned real yield!
+                    <CheckCircle className="w-10 h-10 md:w-16 md:h-16 text-[#00FF99] mx-auto mb-2 md:mb-4" />
+                    <h3 className="text-lg md:text-2xl font-bold text-white mb-1 md:mb-2">Trade Successful!</h3>
+                    <p className="text-gray-400 text-xs md:text-base mb-2 md:mb-4">
+                      Fees collected and returned to the Vault.
                     </p>
                     
                     {/* Trader Summary Line */}
-                    <div className="bg-black/40 rounded-xl p-4 mb-6 border border-gray-700">
-                      <p className="text-sm text-gray-300">
-                        <span className="text-white font-semibold">{selectedOutcome}</span> position @ <span className="text-[#00FF99] font-mono">{leverage}x</span> leverage
+                    <div className="bg-black/40 rounded-lg md:rounded-xl p-2 md:p-4 mb-3 md:mb-6 border border-gray-700">
+                      <p className="text-[10px] md:text-sm text-gray-300 leading-relaxed">
+                        <span className="text-white font-semibold">{selectedOutcome}</span> @ <span className="text-[#00FF99] font-mono">{leverage}x</span>
+                        <span className="hidden md:inline">
+                          {" • "}
+                          <span className="text-gray-400">Open:</span> <span className="text-white font-mono">{openPrice?.toFixed(2)}¢</span>
+                          {" → "}
+                          <span className="text-gray-400">Close:</span> <span className="text-[#00FF99] font-mono">{closePrice?.toFixed(2)}¢</span>
+                        </span>
                         {" • "}
-                        <span className="text-gray-400">Open:</span> <span className="text-white font-mono">{openPrice?.toFixed(2)}¢</span>
-                        {" → "}
-                        <span className="text-gray-400">Close:</span> <span className="text-[#00FF99] font-mono">{closePrice?.toFixed(2)}¢</span>
+                        <span className="text-gray-400">Fees:</span> <span className="text-yellow-400 font-mono">${(totalFees + interest).toFixed(2)}</span>
                         {" • "}
-                        <span className="text-gray-400">Fees paid:</span> <span className="text-yellow-400 font-mono">${(totalFees + interest).toFixed(2)}</span>
-                        {" • "}
-                        <span className="text-gray-400">Net P&L:</span> <span className="text-[#00FF99] font-mono">+${(totalExposure * 0.10 - totalFees - interest).toFixed(2)}</span>
+                        <span className="text-gray-400">P&L:</span> <span className="text-[#00FF99] font-mono">+${(totalExposure * 0.10 - totalFees - interest).toFixed(2)}</span>
                       </p>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-black/30 rounded-xl p-3">
-                        <p className="text-gray-500 text-xs">Collateral Used</p>
-                        <p className="text-white font-mono font-semibold">${collateral.toLocaleString()}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+                      <div className="bg-black/30 rounded-lg md:rounded-xl p-2 md:p-3">
+                        <p className="text-gray-500 text-[10px] md:text-xs">Collateral</p>
+                        <p className="text-white font-mono font-semibold text-xs md:text-base">${collateral.toLocaleString()}</p>
                       </div>
-                      <div className="bg-black/30 rounded-xl p-3">
-                        <p className="text-gray-500 text-xs">Borrowed</p>
-                        <p className="text-[#00FF99] font-mono font-semibold">${borrowedAmount.toLocaleString()}</p>
+                      <div className="bg-black/30 rounded-lg md:rounded-xl p-2 md:p-3">
+                        <p className="text-gray-500 text-[10px] md:text-xs">Borrowed</p>
+                        <p className="text-[#00FF99] font-mono font-semibold text-xs md:text-base">${borrowedAmount.toLocaleString()}</p>
                       </div>
-                      <div className="bg-black/30 rounded-xl p-3">
-                        <p className="text-gray-500 text-xs">Total Fees</p>
-                        <p className="text-yellow-400 font-mono font-semibold">${(totalFees + interest).toFixed(2)}</p>
+                      <div className="bg-black/30 rounded-lg md:rounded-xl p-2 md:p-3">
+                        <p className="text-gray-500 text-[10px] md:text-xs">Total Fees</p>
+                        <p className="text-yellow-400 font-mono font-semibold text-xs md:text-base">${(totalFees + interest).toFixed(2)}</p>
                       </div>
-                      <div className="bg-black/30 rounded-xl p-3">
-                        <p className="text-gray-500 text-xs">LP Earnings</p>
-                        <p className="text-[#00FF99] font-mono font-semibold">${lpShare.toFixed(2)}</p>
+                      <div className="bg-black/30 rounded-lg md:rounded-xl p-2 md:p-3">
+                        <p className="text-gray-500 text-[10px] md:text-xs">LP Earnings</p>
+                        <p className="text-[#00FF99] font-mono font-semibold text-xs md:text-base">${lpShare.toFixed(2)}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -766,8 +768,8 @@ const LeverageDemoTrade = () => {
               </AnimatePresence>
             </div>
 
-            {/* Educational Note */}
-            <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-6">
+            {/* Educational Note - Hidden on mobile */}
+            <div className="hidden md:block bg-gray-900/30 border border-gray-800 rounded-2xl p-6">
               <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                 <Info className="w-5 h-5 text-[#00FF99]" />
                 How It Works
