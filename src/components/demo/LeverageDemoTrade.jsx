@@ -18,7 +18,7 @@ import {
 const LeverageDemoTrade = () => {
   // State
   const [collateral, setCollateral] = useState(1000);
-  const [leverage, setLeverage] = useState(5);
+  const [leverage, setLeverage] = useState(3);
   const [isTrading, setIsTrading] = useState(false);
   const [tradeStep, setTradeStep] = useState(0); // 0: idle, 1: taking collateral, 2: borrowing, 3: trading, 4: returning, 5: complete
   const [vaultBalance, setVaultBalance] = useState(100000);
@@ -56,21 +56,21 @@ const LeverageDemoTrade = () => {
 
     // Step 1: Take collateral from user
     setTradeStep(1);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 2500));
     setUserBalance(prev => prev - collateral);
 
     // Step 2: Borrow from vault
     setTradeStep(2);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 2500));
     setVaultBalance(prev => prev - borrowedAmount);
 
     // Step 3: Execute trade (position open)
     setTradeStep(3);
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3500));
 
     // Step 4: Close trade, return borrowed + fees
     setTradeStep(4);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 2500));
     
     // Simulate profitable trade (10% gain)
     const profit = totalExposure * 0.10;
@@ -83,7 +83,7 @@ const LeverageDemoTrade = () => {
     setTradeStep(5);
     setShowSuccess(true);
     
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
     setIsTrading(false);
   };
 
@@ -151,21 +151,21 @@ const LeverageDemoTrade = () => {
               </h3>
               <input
                 type="range"
-                min="2"
-                max="10"
+                min="1"
+                max="5"
                 value={leverage}
                 onChange={(e) => setLeverage(Number(e.target.value))}
                 disabled={isTrading}
                 className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#00FF99] disabled:opacity-50"
               />
               <div className="flex justify-between text-gray-500 text-sm mt-2">
-                <span>2x</span>
+                <span>1x</span>
+                <span>3x</span>
                 <span>5x</span>
-                <span>10x</span>
               </div>
               {/* Preset buttons */}
               <div className="flex gap-2 mt-4">
-                {[2, 5, 10].map((l) => (
+                {[1, 2, 3, 4, 5].map((l) => (
                   <button
                     key={l}
                     onClick={() => setLeverage(l)}
