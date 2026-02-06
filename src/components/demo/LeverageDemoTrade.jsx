@@ -319,9 +319,10 @@ const LeverageDemoTrade = () => {
               </div>
             </div>
 
-            {/* Collateral Input */}
+            {/* Collateral & Leverage */}
             <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
-              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              {/* Collateral Section */}
+              <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-[#00FF99]" />
                 Collateral
               </h3>
@@ -335,46 +336,32 @@ const LeverageDemoTrade = () => {
                   className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-8 pr-4 text-white text-xl font-mono focus:border-[#00FF99] focus:outline-none disabled:opacity-50"
                 />
               </div>
-              <p className="text-gray-500 text-sm mt-2">
+              <p className="text-gray-500 text-sm mt-2 mb-5">
                 Your balance: ${userBalance.toLocaleString()}
               </p>
-            </div>
-
-            {/* Leverage Selector */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-2xl p-6">
-              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-[#00FF99]" />
-                Leverage: {leverage}x
-              </h3>
-              <input
-                type="range"
-                min="1"
-                max="5"
-                value={leverage}
-                onChange={(e) => setLeverage(Number(e.target.value))}
-                disabled={isTrading}
-                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#00FF99] disabled:opacity-50"
-              />
-              <div className="flex justify-between text-gray-500 text-sm mt-2">
-                <span>1x</span>
-                <span>3x</span>
-                <span>5x</span>
-              </div>
-              <div className="flex gap-2 mt-4">
-                {[1, 2, 3, 4, 5].map((l) => (
-                  <button
-                    key={l}
-                    onClick={() => setLeverage(l)}
-                    disabled={isTrading}
-                    className={`flex-1 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
-                      leverage === l
-                        ? "bg-[#00FF99] text-black"
-                        : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                    } disabled:opacity-50`}
-                  >
-                    {l}x
-                  </button>
-                ))}
+              
+              {/* Leverage Section */}
+              <div className="border-t border-gray-700 pt-5">
+                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-[#00FF99]" />
+                  Leverage: {leverage}x
+                </h3>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLeverage(l)}
+                      disabled={isTrading}
+                      className={`flex-1 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
+                        leverage === l
+                          ? "bg-[#00FF99] text-black"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      } disabled:opacity-50`}
+                    >
+                      {l}x
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
