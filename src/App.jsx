@@ -13,6 +13,7 @@ import HowLMWorksSixBoxes from "./components/HowLMWorksSixBoxes";
 import AlphaAccessPage from "./components/alpha/AlphaAccessPage";
 import PolymarketLivePrediction from "./components/market/PolymarketLivePrediction";
 import PolymarketLivePredictionBoxLeverage from "./components/market/PolymarketLivePredictionBoxLeverage";
+import LeverageDemoTrade from "./components/demo/LeverageDemoTrade";
 import {
   Area,
   AreaChart,
@@ -226,6 +227,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
     { key: "protocol", label: "Protocol" },
     { key: "market", label: "Market" },
     { key: "vault", label: "Vault" },
+    { key: "demo", label: "Demo" },
   ];
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
@@ -1586,6 +1588,7 @@ export default function App() {
       {currentPage === "whitepaper" && <WhitepaperPage />}
       {currentPage === "faq" && <FAQPage />}
       {currentPage === "documentation" && <DocumentationPage setCurrentPage={setCurrentPage} />}
+      {currentPage === "demo" && <LeverageDemoTrade />}
 
       <Footer setCurrentPage={setCurrentPage} />
     </div>
