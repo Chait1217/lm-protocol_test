@@ -50,6 +50,8 @@ const LeverageDemoTrade = () => {
   const [ask, setAsk] = useState(FAKE_MARKETS[0].baseProb + 1);
   const [chartData, setChartData] = useState([]);
   const [selectedOutcome, setSelectedOutcome] = useState("YES");
+  const [openPrice, setOpenPrice] = useState(null);
+  const [closePrice, setClosePrice] = useState(null);
   const chartInterval = useRef(null);
   const tradeStartPrice = useRef(null);
   const tickCount = useRef(0);
@@ -157,6 +159,8 @@ const LeverageDemoTrade = () => {
     setVaultBalance(100000);
     setUserBalance(5000);
     setShowSuccess(false);
+    setOpenPrice(null);
+    setClosePrice(null);
     // Pick a new random market
     const newMarket = FAKE_MARKETS[Math.floor(Math.random() * FAKE_MARKETS.length)];
     setSelectedMarket(newMarket);
@@ -167,6 +171,10 @@ const LeverageDemoTrade = () => {
     
     setIsTrading(true);
     setShowSuccess(false);
+    
+    // Record open price
+    const openPriceValue = selectedOutcome === "YES" ? ask : (100 - bid);
+    setOpenPrice(openPriceValue);
 
     // Step 1: Take collateral from user
     setTradeStep(1);
@@ -185,6 +193,12 @@ const LeverageDemoTrade = () => {
     // Step 4: Close trade, return borrowed + fees
     setTradeStep(4);
     await new Promise(r => setTimeout(r, 10000));
+    
+    // Record close price (10% profit from open)
+    const closePriceValue = selectedOutcome === "YES" 
+      ? openPriceValue * 1.10 
+      : openPriceValue * 0.90;
+    setClosePrice(closePriceValue);
     
     const profit = totalExposure * 0.10;
     const netProfit = profit - totalFees - interest;
@@ -723,7 +737,23 @@ const LeverageDemoTrade = () => {
                     <p className="text-gray-400 mb-4">
                       Fees collected and returned to the Vault. LPs earned real yield!
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                    
+                    {/* Trader Summary Line */}
+                    <div className="bg-black/40 rounded-xl p-4 mb-6 border border-gray-700">
+                      <p className="text-sm text-gray-300">
+                        <span className="text-white font-semibold">{selectedOutcome}</span> position @ <span className="text-[#00FF99] font-mono">{leverage}x</span> leverage
+                        {" • "}
+                        <span className="text-gray-400">Open:</span> <span className="text-white font-mono">{openPrice?.toFixed(2)}¢</span>
+                        {" → "}
+                        <span className="text-gray-400">Close:</span> <span className="text-[#00FF99] font-mono">{closePrice?.toFixed(2)}¢</span>
+                        {" • "}
+                        <span className="text-gray-400">Fees paid:</span> <span className="text-yellow-400 font-mono">${(totalFees + interest).toFixed(2)}</span>
+                        {" • "}
+                        <span className="text-gray-400">Net P&L:</span> <span className="text-[#00FF99] font-mono">+${(totalExposure * 0.10 - totalFees - interest).toFixed(2)}</span>
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="bg-black/30 rounded-xl p-3">
                         <p className="text-gray-500 text-xs">Collateral Used</p>
                         <p className="text-white font-mono font-semibold">${collateral.toLocaleString()}</p>
