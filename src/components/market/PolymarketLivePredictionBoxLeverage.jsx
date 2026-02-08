@@ -200,7 +200,7 @@ export default function PolymarketLivePredictionBoxLeverage({
 
   if (loading) {
     return (
-      <div className="bg-gray-950 p-4 sm:p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col justify-center items-center min-h-[400px]">
+      <div className="bg-gray-950 p-3 sm:p-4 md:p-6 rounded-xl md:rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col justify-center items-center min-h-[200px] md:min-h-[400px]">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -213,15 +213,15 @@ export default function PolymarketLivePredictionBoxLeverage({
   }
 
   return (
-    <div className="bg-gray-950 p-4 sm:p-6 rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
+    <div className="bg-gray-950 p-1.5 sm:p-4 md:p-6 rounded-xl md:rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
       {/* Header with Live Badge */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded-full text-[0.65rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
+      <div className="flex items-center justify-between mb-1 md:mb-4">
+        <div className="flex items-center gap-1 md:gap-2">
+          <span className="px-1 md:px-2.5 py-0.5 md:py-1 rounded-full text-[0.5rem] md:text-[0.65rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-1 md:gap-1.5">
+            <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
             LIVE
           </span>
-          <span className="text-xs text-gray-500">Real-time from Polymarket</span>
+          <span className="text-[9px] md:text-xs text-gray-500 hidden sm:inline">Real-time from Polymarket</span>
         </div>
         <button
           onClick={() => loadData(true)}
@@ -238,36 +238,36 @@ export default function PolymarketLivePredictionBoxLeverage({
       </div>
 
       {/* Market Question */}
-      <h3 className="text-white font-bold text-lg sm:text-xl mb-4 leading-tight">
+      <h3 className="text-white font-bold text-[9px] sm:text-lg md:text-xl mb-1 md:mb-4 leading-tight">
         {market?.title || "Will Jesus Christ return before 2027?"}
       </h3>
 
       {/* Outcome Buttons - YES/NO */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
+      <div className="grid grid-cols-2 gap-1 md:gap-3 mb-1 md:mb-5">
         <motion.button
           onClick={() => setSelectedOutcome("YES")}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className={`relative p-4 rounded-xl border-2 transition-all ${
+          className={`relative p-1.5 md:p-4 rounded-lg md:rounded-xl border-2 transition-all ${
             selectedOutcome === "YES"
               ? "bg-[#00FF99]/10 border-[#00FF99] shadow-[0_0_20px_rgba(0,255,153,0.2)]"
               : "bg-gray-900/50 border-gray-700 hover:border-[#00FF99]/50"
           }`}
         >
           <div className="flex flex-col items-center">
-            <span className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+            <span className={`text-[9px] md:text-xs font-semibold uppercase tracking-wider mb-0 md:mb-1 ${
               selectedOutcome === "YES" ? "text-[#00FF99]" : "text-gray-400"
             }`}>
               Yes
             </span>
             <AnimatedValue
               value={market?.yesProbability}
-              className={`text-2xl sm:text-3xl font-bold ${
+              className={`text-sm sm:text-2xl md:text-3xl font-bold ${
                 selectedOutcome === "YES" ? "text-[#00FF99]" : "text-white"
               }`}
               suffix="%"
             />
-            <span className="text-xs text-gray-500 mt-1">
+            <span className="text-[9px] md:text-xs text-gray-500 mt-0 md:mt-1">
               {market?.yesPrice ? `${market.yesPrice}¢` : '--'}
             </span>
           </div>
@@ -293,26 +293,26 @@ export default function PolymarketLivePredictionBoxLeverage({
           onClick={() => setSelectedOutcome("NO")}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className={`relative p-4 rounded-xl border-2 transition-all ${
+          className={`relative p-1.5 md:p-4 rounded-lg md:rounded-xl border-2 transition-all ${
             selectedOutcome === "NO"
               ? "bg-red-500/10 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
               : "bg-gray-900/50 border-gray-700 hover:border-red-500/50"
           }`}
         >
           <div className="flex flex-col items-center">
-            <span className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+            <span className={`text-[9px] md:text-xs font-semibold uppercase tracking-wider mb-0 md:mb-1 ${
               selectedOutcome === "NO" ? "text-red-400" : "text-gray-400"
             }`}>
               No
             </span>
             <AnimatedValue
               value={market?.noProbability}
-              className={`text-2xl sm:text-3xl font-bold ${
+              className={`text-sm sm:text-2xl md:text-3xl font-bold ${
                 selectedOutcome === "NO" ? "text-red-400" : "text-white"
               }`}
               suffix="%"
             />
-            <span className="text-xs text-gray-500 mt-1">
+            <span className="text-[9px] md:text-xs text-gray-500 mt-0 md:mt-1">
               {market?.noPrice ? `${market.noPrice}¢` : '--'}
             </span>
           </div>
@@ -320,59 +320,59 @@ export default function PolymarketLivePredictionBoxLeverage({
       </div>
 
       {/* Market Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        <div className="bg-black/40 rounded-lg p-3 border border-gray-800/50">
-          <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <Activity className="w-3.5 h-3.5" />
-            <span>24h Volume</span>
+      <div className="grid grid-cols-2 gap-1 md:gap-3 mb-1.5 md:mb-5">
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50">
+          <div className="flex items-center gap-0.5 md:gap-2 text-gray-400 text-[8px] md:text-xs mb-0 md:mb-1">
+            <Activity className="w-2 h-2 md:w-3.5 md:h-3.5" />
+            <span>24h Vol</span>
           </div>
           <AnimatedValue
             value={market?.volume24h || market?.volume}
             format={formatVolume}
-            className="text-white font-bold text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
         
-        <div className="bg-black/40 rounded-lg p-3 border border-gray-800/50">
-          <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <DollarSign className="w-3.5 h-3.5" />
-            <span>Total Volume</span>
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50">
+          <div className="flex items-center gap-0.5 md:gap-2 text-gray-400 text-[8px] md:text-xs mb-0 md:mb-1">
+            <DollarSign className="w-2 h-2 md:w-3.5 md:h-3.5" />
+            <span>Total Vol</span>
           </div>
           <AnimatedValue
             value={market?.volume}
             format={formatVolume}
-            className="text-white font-bold text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
 
-        <div className="bg-black/40 rounded-lg p-3 border border-gray-800/50">
-          <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <Zap className="w-3.5 h-3.5" />
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50">
+          <div className="flex items-center gap-0.5 md:gap-2 text-gray-400 text-[8px] md:text-xs mb-0 md:mb-1">
+            <Zap className="w-2 h-2 md:w-3.5 md:h-3.5" />
             <span>Liquidity</span>
           </div>
           <AnimatedValue
             value={market?.liquidity}
             format={formatVolume}
-            className="text-white font-bold text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
 
-        <div className="bg-black/40 rounded-lg p-3 border border-gray-800/50">
-          <div className="flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <Users className="w-3.5 h-3.5" />
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50">
+          <div className="flex items-center gap-0.5 md:gap-2 text-gray-400 text-[8px] md:text-xs mb-0 md:mb-1">
+            <Users className="w-2 h-2 md:w-3.5 md:h-3.5" />
             <span>Traders</span>
           </div>
           <AnimatedValue
             value={market?.traders}
             format={formatNumber}
-            className="text-white font-bold text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
       </div>
 
       {/* Best Bid/Ask Display - updates by selected outcome (YES vs NO) */}
       {(market?.bestBid != null || market?.bestAsk != null) && (
-        <div className="bg-black/40 rounded-lg p-3 border border-gray-800/50 mb-5">
+        <div className="bg-black/40 rounded-lg p-1.5 md:p-3 border border-gray-800/50 mb-2 md:mb-5">
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-400 text-xs">
               Order book for <span className={selectedOutcome === "YES" ? "text-[#00FF99] font-medium" : "text-red-400 font-medium"}>{selectedOutcome}</span>
@@ -416,17 +416,17 @@ export default function PolymarketLivePredictionBoxLeverage({
       )}
 
       {/* Demo: Leverage, Amount, Liquidation */}
-      <div className="border border-[#00FF99]/20 rounded-xl p-4 bg-black/30 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Leverage demo</span>
-          <span className="text-[10px] text-gray-500">Simulation only</span>
+      <div className="border border-[#00FF99]/20 rounded-lg md:rounded-xl p-1.5 md:p-4 bg-black/30 mb-1.5 md:mb-5">
+        <div className="flex items-center justify-between mb-1 md:mb-3">
+          <span className="text-gray-400 text-[9px] md:text-xs font-semibold uppercase tracking-wider">Leverage demo</span>
+          <span className="text-[8px] md:text-[10px] text-gray-500">Simulation only</span>
         </div>
 
         {/* Leverage 1x–5x */}
-        <div className="space-y-2 mb-4">
+        <div className="space-y-1 md:space-y-2 mb-1.5 md:mb-4">
           <div className="flex justify-between items-center">
-            <label className="text-gray-400 text-sm">Leverage</label>
-            <span className="text-[#00FF99] font-bold">{leverage.toFixed(1)}x</span>
+            <label className="text-gray-400 text-[10px] md:text-sm">Leverage</label>
+            <span className="text-[#00FF99] font-bold text-[10px] md:text-base">{leverage.toFixed(1)}x</span>
           </div>
           <input
             type="range"
@@ -435,18 +435,18 @@ export default function PolymarketLivePredictionBoxLeverage({
             step="0.5"
             value={leverage}
             onChange={(e) => setLeverage(parseFloat(e.target.value))}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#00FF99]"
+            className="w-full h-1 md:h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#00FF99]"
             style={{
               background: `linear-gradient(to right, #00FF99 0%, #00FF99 ${((leverage - 1) / 4) * 100}%, #333 ${((leverage - 1) / 4) * 100}%, #333 100%)`,
             }}
           />
-          <div className="flex justify-between gap-1">
+          <div className="flex justify-between gap-0.5">
             {[1, 2, 3, 4, 5].map((x) => (
               <button
                 key={x}
                 type="button"
                 onClick={() => setLeverage(x)}
-                className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                className={`flex-1 py-0.5 md:py-1.5 rounded-md text-[9px] md:text-xs font-semibold border transition-colors cursor-pointer ${
                   Math.round(leverage) === x
                     ? "bg-[#00FF99] text-black border-[#00FF99]"
                     : "bg-gray-900 text-gray-300 border-gray-700 hover:border-[#00FF99]/60"
@@ -459,10 +459,10 @@ export default function PolymarketLivePredictionBoxLeverage({
         </div>
 
         {/* Amount (margin) */}
-        <div className="mb-4">
-          <label className="text-gray-400 text-sm block mb-1">Amount (margin)</label>
+        <div className="mb-1.5 md:mb-4">
+          <label className="text-gray-400 text-[10px] md:text-sm block mb-0.5 md:mb-1">Amount (margin)</label>
           <div className="flex rounded-lg border border-gray-700 bg-black overflow-hidden">
-            <span className="px-3 py-2.5 text-gray-400 text-sm border-r border-gray-700">$</span>
+            <span className="px-1.5 md:px-3 py-1.5 md:py-2.5 text-gray-400 text-[10px] md:text-sm border-r border-gray-700">$</span>
             <input
               type="number"
               min="0"
@@ -470,13 +470,13 @@ export default function PolymarketLivePredictionBoxLeverage({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
-              className="flex-1 bg-transparent px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-0"
+              className="flex-1 bg-transparent px-1.5 md:px-3 py-1.5 md:py-2.5 text-white text-[10px] md:text-sm focus:outline-none focus:ring-0"
             />
           </div>
         </div>
 
         {/* Summary: Entry, Position, Liquidation, Max win (all update with live market) */}
-        <div className="bg-black/50 rounded-lg p-3 border border-[#00FF99]/10 space-y-2 text-sm">
+        <div className="bg-black/50 rounded-lg p-1 md:p-3 border border-[#00FF99]/10 space-y-0.5 md:space-y-2 text-[9px] md:text-sm">
           <div className="flex justify-between">
             <span className="text-gray-400">Entry price</span>
             <AnimatedValue value={entryPriceCents} format={(v) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" />
@@ -500,7 +500,7 @@ export default function PolymarketLivePredictionBoxLeverage({
       <div className="flex-1" />
 
       {/* Footer with last update */}
-      <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+      <div className="flex items-center justify-between mt-2 md:mt-3 text-[10px] md:text-xs text-gray-500">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
           <span>Real-time · every 5s</span>
