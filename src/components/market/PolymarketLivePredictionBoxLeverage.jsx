@@ -319,53 +319,57 @@ export default function PolymarketLivePredictionBoxLeverage({
         </motion.button>
       </div>
 
-      {/* Market Stats Grid */}
-      <div className="grid grid-cols-2 gap-1.5 md:gap-3 mb-2 md:mb-5">
-        <div className="bg-black/40 rounded-lg p-1.5 md:p-3 border border-gray-800/50">
-          <div className="flex items-center gap-1 md:gap-2 text-gray-400 text-[9px] md:text-xs mb-0.5 md:mb-1">
-            <Activity className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" />
+      {/* Market Stats Grid - 1 row on mobile, 2x2 on desktop */}
+      <div className="grid grid-cols-4 md:grid-cols-2 gap-1 md:gap-3 mb-2 md:mb-5">
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
+            <Activity className="w-3.5 h-3.5" />
             <span>24h Volume</span>
           </div>
+          <div className="text-gray-400 text-[7px] md:hidden mb-0.5">24h Vol</div>
           <AnimatedValue
             value={market?.volume24h || market?.volume}
             format={formatVolume}
-            className="text-white font-bold text-xs md:text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
         
-        <div className="bg-black/40 rounded-lg p-1.5 md:p-3 border border-gray-800/50">
-          <div className="flex items-center gap-1 md:gap-2 text-gray-400 text-[9px] md:text-xs mb-0.5 md:mb-1">
-            <DollarSign className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" />
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
+            <DollarSign className="w-3.5 h-3.5" />
             <span>Total Volume</span>
           </div>
+          <div className="text-gray-400 text-[7px] md:hidden mb-0.5">Total Vol</div>
           <AnimatedValue
             value={market?.volume}
             format={formatVolume}
-            className="text-white font-bold text-xs md:text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
 
-        <div className="bg-black/40 rounded-lg p-1.5 md:p-3 border border-gray-800/50">
-          <div className="flex items-center gap-1 md:gap-2 text-gray-400 text-[9px] md:text-xs mb-0.5 md:mb-1">
-            <Zap className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" />
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
+            <Zap className="w-3.5 h-3.5" />
             <span>Liquidity</span>
           </div>
+          <div className="text-gray-400 text-[7px] md:hidden mb-0.5">Liquidity</div>
           <AnimatedValue
             value={market?.liquidity}
             format={formatVolume}
-            className="text-white font-bold text-xs md:text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
 
-        <div className="bg-black/40 rounded-lg p-1.5 md:p-3 border border-gray-800/50">
-          <div className="flex items-center gap-1 md:gap-2 text-gray-400 text-[9px] md:text-xs mb-0.5 md:mb-1">
-            <Users className="w-2.5 h-2.5 md:w-3.5 md:h-3.5" />
+        <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
+            <Users className="w-3.5 h-3.5" />
             <span>Traders</span>
           </div>
+          <div className="text-gray-400 text-[7px] md:hidden mb-0.5">Traders</div>
           <AnimatedValue
             value={market?.traders}
             format={formatNumber}
-            className="text-white font-bold text-xs md:text-lg"
+            className="text-white font-bold text-[10px] md:text-lg"
           />
         </div>
       </div>
