@@ -970,9 +970,9 @@ const MarketPage = ({ setCurrentPage }) => {
   }, [featuredMarket?.conditionId, orderBookSide]);
 
   return (
-    <div className="min-h-screen bg-black pt-28 sm:pt-36 md:pt-40 pb-4 sm:pb-12 md:pb-16 overflow-x-hidden">
+    <div className="min-h-screen bg-black pt-20 sm:pt-32 md:pt-36 pb-4 sm:pb-12 md:pb-16 overflow-x-hidden">
       {/* Hero */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-10 md:py-16 text-center relative">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-2 sm:py-10 md:py-16 text-center relative">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1141,10 +1141,10 @@ const ProtocolPage = () => {
     { quarter: "Q4 2026", title: "AI Agents", items: ["AI Trading Agents", "Cross-chain Bridge", "DAO Governance"] },
   ];
   return (
-    <div className="min-h-screen bg-black pt-20 sm:pt-24 md:pt-28 pb-4 sm:pb-12 md:pb-16 overflow-x-hidden">
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-4 sm:pb-12 md:pb-16 overflow-x-hidden">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 min-w-0">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-3 sm:py-10 md:py-16">
-          <h1 className="text-lg sm:text-4xl md:text-5xl font-bold text-white mb-1 sm:mb-3 md:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-2 sm:py-10 md:py-16">
+          <h1 className="text-lg sm:text-4xl md:text-5xl font-bold text-white mb-0.5 sm:mb-3 md:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
           <p className="text-[10px] sm:text-base md:text-xl text-gray-400 max-w-2xl mx-auto px-2">Prediction markets, but with leverage</p>
         </motion.div>
         <div className="bg-gradient-to-br from-gray-900 to-black p-2 sm:p-5 md:p-12 rounded-xl md:rounded-2xl border border-[#00FF99]/20 mb-3 sm:mb-10 md:mb-16">
@@ -1521,10 +1521,10 @@ const VaultPage = ({ walletConnected }) => {
   };
 
   return (
-    <div className="min-h-screen bg-black pt-20 sm:pt-24 md:pt-28 pb-4 sm:pb-16 md:pb-24 overflow-x-hidden">
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-4 sm:pb-16 md:pb-24 overflow-x-hidden">
       <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="text-center py-3 sm:py-10 md:py-14">
-          <h1 className="text-lg sm:text-4xl md:text-5xl font-bold text-white mb-1 sm:mb-3 md:mb-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="text-center py-2 sm:py-10 md:py-14">
+          <h1 className="text-lg sm:text-4xl md:text-5xl font-bold text-white mb-0.5 sm:mb-3 md:mb-4">
             Liquidity <span className="text-[#00FF99]">Vault</span>
           </h1>
           <p className="text-[10px] sm:text-base md:text-xl text-gray-400 max-w-2xl mx-auto px-2">
