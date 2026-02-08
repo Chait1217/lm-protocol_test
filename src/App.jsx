@@ -636,12 +636,12 @@ const CategoriesCarousel = () => {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-shrink-0 snap-center w-[90px] sm:w-[220px] md:w-[240px]"
+                className="flex-shrink-0 snap-center w-[105px] sm:w-[220px] md:w-[240px]"
               >
                 <motion.div
                   whileHover={{ scale: 1.03, y: -4 }}
                   whileTap={{ scale: 0.98 }}
-                  className="rounded-lg md:rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 hover:border-[#00FF99]/50 hover:shadow-[0_0_30px_rgba(0,255,153,0.2)] transition-all flex flex-col h-[80px] sm:h-[280px] md:h-[340px]"
+                  className="rounded-lg md:rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 hover:border-[#00FF99]/50 hover:shadow-[0_0_30px_rgba(0,255,153,0.2)] transition-all flex flex-col h-[100px] sm:h-[280px] md:h-[340px]"
                 >
                   <div className="relative w-full flex-1 min-h-0">
                     <img
