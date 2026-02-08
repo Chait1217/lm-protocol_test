@@ -332,8 +332,8 @@ export default function PolymarketLivePrediction({
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black p-6 sm:p-8">
-        <div className="flex items-center justify-center py-16">
+      <div className="rounded-xl md:rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black p-3 md:p-6 sm:p-8">
+        <div className="flex items-center justify-center py-8 md:py-16">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -351,17 +351,17 @@ export default function PolymarketLivePrediction({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_60px_rgba(0,255,153,0.08)]"
+      className="rounded-xl md:rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_60px_rgba(0,255,153,0.08)]"
     >
       {/* Header */}
-      <div className="p-4 sm:p-6 border-b border-[#00FF99]/10">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 rounded-full text-[0.7rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#00FF99] animate-pulse" />
+      <div className="p-2.5 md:p-4 sm:p-6 border-b border-[#00FF99]/10">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 md:gap-3 mb-2 md:mb-4">
+          <div className="flex items-center gap-1.5 md:gap-3">
+            <span className="px-2 py-1 md:px-3 md:py-1.5 rounded-full text-[0.6rem] md:text-[0.7rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
               {dataSource === 'live' ? 'LIVE' : 'Polymarket'}
             </span>
-            <span className="text-xs text-gray-500">
+            <span className="text-[10px] md:text-xs text-gray-500">
               Settlement by {settlementDate}
             </span>
           </div>
@@ -399,17 +399,17 @@ export default function PolymarketLivePrediction({
         )}
 
         {/* Market Question */}
-        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-6">
+        <h2 className="text-sm md:text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 md:mb-6 leading-tight">
           {market?.title || "Will Jesus Christ return before 2027?"}
         </h2>
 
         {/* Stats Row */}
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex items-baseline gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-2 md:gap-4">
+          <div className="flex items-baseline gap-2 md:gap-4">
             <div className="relative">
               <AnimatedValue
                 value={market?.probability}
-                className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-[#00FF99] leading-none"
+                className="text-3xl md:text-5xl sm:text-6xl md:text-7xl font-extrabold text-[#00FF99] leading-none"
                 suffix="%"
               />
               {/* Price change indicator */}
@@ -433,26 +433,26 @@ export default function PolymarketLivePrediction({
                 )}
               </AnimatePresence>
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-gray-400 text-xs uppercase tracking-widest">
+            <div className="flex flex-col gap-0.5 md:gap-1">
+              <span className="text-gray-400 text-[9px] md:text-xs uppercase tracking-widest">
                 Implied Chance
               </span>
-              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-                <span className="w-2 h-2 rounded-full bg-[#00FF99] animate-pulse" />
+              <span className="inline-flex items-center gap-1 md:gap-1.5 text-[9px] md:text-xs text-gray-400">
+                <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
                 YES outcome • Updates every 10s
               </span>
             </div>
           </div>
 
-          <div className="flex gap-6">
+          <div className="flex gap-3 md:gap-6">
             <div className="text-right">
-              <div className="text-gray-400 text-xs uppercase tracking-widest mb-1">
+              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
                 24h Volume
               </div>
               <AnimatedValue
                 value={market?.volume24h || market?.volume}
                 format={formatVolume}
-                className="text-white text-xl sm:text-2xl font-bold block"
+                className="text-white text-sm md:text-xl sm:text-2xl font-bold block"
               />
             </div>
             <div className="text-right hidden sm:block">
@@ -470,10 +470,10 @@ export default function PolymarketLivePrediction({
       </div>
 
       {/* Real-time Chart */}
-      <div className="p-4 sm:p-6">
-        <div className="h-56 sm:h-64 md:h-72">
+      <div className="p-2.5 md:p-4 sm:p-6">
+        <div className="h-32 md:h-56 sm:h-64 md:h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 30 }}>
+            <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 5, bottom: 15 }}>
               <defs>
                 <linearGradient id="colorProbLive" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#00FF99" stopOpacity={0.4} />
@@ -483,34 +483,21 @@ export default function PolymarketLivePrediction({
               <XAxis
                 dataKey="time"
                 stroke="#444"
-                tick={{ fill: "#888", fontSize: 10 }}
+                tick={{ fill: "#888", fontSize: 9 }}
                 axisLine={{ stroke: "#333" }}
                 tickLine={{ stroke: "#333" }}
                 interval="preserveStartEnd"
-              >
-                <Label
-                  value="Time"
-                  position="bottom"
-                  offset={10}
-                  style={{ fill: "#888", fontSize: 12, fontWeight: 500 }}
-                />
-              </XAxis>
+                hide={typeof window !== 'undefined' && window.innerWidth < 640}
+              />
               <YAxis
                 stroke="#444"
-                tick={{ fill: "#888", fontSize: 10 }}
+                tick={{ fill: "#888", fontSize: 9 }}
                 axisLine={{ stroke: "#333" }}
                 tickLine={{ stroke: "#333" }}
                 domain={[0, Math.max(15, Math.min(100, Math.ceil((market?.probability || 10) * 2)))]}
                 tickFormatter={(v) => `${v}%`}
-              >
-                <Label
-                  value="Probability (%)"
-                  angle={-90}
-                  position="insideLeft"
-                  offset={5}
-                  style={{ fill: "#888", fontSize: 12, fontWeight: 500, textAnchor: "middle" }}
-                />
-              </YAxis>
+                width={typeof window !== 'undefined' && window.innerWidth < 640 ? 32 : 60}
+              />
               <Tooltip content={<CustomTooltip />} />
               <Area
                 type="monotone"
@@ -528,15 +515,15 @@ export default function PolymarketLivePrediction({
         </div>
 
         {/* Data source note with live indicator */}
-        <div className="mt-4 pt-4 border-t border-[#00FF99]/10 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-2 md:mt-4 pt-2 md:pt-4 border-t border-[#00FF99]/10 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#00FF99] animate-pulse" />
-            <p className="text-xs text-gray-500">
-              Real-time data from Polymarket • Auto-updates every 10 seconds
+            <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
+            <p className="text-[10px] md:text-xs text-gray-500">
+              Real-time data from Polymarket • Auto-updates every 10s
             </p>
           </div>
           {lastUpdate && (
-            <p className="text-xs text-gray-400 font-mono">
+            <p className="text-[10px] md:text-xs text-gray-400 font-mono">
               Last update: {lastUpdate.toLocaleTimeString()}
             </p>
           )}
@@ -544,27 +531,27 @@ export default function PolymarketLivePrediction({
       </div>
 
       {/* Comments Section - Link to Polymarket */}
-      <div className="p-4 sm:p-6 border-t border-[#00FF99]/10">
+      <div className="p-2.5 md:p-4 sm:p-6 border-t border-[#00FF99]/10">
         <a
           href="https://polymarket.com/event/will-jesus-christ-return-before-2027"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-between p-4 rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/30 hover:bg-gray-800/70 transition-all group cursor-pointer"
+          className="flex items-center justify-between p-2 md:p-4 rounded-lg md:rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/30 hover:bg-gray-800/70 transition-all group cursor-pointer"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10 flex items-center justify-center">
-              <MessageCircle className="w-5 h-5 text-[#00FF99]" />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="w-7 h-7 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-3.5 h-3.5 md:w-5 md:h-5 text-[#00FF99]" />
             </div>
             <div>
-              <h3 className="text-white font-semibold group-hover:text-[#00FF99] transition-colors">
+              <h3 className="text-white font-semibold text-xs md:text-base group-hover:text-[#00FF99] transition-colors">
                 View Comments & Discussion
               </h3>
-              <p className="text-sm text-gray-400">
+              <p className="text-[10px] md:text-sm text-gray-400">
                 Join the conversation on Polymarket
               </p>
             </div>
           </div>
-          <ExternalLink className="w-5 h-5 text-gray-500 group-hover:text-[#00FF99] transition-colors" />
+          <ExternalLink className="w-3.5 h-3.5 md:w-5 md:h-5 text-gray-500 group-hover:text-[#00FF99] transition-colors flex-shrink-0" />
         </a>
       </div>
     </motion.div>

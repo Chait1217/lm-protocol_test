@@ -1033,7 +1033,7 @@ const MarketPage = ({ setCurrentPage }) => {
           </span>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 sm:gap-8 items-stretch">
+        <div className="grid md:grid-cols-2 gap-3 md:gap-6 sm:gap-8 items-stretch">
             {/* Carte marché – Composant réutilisable avec données live Polymarket */}
             <PolymarketLivePrediction
               slug="will-jesus-christ-return-before-2027"
