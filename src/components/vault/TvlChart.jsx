@@ -41,16 +41,16 @@ export default function TvlChart({ currentTvl = 1234567, data: propData }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.2 }}
-      className="p-3 md:p-6 rounded-xl md:rounded-2xl bg-gray-900/60 border border-[#00FF99]/15 hover:border-[#00FF99]/25 transition-all"
+      className="p-6 rounded-2xl bg-gray-900/60 border border-[#00FF99]/15 hover:border-[#00FF99]/25 transition-all"
     >
-      <h3 className="text-sm md:text-lg font-bold text-white mb-1 md:mb-2">Vault TVL Over Time</h3>
-      <p className="text-gray-500 text-[10px] md:text-xs mb-3 md:mb-4">
+      <h3 className="text-lg font-bold text-white mb-2">Vault TVL Over Time</h3>
+      <p className="text-gray-500 text-xs mb-4">
         Real-time total value locked in the USDC vault
       </p>
 
-      <div className="h-[160px] md:h-[240px] w-full">
+      <div className="h-[240px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="tvlGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#00FF99" stopOpacity={0.4} />
@@ -60,19 +60,17 @@ export default function TvlChart({ currentTvl = 1234567, data: propData }) {
             <XAxis
               dataKey="time"
               stroke="#666"
-              tick={{ fill: "#999", fontSize: 9 }}
+              tick={{ fill: "#999", fontSize: 10 }}
               axisLine={{ stroke: "#333" }}
               tickLine={{ stroke: "#333" }}
-              hide={typeof window !== 'undefined' && window.innerWidth < 640}
             />
             <YAxis
               stroke="#666"
-              tick={{ fill: "#999", fontSize: 9 }}
+              tick={{ fill: "#999", fontSize: 10 }}
               axisLine={{ stroke: "#333" }}
               tickLine={{ stroke: "#333" }}
               tickFormatter={formatTvl}
               domain={["dataMin", "dataMax"]}
-              width={typeof window !== 'undefined' && window.innerWidth < 640 ? 40 : 50}
             />
             <Area
               type="monotone"
@@ -85,7 +83,7 @@ export default function TvlChart({ currentTvl = 1234567, data: propData }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-2 md:mt-4 flex justify-between items-center text-xs md:text-sm">
+      <div className="mt-4 flex justify-between items-center text-sm">
         <span className="text-gray-400">Current TVL</span>
         <span className="text-[#00FF99] font-bold">{formatTvl(currentTvl)}</span>
       </div>

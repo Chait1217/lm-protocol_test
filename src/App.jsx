@@ -601,6 +601,7 @@ const POLYMARKET_CATEGORIES = [
 const CategoriesCarousel = () => {
   const scrollRef = React.useRef(null);
   const cardWidthPx = 240;
+  const cardHeightPx = 340;
   const gap = 20;
 
   const scroll = (dir) => {
@@ -610,18 +611,18 @@ const CategoriesCarousel = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 mt-3 sm:mt-12 md:mt-20 mb-3 md:mb-8">
-      <h2 className="text-xs sm:text-lg md:text-xl font-semibold text-white mb-1.5 sm:mb-4 md:mb-6 flex items-center gap-2">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20 mb-8">
+      <h2 className="text-lg sm:text-xl font-semibold text-white mb-4 sm:mb-6 flex items-center gap-2">
         <span className="text-[#00FF99]">Categories</span> Polymarket
       </h2>
       <div className="relative flex items-center gap-2">
         <button
           type="button"
           onClick={() => scroll("prev")}
-          className="flex-shrink-0 z-10 min-w-[28px] min-h-[28px] w-7 h-7 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
+          className="flex-shrink-0 z-10 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
           aria-label="Previous categories"
         >
-          <ChevronLeft className="w-3 h-3 md:w-6 md:h-6" />
+          <ChevronLeft className="w-6 h-6" />
         </button>
         <div
           ref={scrollRef}
@@ -636,12 +637,13 @@ const CategoriesCarousel = () => {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-shrink-0 snap-center w-[90px] sm:w-[220px] md:w-[240px]"
+                className="flex-shrink-0 snap-center w-[220px] sm:w-[240px]"
               >
                 <motion.div
                   whileHover={{ scale: 1.03, y: -4 }}
                   whileTap={{ scale: 0.98 }}
-                  className="rounded-lg md:rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 hover:border-[#00FF99]/50 hover:shadow-[0_0_30px_rgba(0,255,153,0.2)] transition-all flex flex-col h-[80px] sm:h-[280px] md:h-[340px]"
+                  className="rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 hover:border-[#00FF99]/50 hover:shadow-[0_0_30px_rgba(0,255,153,0.2)] transition-all flex flex-col"
+                  style={{ height: cardHeightPx }}
                 >
                   <div className="relative w-full flex-1 min-h-0">
                     <img
@@ -650,10 +652,10 @@ const CategoriesCarousel = () => {
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-1.5 sm:p-4 flex flex-col gap-0 sm:gap-1">
-                      <span className="text-white font-bold text-[10px] sm:text-lg">{cat.label}</span>
-                      <span className="text-[#00FF99] text-[8px] sm:text-sm flex items-center gap-0.5">
-                        View <ArrowUpRight className="w-2 h-2 sm:w-4 sm:h-4" />
+                    <div className="absolute bottom-0 left-0 right-0 p-4 flex flex-col gap-1">
+                      <span className="text-white font-bold text-lg">{cat.label}</span>
+                      <span className="text-[#00FF99] text-sm flex items-center gap-1">
+                        View on Polymarket <ArrowUpRight className="w-4 h-4" />
                       </span>
                     </div>
                   </div>
@@ -665,10 +667,10 @@ const CategoriesCarousel = () => {
         <button
           type="button"
           onClick={() => scroll("next")}
-          className="flex-shrink-0 z-10 min-w-[28px] min-h-[28px] w-7 h-7 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
+          className="flex-shrink-0 z-10 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
           aria-label="Next categories"
         >
-          <ChevronRight className="w-3 h-3 md:w-6 md:h-6" />
+          <ChevronRight className="w-6 h-6" />
         </button>
       </div>
     </div>
@@ -970,20 +972,20 @@ const MarketPage = ({ setCurrentPage }) => {
   }, [featuredMarket?.conditionId, orderBookSide]);
 
   return (
-    <div className="min-h-screen bg-black pt-20 sm:pt-32 md:pt-36 pb-4 sm:pb-12 md:pb-16 overflow-x-hidden">
+    <div className="min-h-screen bg-black pt-32 sm:pt-36 pb-12 sm:pb-16 overflow-x-hidden">
       {/* Hero */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-2 sm:py-10 md:py-16 text-center relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center relative">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <h1 className="text-lg sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-1 sm:mb-4 md:mb-6">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold mb-4 sm:mb-6">
             <span className="text-white">Institutional-Grade</span>
             <br />
             <span className="text-[#00FF99]">Leverage Trading</span>
           </h1>
-          <p className="text-[10px] sm:text-base md:text-xl text-gray-400 mb-2 sm:mb-6 md:mb-8 max-w-2xl mx-auto px-1">
+          <p className="text-base sm:text-xl text-gray-400 mb-6 sm:mb-8 max-w-2xl mx-auto px-1">
             Powered by Base L2. Trade prediction markets with up to 5x leverage.
           </p>
           <motion.button
@@ -991,10 +993,10 @@ const MarketPage = ({ setCurrentPage }) => {
             onClick={() => setCurrentPage?.("alpha")}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="min-h-[36px] md:min-h-[48px] px-3 sm:px-6 md:px-8 py-1.5 sm:py-3 md:py-4 bg-[#00FF99] text-black font-bold rounded-lg text-[10px] sm:text-base md:text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all inline-flex items-center justify-center gap-1.5"
+            className="min-h-[48px] px-6 sm:px-8 py-3 sm:py-4 bg-[#00FF99] text-black font-bold rounded-lg text-base sm:text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all inline-flex items-center justify-center gap-2"
           >
             Apply for alpha access
-            <ArrowUpRight className="w-3 h-3 md:w-5 md:h-5" />
+            <ArrowUpRight className="w-5 h-5" />
           </motion.button>
         </motion.div>
 
@@ -1020,9 +1022,9 @@ const MarketPage = ({ setCurrentPage }) => {
       </div>
 
       {/* Bloc marché principal – Live Polymarket Integration */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 mt-2 sm:mt-8 md:mt-12">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 mb-2 sm:mb-6">
-          <h2 className="text-sm sm:text-2xl md:text-3xl font-bold text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 sm:mt-12">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <h2 className="text-xl sm:text-3xl font-bold text-white">
             Live Polymarket Integration
           </h2>
           <span className="hidden md:inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] uppercase tracking-widest">
@@ -1031,7 +1033,7 @@ const MarketPage = ({ setCurrentPage }) => {
           </span>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-2 sm:gap-6 md:gap-8 items-stretch">
+        <div className="grid md:grid-cols-2 gap-6 sm:gap-8 items-stretch">
             {/* Carte marché – Composant réutilisable avec données live Polymarket */}
             <PolymarketLivePrediction
               slug="will-jesus-christ-return-before-2027"
@@ -1048,8 +1050,8 @@ const MarketPage = ({ setCurrentPage }) => {
       </div>
 
       {/* Value props */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 mt-3 sm:mt-12 md:mt-20">
-        <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-4 md:gap-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
           {[
             { icon: Activity, title: "Mark-Based Liquidation", desc: "Liquidation follows mark price (probability move). Your liquidation level is shown before you trade. No hidden triggers." },
             { icon: Lock, title: "Isolated Margin", desc: "Margin is per position. One liquidated position does not pull collateral from your other positions; no cross-margin contagion." },
@@ -1060,11 +1062,11 @@ const MarketPage = ({ setCurrentPage }) => {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="bg-gray-900 p-2 sm:p-4 md:p-6 rounded-lg md:rounded-xl border border-[#00FF99]/20"
+              className="bg-gray-900 p-6 rounded-xl border border-[#00FF99]/20"
             >
-              <prop.icon className="w-4 h-4 sm:w-8 sm:h-8 md:w-12 md:h-12 text-[#00FF99] mb-1 md:mb-4" />
-              <h3 className="text-white font-bold text-[9px] sm:text-base md:text-lg mb-0.5 md:mb-2">{prop.title}</h3>
-              <p className="text-gray-400 text-[8px] sm:text-sm md:text-base leading-snug">{prop.desc}</p>
+              <prop.icon className="w-12 h-12 text-[#00FF99] mb-4" />
+              <h3 className="text-white font-bold text-lg mb-2">{prop.title}</h3>
+              <p className="text-gray-400">{prop.desc}</p>
             </motion.div>
           ))}
         </div>
@@ -1083,7 +1085,7 @@ const interestSplitData = [
 ];
 const InterestSplitChart = () => (
   <div className="relative min-w-0">
-    <div className="h-[100px] sm:h-[240px] md:h-[280px] min-h-[90px]">
+    <div className="h-[240px] sm:h-[280px] min-h-[200px]">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart margin={{ top: 12, right: 24, bottom: 12, left: 24 }}>
           <Pie
@@ -1141,15 +1143,15 @@ const ProtocolPage = () => {
     { quarter: "Q4 2026", title: "AI Agents", items: ["AI Trading Agents", "Cross-chain Bridge", "DAO Governance"] },
   ];
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-4 sm:pb-12 md:pb-16 overflow-x-hidden">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 min-w-0">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-2 sm:py-10 md:py-16">
-          <h1 className="text-lg sm:text-4xl md:text-5xl font-bold text-white mb-0.5 sm:mb-3 md:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
-          <p className="text-[10px] sm:text-base md:text-xl text-gray-400 max-w-2xl mx-auto px-2">Prediction markets, but with leverage</p>
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-12 sm:pb-16 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 min-w-0">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-10 sm:py-16">
+          <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
+          <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">Prediction markets, but with leverage</p>
         </motion.div>
-        <div className="bg-gradient-to-br from-gray-900 to-black p-2 sm:p-5 md:p-12 rounded-xl md:rounded-2xl border border-[#00FF99]/20 mb-3 sm:mb-10 md:mb-16">
-          <h2 className="text-xs sm:text-xl md:text-3xl font-bold text-white mb-2 sm:mb-6 md:mb-12 text-center">Protocol Architecture</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-1 sm:gap-4 md:gap-8 relative">
+        <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-12 rounded-2xl border border-[#00FF99]/20 mb-8 sm:mb-16">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-6 sm:mb-8 md:mb-12 text-center">Protocol Architecture</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 relative">
             <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-[#00FF99]/0 via-[#00FF99]/50 to-[#00FF99]/0" />
             {[
               { icon: Database, title: "LP Deposits", desc: "USDC into Vaults" },
@@ -1157,80 +1159,80 @@ const ProtocolPage = () => {
               { icon: Activity, title: "Oracle Monitor", desc: "Real-time price tracking" },
               { icon: Shield, title: "Liquidation", desc: "Position secured on market" },
             ].map((step, i) => (
-              <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.2 }} className="relative z-10 bg-black p-1.5 sm:p-4 md:p-6 rounded-lg md:rounded-xl border border-[#00FF99]/30 text-center">
-                <div className="w-6 h-6 sm:w-12 sm:h-12 md:w-16 md:h-16 mx-auto mb-1 md:mb-4 bg-[#00FF99]/10 rounded-full flex items-center justify-center">
-                  <step.icon className="w-3 h-3 sm:w-6 sm:h-6 md:w-8 md:h-8 text-[#00FF99]" />
+              <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.2 }} className="relative z-10 bg-black p-6 rounded-xl border border-[#00FF99]/30 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-[#00FF99]/10 rounded-full flex items-center justify-center">
+                  <step.icon className="w-8 h-8 text-[#00FF99]" />
                 </div>
-                <h3 className="text-white font-bold text-[9px] sm:text-sm md:text-base mb-0.5 md:mb-2">{step.title}</h3>
-                <p className="text-gray-400 text-[8px] sm:text-xs md:text-sm">{step.desc}</p>
+                <h3 className="text-white font-bold mb-2">{step.title}</h3>
+                <p className="text-gray-400 text-sm">{step.desc}</p>
                 {i < 3 && (
                   <>
                     <ChevronRight className="hidden md:block absolute -right-4 top-1/2 -translate-y-1/2 text-[#00FF99]" />
-                    <ChevronRight className="hidden sm:block md:hidden absolute -bottom-3 left-1/2 -translate-x-1/2 rotate-90 text-[#00FF99] w-4 h-4" />
+                    <ChevronRight className="md:hidden absolute -bottom-4 left-1/2 -translate-x-1/2 rotate-90 text-[#00FF99]" />
                   </>
                 )}
               </motion.div>
             ))}
           </div>
         </div>
-        <div className="mb-3 sm:mb-10 md:mb-16">
+        <div className="mb-10 sm:mb-16">
           <HowLMWorksSixBoxes />
         </div>
         {/* Example Trade (5x leverage) */}
-        <div className="mb-3 sm:mb-10 md:mb-16">
-          <h2 className="text-xs sm:text-xl md:text-2xl font-bold text-white mb-1.5 sm:mb-4 md:mb-6 text-center px-2">Example Trade</h2>
-          <div className="grid grid-cols-3 md:grid-cols-3 gap-1 sm:gap-4 md:gap-6">
+        <div className="mb-8 sm:mb-16">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 text-center px-2">Example Trade</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {[
-              { icon: TrendingUp, title: "Position", rows: [["Collateral:", "$1,000"], ["Side:", "YES"], ["Leverage:", "5x"], ["Entry:", "$0.60"], ["Exposure:", "$5,000"], ["Shares:", "8,333"]] },
-              { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee:", "$10"], ["Borrowed:", "≈$4,000"], ["APR:", "20%"], ["Duration:", "7d"], ["Interest:", "$15.34"], ["Protocol:", "$2.30"], ["LPs:", "$13.04"]] },
+              { icon: TrendingUp, title: "Position", rows: [["Collateral:", "$1,000 USDC"], ["Side:", "YES"], ["Leverage:", "5x"], ["Entry price:", "$0.60"], ["Exposure:", "$5,000"], ["Approx. shares:", "8,333.33"]] },
+              { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee (0.2% of exposure):", "$10"], ["Borrowed from Vaults:", "≈$4,000"], ["APR:", "20%"], ["Duration:", "7 days"], ["Interest paid:", "$15.34"], ["Protocol cut (15%):", "$2.30"], ["LPs receive:", "$13.04"]] },
               {
                 icon: Lightbulb,
                 title: "Outcomes",
                 rows: [
-                  ["Price up:", "$0.60→$0.66"],
-                  ["P&L:", "+$500"],
-                  ["Margin hit:", "Liquidated"],
-                  ["Liq fee:", "3–8%"],
+                  ["If price moves up:", "$0.60 → $0.66"],
+                  ["P&L (before fees/interest):", "+$500"],
+                  ["If maintenance margin hit:", "Position liquidated"],
+                  ["Liquidation fee (3–8%):", "Liquidators, insurance, treasury"],
                 ],
               },
             ].map((box, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.1 }} className="bg-gray-900 p-1.5 sm:p-4 md:p-6 rounded-lg md:rounded-xl border border-[#00FF99]/20 min-w-0">
-                <div className="flex items-center gap-1 mb-1 sm:mb-3 md:mb-4">
-                  <box.icon className="w-3 h-3 md:w-5 md:h-5 text-[#00FF99] flex-shrink-0" />
-                  <h3 className="text-[#00FF99] font-bold text-[9px] md:text-base">{box.title}</h3>
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.1 }} className="bg-gray-900 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0">
+                <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                  <box.icon className="w-5 h-5 text-[#00FF99] flex-shrink-0" />
+                  <h3 className="text-[#00FF99] font-bold">{box.title}</h3>
                 </div>
-                <div className="space-y-0.5 md:space-y-2 text-gray-400 text-[8px] sm:text-sm">
+                <div className="space-y-2 text-gray-400 text-sm">
                   {box.rows.map(([k, v], j) => (
-                    <div key={j} className="flex justify-between gap-0.5"><span className="truncate">{k}</span><span className="text-white text-right whitespace-nowrap">{v}</span></div>
+                    <div key={j} className="flex justify-between gap-2"><span>{k}</span><span className="text-white text-right">{v}</span></div>
                   ))}
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
-        <div className="space-y-1.5 sm:space-y-4 md:space-y-6 mb-3 sm:mb-10 md:mb-16">
-          <div className="bg-gray-900/60 p-2 sm:p-4 md:p-6 rounded-lg md:rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
-            <h3 className="text-[10px] sm:text-base md:text-lg font-bold text-white mb-1 sm:mb-3 md:mb-4">Interest Split ($15.34 total)</h3>
+        <div className="space-y-4 sm:space-y-6 mb-10 sm:mb-16">
+          <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
+            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($15.34 total)</h3>
             <InterestSplitChart />
           </div>
         </div>
-        <div className="bg-gradient-to-br from-gray-900 to-black p-2 sm:p-5 md:p-10 rounded-xl md:rounded-2xl border border-[#00FF99]/20 mb-3 sm:mb-10 md:mb-16 overflow-x-hidden">
-          <h2 className="text-xs sm:text-xl md:text-3xl font-bold text-white mb-1.5 sm:mb-5 md:mb-8 text-center">$LMP Tokenomics</h2>
-          <div className="grid grid-cols-2 md:grid-cols-2 gap-2 sm:gap-6 md:gap-8">
+        <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16 overflow-x-hidden">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-4 sm:mb-6 md:mb-8 text-center">$LMP Tokenomics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
             <div>
-              <h3 className="text-[#00FF99] font-bold text-[10px] sm:text-lg md:text-xl mb-1 sm:mb-3 md:mb-4">Utility</h3>
-              <ul className="space-y-1 sm:space-y-3">
+              <h3 className="text-[#00FF99] font-bold text-xl mb-4">Utility</h3>
+              <ul className="space-y-3">
                 {["Governance voting rights", "Trading fee discounts up to 50%", "Staking for yield boost", "Access to exclusive markets"].map((item, i) => (
-                  <li key={i} className="flex items-start gap-1 sm:gap-3 text-gray-300 text-[8px] sm:text-base">
-                    <Circle className="w-1 h-1 sm:w-2 sm:h-2 mt-0.5 sm:mt-2 text-[#00FF99] fill-current flex-shrink-0" />
+                  <li key={i} className="flex items-start gap-3 text-gray-300">
+                    <Circle className="w-2 h-2 mt-2 text-[#00FF99] fill-current" />
                     {item}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <h3 className="text-[#00FF99] font-bold text-[10px] sm:text-lg md:text-xl mb-1 sm:mb-3 md:mb-4">Distribution</h3>
-              <div className="space-y-1 sm:space-y-4">
+              <h3 className="text-[#00FF99] font-bold text-xl mb-4">Distribution</h3>
+              <div className="space-y-4">
                 {[
                   { label: "Community & Rewards", pct: 40, cls: "bg-[#00FF99]" },
                   { label: "Team & Advisors", pct: 25, cls: "bg-[#00FF99]/70" },
@@ -1239,10 +1241,10 @@ const ProtocolPage = () => {
                 ].map((row) => (
                   <div key={row.label}>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-300 text-[8px] sm:text-base">{row.label}</span>
-                      <span className="text-white font-bold text-[8px] sm:text-base">{row.pct}%</span>
+                      <span className="text-gray-300">{row.label}</span>
+                      <span className="text-white font-bold">{row.pct}%</span>
                     </div>
-                    <div className="w-full h-1.5 sm:h-2 bg-gray-700 rounded-full overflow-hidden mt-1">
+                    <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden mt-2">
                       <div className={`h-full ${row.cls}`} style={{ width: `${row.pct}%` }} />
                     </div>
                   </div>
@@ -1250,29 +1252,32 @@ const ProtocolPage = () => {
               </div>
             </div>
           </div>
-          <div className="mt-2 sm:mt-6 p-1.5 sm:p-4 bg-[#00FF99]/5 border border-[#00FF99]/20 rounded-lg text-center">
-            <p className="text-gray-300 text-[9px] sm:text-base">Launching on <span className="text-[#00FF99] font-bold">Virtuals Protocol</span></p>
+          <div className="mt-6 p-4 bg-[#00FF99]/5 border border-[#00FF99]/20 rounded-lg text-center">
+            <p className="text-gray-300">Launching on <span className="text-[#00FF99] font-bold">Virtuals Protocol</span></p>
           </div>
         </div>
         <div>
-          <h2 className="text-xs sm:text-2xl md:text-3xl font-bold text-white mb-2 sm:mb-8 md:mb-12 text-center">Roadmap</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-1 sm:gap-4 md:gap-6">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-8 sm:mb-12 text-center">Roadmap</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             {roadmapItems.map((item, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="relative">
-                <div className="bg-gray-900 p-1.5 sm:p-4 md:p-6 rounded-lg md:rounded-xl border border-[#00FF99]/20 h-full">
-                  <div className="text-[#00FF99] font-bold text-[8px] sm:text-sm md:text-base mb-0.5 md:mb-2">{item.quarter}</div>
-                  <h3 className="text-white font-bold text-[9px] sm:text-base md:text-lg mb-1 md:mb-4">{item.title}</h3>
-                  <ul className="space-y-0.5 sm:space-y-2">
+                <div className="bg-gray-900 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 h-full">
+                  <div className="text-[#00FF99] font-bold mb-2">{item.quarter}</div>
+                  <h3 className="text-white font-bold text-lg mb-4">{item.title}</h3>
+                  <ul className="space-y-2">
                     {item.items.map((subItem, j) => (
-                      <li key={j} className="flex items-start gap-0.5 sm:gap-2 text-gray-400 text-[8px] sm:text-xs md:text-sm">
-                        <Circle className="w-0.5 h-0.5 sm:w-1.5 sm:h-1.5 mt-1 sm:mt-1.5 text-[#00FF99] fill-current flex-shrink-0" />
+                      <li key={j} className="flex items-start gap-2 text-gray-400 text-sm">
+                        <Circle className="w-1.5 h-1.5 mt-1.5 text-[#00FF99] fill-current flex-shrink-0" />
                         {subItem}
                       </li>
                     ))}
                   </ul>
                 </div>
                 {i < roadmapItems.length - 1 && (
-                  <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-full w-6 h-0.5 bg-[#00FF99]/30 z-10" />
+                  <>
+                    <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-full w-6 h-0.5 bg-[#00FF99]/30 z-10" />
+                    <div className="md:hidden absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-6 bg-[#00FF99]/30 z-10" />
+                  </>
                 )}
               </motion.div>
             ))}
@@ -1521,18 +1526,18 @@ const VaultPage = ({ walletConnected }) => {
   };
 
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-4 sm:pb-16 md:pb-24 overflow-x-hidden">
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="text-center py-2 sm:py-10 md:py-14">
-          <h1 className="text-lg sm:text-4xl md:text-5xl font-bold text-white mb-0.5 sm:mb-3 md:mb-4">
+    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-16 sm:pb-24 overflow-x-hidden">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="text-center py-10 sm:py-14">
+          <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">
             Liquidity <span className="text-[#00FF99]">Vault</span>
           </h1>
-          <p className="text-[10px] sm:text-base md:text-xl text-gray-400 max-w-2xl mx-auto px-2">
+          <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">
             Provide USDC liquidity and earn real yield from interest and trading fees
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-6 md:gap-8 items-stretch mb-3 sm:mb-12 md:mb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-stretch mb-12 sm:mb-16">
           <VaultCard
             vault={usdcVault}
             amount={amount}
@@ -1546,10 +1551,10 @@ const VaultPage = ({ walletConnected }) => {
           <HowVaultsWorkSteps compact />
         </div>
 
-        <section className="py-1.5 sm:py-8 md:py-12">
-          <h2 className="text-xs sm:text-2xl md:text-3xl font-bold text-white text-center mb-0.5 sm:mb-4">Vault Health</h2>
-          <p className="text-gray-400 text-center text-[9px] sm:text-sm md:text-base max-w-xl mx-auto mb-2 sm:mb-6 md:mb-10">Key metrics for the USDC vault</p>
-          <div className="grid grid-cols-2 md:grid-cols-2 gap-1.5 sm:gap-4 md:gap-6">
+        <section className="py-8 sm:py-12">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white text-center mb-4">Vault Health</h2>
+          <p className="text-gray-400 text-center text-sm sm:text-base max-w-xl mx-auto mb-10">Key metrics for the USDC vault</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <UtilizationGauge utilization={usdcVault.utilization} />
             <ApyBreakdownDonut apyBreakdown={usdcVault.apyBreakdown} />
           </div>
