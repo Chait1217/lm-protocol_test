@@ -6,23 +6,24 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { label: "Home", href: "/" },
-  { label: "Vault", href: "/vault" },
   { label: "Trade Demo", href: "/trade-demo" },
+  { label: "Base Vault", href: "/base-vault" },
+  { label: "Margin Trade", href: "/margin-trade" },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-gray-800/50 bg-[#0a0a0a]/90 backdrop-blur-md">
+    <nav className="sticky top-0 z-50 border-b border-emerald-900/30 bg-[#0a0a0a]/90 backdrop-blur-md">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-10 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-neon/20 flex items-center justify-center">
-              <span className="text-neon font-bold text-sm">LM</span>
+            <div className="h-6 w-6 rounded bg-emerald-500/20 flex items-center justify-center shadow-glow">
+              <span className="text-emerald-400 font-bold text-[10px]">LM</span>
             </div>
-            <span className="hidden sm:block text-white font-semibold text-lg">
+            <span className="hidden sm:block text-white font-semibold text-sm">
               Protocol
             </span>
           </Link>
@@ -33,9 +34,9 @@ export default function Navbar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                   pathname === item.href
-                    ? "text-neon bg-neon/10"
+                    ? "text-emerald-400 bg-emerald-500/10"
                     : "text-gray-400 hover:text-white hover:bg-white/5"
                 }`}
               >

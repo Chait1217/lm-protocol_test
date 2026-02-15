@@ -11,7 +11,7 @@ export function formatUSDC(amount: bigint | undefined, decimals = 2): string {
 /// Parse human-readable USDC amount to bigint (6 decimals)
 export function parseUSDC(amount: string): bigint {
   const num = parseFloat(amount);
-  if (isNaN(num) || num < 0) return 0n;
+  if (isNaN(num) || num < 0) return BigInt(0);
   return BigInt(Math.round(num * 1e6));
 }
 
@@ -24,7 +24,7 @@ export function formatPrice(price: bigint | number): string {
 /// Parse human-readable price to 6-decimal integer
 export function parsePrice(price: string): bigint {
   const num = parseFloat(price);
-  if (isNaN(num) || num < 0) return 0n;
+  if (isNaN(num) || num < 0) return BigInt(0);
   return BigInt(Math.round(num * 1e6));
 }
 

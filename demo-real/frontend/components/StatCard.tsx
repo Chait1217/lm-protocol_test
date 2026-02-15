@@ -21,8 +21,8 @@ export default function StatCard({
     <div
       className={`rounded-xl border p-4 ${
         highlight
-          ? "border-neon/30 bg-neon/5 neon-glow"
-          : "border-gray-800/50 bg-gray-900/50"
+          ? "border-emerald-500/30 bg-emerald-500/5 shadow-glow"
+          : "border-emerald-900/20 bg-black/40"
       }`}
     >
       <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
@@ -30,8 +30,8 @@ export default function StatCard({
         <span>{label}</span>
       </div>
       <div
-        className={`text-xl font-bold ${
-          highlight ? "text-neon" : "text-white"
+        className={`text-xl font-bold font-mono ${
+          highlight ? "text-emerald-400" : "text-white"
         }`}
       >
         {value}

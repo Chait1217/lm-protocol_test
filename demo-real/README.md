@@ -63,7 +63,115 @@ npm install
 cd ..
 ```
 
-### 2. Local Development (Anvil Fork)
+### 2. Environment Variables
+
+**Backend (Foundry) – `contracts/.env`**
+
+```env
+# Required for deployment to Polygon Amoy
+PRIVATE_KEY=0x...                    # Your wallet private key (e.g. deployer)
+POLYGON_AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+
+# Optional: for contract verification
+POLYGONSCAN_API_KEY=...
+```
+
+**Frontend – `frontend/.env.local`**
+
+```env
+# Chain: 80002 = Polygon Amoy (real testnet vault)
+NEXT_PUBLIC_CHAIN_ID=80002
+NEXT_PUBLIC_RPC_URL=https://rpc-amoy.polygon.technology
+
+# Deployed contract addresses (copy from deploy script output)
+NEXT_PUBLIC_USDC_ADDRESS=0x...       # MockUSDC (or real USDC on mainnet)
+NEXT_PUBLIC_VAULT_ADDRESS=0x...      # Vault
+
+# Optional: if you use MarginEngine on this demo
+NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS=0x...
+
+# WalletConnect (get one at https://cloud.walletconnect.com)
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
+```
+
+**Frontend – Base mainnet vault (`/base-vault`, `/trade-demo`)** – add to `.env.local`:
+
+```env
+NEXT_PUBLIC_BASE_CHAIN_ID=8453
+NEXT_PUBLIC_BASE_RPC_URL=https://mainnet.base.org
+NEXT_PUBLIC_BASE_USDC_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+NEXT_PUBLIC_BASE_VAULT_ADDRESS=0x...   # From DeployBaseVault script output
+NEXT_PUBLIC_BASE_MARGIN_ENGINE_ADDRESS=0x...
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
+```
+
+**Frontend – Polygon + Polymarket (real trade on `/trade-demo`)** – optional, for “Real Polymarket trade”:
+
+```env
+NEXT_PUBLIC_POLYGON_CHAIN_ID=137
+NEXT_PUBLIC_POLYGON_RPC_URL=https://polygon-rpc.com
+NEXT_PUBLIC_POLYMKT_USDCE_ADDRESS=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174
+NEXT_PUBLIC_POLYMKT_CTF_ADDRESS=0x4D97DCd97eC945f40cF65F87097ACe5EA0476045
+NEXT_PUBLIC_POLYMKT_CTF_EXCHANGE_ADDRESS=0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E
+```
+
+You need USDC/USDC.e on Polygon in the same wallet to place real Polymarket orders (bridge or send from an exchange).
+
+### 3. How to run the deployment locally (Polygon Amoy)
+
+Exact CLI steps:
+
+1. **Set up `contracts/.env`** with:
+
+   ```env
+   PRIVATE_KEY=0x<your_hex_private_key>
+   POLYGON_AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+   ```
+
+2. **Run the vault-only deploy script** (MockUSDC + Vault only; no MarginEngine):
+
+   ```bash
+   cd demo-real/contracts
+   source .env   # or: export $(cat .env | xargs)
+   forge script script/DeployVault.s.sol:DeployVaultScript --rpc-url polygon_amoy --broadcast
+   ```
+   (`polygon_amoy` in foundry.toml uses `POLYGON_AMOY_RPC_URL` from .env.)
+
+3. **Copy the logged addresses** from the output:
+
+   - `USDC_ADDRESS` → use as `NEXT_PUBLIC_USDC_ADDRESS` (and optionally `NEXT_PUBLIC_MOCK_USDC_ADDRESS`) in frontend `.env.local`
+   - `VAULT_ADDRESS` → use as `NEXT_PUBLIC_VAULT_ADDRESS` in frontend `.env.local`
+
+4. **Frontend**: set `NEXT_PUBLIC_CHAIN_ID=80002`, `NEXT_PUBLIC_RPC_URL`, and the two addresses above in `frontend/.env.local`, then run `npm run dev`. The `/vault` page will use the real onchain vault; `/trade-demo` vault stats will read from the same Vault contract.
+
+### 3b. Deploy BaseVault to Base mainnet (native USDC)
+
+The Base vault uses **canonical native USDC** on Base (no MockUSDC). Chain id: **8453**.
+
+1. **Set up `contracts/.env`** with:
+
+   ```env
+   PRIVATE_KEY=0x<your_hex_private_key>
+   BASE_MAINNET_RPC_URL=https://mainnet.base.org
+   ```
+
+2. **Deploy the vault**:
+
+   ```bash
+   cd demo-real/contracts
+   source .env   # or: export $(cat .env | xargs)
+   forge script script/DeployBaseVault.s.sol:DeployBaseVault --rpc-url $BASE_MAINNET_RPC_URL --broadcast
+   ```
+
+   Or using the named endpoint (foundry.toml has `base = "${BASE_MAINNET_RPC_URL}"`):
+
+   ```bash
+   forge script script/DeployBaseVault.s.sol:DeployBaseVault --rpc-url base --broadcast
+   ```
+
+3. **Copy the logged vault address** into frontend `.env.local` as `NEXT_PUBLIC_BASE_VAULT_ADDRESS`. USDC address is fixed: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`. See frontend env section for Base below.
+
+### 4. Local Development (Anvil Fork)
 
 #### Start local Anvil node
 
@@ -83,7 +191,10 @@ cp .env.example .env
 # e.g. PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 source .env
-forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+# Vault-only (no MarginEngine): use DeployVault.s.sol
+forge script script/DeployVault.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+# Or full stack (Vault + MarginEngine): use Deploy.s.sol
+# forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
 Note the deployed addresses from the output.
@@ -150,7 +261,7 @@ forge verify-contract <MARGIN_ENGINE_ADDRESS> src/MarginEngine.sol:MarginEngine 
   --etherscan-api-key $POLYGONSCAN_API_KEY
 ```
 
-### 4. Getting Test USDC
+### 6. Getting Test USDC
 
 The MockUSDC contract has a `faucet()` function:
 
@@ -165,7 +276,7 @@ cast send <MOCK_USDC_ADDRESS> "faucet(address,uint256)" <YOUR_WALLET> 1000000000
 
 Each call mints up to 10,000 USDC (6 decimals: `10000000000` = 10,000 USDC).
 
-### 5. Run Tests
+### 7. Run Tests
 
 ```bash
 cd contracts
@@ -221,12 +332,9 @@ Overview with links to Vault and Trade Demo.
 - Testnet USDC faucet
 
 ### /trade-demo
-- Set collateral, leverage (2-10x), direction (Long/Short)
-- Set mock entry and exit prices
-- Open position (real USDC transfer + vault borrow)
-- Close position (real repayment + PnL settlement)
-- View live vault stats, fee distribution, borrow APR
-- Educational explanation of money flow
+- **Simulated PnL**: Set collateral, leverage (2-10x), direction (Long/Short); open/close positions on Base vault with real USDC; PnL is simulated from entry/exit prices.
+- **Real Polymarket trade**: Switch to Polygon, use USDC.e in the same wallet to place a real order on Polymarket (BTC 100k market) via the CLOB API; includes warning and confirmation modal.
+- Live Polymarket quotes and order book; vault stats, fee distribution, borrow APR.
 
 ## Project Structure
 

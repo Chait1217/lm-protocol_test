@@ -13,7 +13,6 @@ import {
 import {
   ExternalLink,
   RefreshCw,
-  MessageCircle,
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
@@ -22,8 +21,8 @@ import {
 function CustomTooltip({ active, payload, label }: any) {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-gray-900 border border-neon/30 rounded-lg px-3 py-2 shadow-lg">
-        <p className="text-neon font-semibold text-sm">
+      <div className="bg-[#111111] border border-emerald-500/30 rounded-lg px-3 py-2 shadow-glow">
+        <p className="text-emerald-400 font-semibold text-sm">
           {payload[0].value.toFixed(1)}%
         </p>
         <p className="text-gray-400 text-xs">{label}</p>
@@ -119,46 +118,60 @@ export default function PolymarketLiveChart({
   const chartUpdateCount = useRef(0);
 
   const parseMarketData = (m: any): MarketData => {
-    let outcomePrices: number[] = [];
     try {
-      if (typeof m.outcomePrices === "string")
-        outcomePrices = JSON.parse(m.outcomePrices);
-      else if (Array.isArray(m.outcomePrices)) outcomePrices = m.outcomePrices;
+      let outcomePrices: number[] = [];
+      try {
+        if (typeof m?.outcomePrices === "string") outcomePrices = JSON.parse(m.outcomePrices);
+        else if (Array.isArray(m?.outcomePrices)) outcomePrices = m.outcomePrices;
+      } catch {
+        outcomePrices = [];
+      }
+
+      const yesPrice = outcomePrices[0] != null ? parseFloat(String(outcomePrices[0])) : null;
+      let probability: number | null = null;
+      if (yesPrice != null && yesPrice > 0 && yesPrice <= 1) {
+        probability = Math.round(yesPrice * 1000) / 10;
+      } else if (m?.lastTradePrice != null && parseFloat(String(m.lastTradePrice)) <= 1) {
+        probability = Math.round(parseFloat(String(m.lastTradePrice)) * 1000) / 10;
+      }
+
+      let clobTokenIds: string[] = [];
+      try {
+        if (typeof m?.clobTokenIds === "string") clobTokenIds = JSON.parse(m.clobTokenIds);
+        else if (Array.isArray(m?.clobTokenIds)) clobTokenIds = m.clobTokenIds;
+      } catch {
+        clobTokenIds = [];
+      }
+
+      const noPrice = outcomePrices[1] != null ? parseFloat(String(outcomePrices[1])) : yesPrice != null ? 1 - yesPrice : null;
+      return {
+        title: m?.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
+        slug: m?.slug ?? null,
+        probability,
+        volume: parseFloat(m?.volume) || parseFloat(m?.volumeNum) || 0,
+        volume24h: parseFloat(m?.volume24hr) || 0,
+        liquidity: parseFloat(m?.liquidity) || 0,
+        lastPrice: yesPrice ?? (parseFloat(String(m?.lastTradePrice)) || 0.41),
+        clobTokenIds,
+        oneDayPriceChange: parseFloat(m?.oneDayPriceChange) || 0,
+        yesPriceCents: yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null,
+        noPriceCents: noPrice != null ? Math.round(noPrice * 1000) / 10 : null,
+      };
     } catch {
-      outcomePrices = [];
+      return {
+        title: "Will Bitcoin reach $100,000 by December 31, 2026?",
+        slug: null,
+        probability: null,
+        volume: 0,
+        volume24h: 0,
+        liquidity: 0,
+        lastPrice: 0.41,
+        clobTokenIds: [],
+        oneDayPriceChange: 0,
+        yesPriceCents: null,
+        noPriceCents: null,
+      };
     }
-
-    const yesPrice = outcomePrices[0] ? parseFloat(outcomePrices[0] as any) : null;
-    let probability: number | null = null;
-    if (yesPrice !== null && yesPrice > 0 && yesPrice <= 1) {
-      probability = Math.round(yesPrice * 1000) / 10;
-    } else if (m.lastTradePrice && parseFloat(m.lastTradePrice) <= 1) {
-      probability = Math.round(parseFloat(m.lastTradePrice) * 1000) / 10;
-    }
-
-    let clobTokenIds: string[] = [];
-    try {
-      if (typeof m.clobTokenIds === "string")
-        clobTokenIds = JSON.parse(m.clobTokenIds);
-      else if (Array.isArray(m.clobTokenIds)) clobTokenIds = m.clobTokenIds;
-    } catch {
-      clobTokenIds = [];
-    }
-
-    const noPrice = outcomePrices[1] ? parseFloat(outcomePrices[1] as any) : yesPrice != null ? 1 - yesPrice : null;
-    return {
-      title: m.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
-      slug: m.slug || null,
-      probability,
-      volume: parseFloat(m.volume) || parseFloat(m.volumeNum) || 0,
-      volume24h: parseFloat(m.volume24hr) || 0,
-      liquidity: parseFloat(m.liquidity) || 0,
-      lastPrice: yesPrice || parseFloat(m.lastTradePrice) || 0.41,
-      clobTokenIds,
-      oneDayPriceChange: parseFloat(m.oneDayPriceChange) || 0,
-      yesPriceCents: yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null,
-      noPriceCents: noPrice != null ? Math.round(noPrice * 1000) / 10 : null,
-    };
   };
 
   const fetchPriceHistory = useCallback(async (tokenId: string) => {
@@ -320,135 +333,53 @@ export default function PolymarketLiveChart({
       transition={{ duration: 0.5 }}
       className="rounded-xl border border-neon/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_40px_rgba(57,255,20,0.06)]"
     >
-      {/* Header */}
-      <div className="p-3 sm:p-4 border-b border-neon/10">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full text-[0.6rem] bg-neon/15 text-neon border border-neon/40 uppercase tracking-widest font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-neon animate-pulse" />
-              {dataSource === "live" ? "LIVE" : "Polymarket"}
-            </span>
-            <span className="text-[10px] text-gray-500">Settlement {settlementDate}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => loadAllData(true)}
-              disabled={isRefreshing}
-              className="p-1.5 rounded-lg hover:bg-neon/10 transition-colors disabled:opacity-50"
-            >
-              <motion.div
-                animate={isRefreshing ? { rotate: 360 } : {}}
-                transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-neon" />
-              </motion.div>
-            </button>
-            <a
-              href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/what-price-will-bitcoin-hit-before-2027`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-neon transition-colors underline underline-offset-4"
-            >
-              View on Polymarket
-              <ExternalLink className="w-3 h-3" />
-            </a>
+      {/* Compact header row */}
+      <div className="px-3 py-2 border-b border-neon/10 flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className="px-1.5 py-0.5 rounded-full text-[0.55rem] bg-neon/15 text-neon border border-neon/40 uppercase tracking-widest font-semibold flex items-center gap-1">
+            <span className="w-1 h-1 rounded-full bg-neon animate-pulse" />
+            {dataSource === "live" ? "LIVE" : "PM"}
+          </span>
+          <AnimatedValue value={market?.probability} className="text-lg font-extrabold text-neon leading-none" suffix="%" />
+          <AnimatePresence>
+            {priceChange !== 0 && (
+              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className={`flex items-center gap-0.5 text-[10px] font-semibold ${priceChange > 0 ? "text-green-400" : "text-red-400"}`}>
+                {priceChange > 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                {Math.abs(priceChange).toFixed(1)}
+              </motion.span>
+            )}
+          </AnimatePresence>
+          <div className="w-px h-3.5 bg-gray-700" />
+          <div key={marketKey} className="flex gap-2.5">
+            <span className="text-[10px] text-gray-500">YES <AnimatedValue value={market?.yesPriceCents} className="text-neon font-mono font-bold text-[11px]" suffix="¢" /></span>
+            <span className="text-[10px] text-gray-500">NO <AnimatedValue value={market?.noPriceCents} className="text-red-400 font-mono font-bold text-[11px]" suffix="¢" /></span>
           </div>
         </div>
-
-        {error && dataSource !== "live" && (
-          <div className="mb-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs">
-            Could not fetch live data. Try refreshing.
-          </div>
-        )}
-
-        <h2 className="text-sm sm:text-base md:text-lg font-bold text-white mb-2 leading-tight">
-          {market?.title || "Will Bitcoin reach $100,000 by December 31, 2026?"}
-        </h2>
-
-        {/* YES / NO quotes — live (key forces re-render when data changes) */}
-        <div key={marketKey} className="flex gap-4 mb-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-gray-500 uppercase">YES</span>
-            <AnimatedValue
-              value={market?.yesPriceCents}
-              className="text-neon font-mono font-bold text-sm"
-              suffix="¢"
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-gray-500 uppercase">NO</span>
-            <AnimatedValue
-              value={market?.noPriceCents}
-              className="text-red-400 font-mono font-bold text-sm"
-              suffix="¢"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div className="flex items-baseline gap-3">
-            <div className="relative">
-              <AnimatedValue
-                value={market?.probability}
-                className="text-3xl sm:text-4xl font-extrabold text-neon leading-none"
-                suffix="%"
-              />
-              <AnimatePresence>
-                {priceChange !== 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className={`absolute -top-1 -right-7 flex items-center gap-0.5 text-[10px] font-semibold ${
-                      priceChange > 0 ? "text-green-400" : "text-red-400"
-                    }`}
-                  >
-                    {priceChange > 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-                    {Math.abs(priceChange).toFixed(1)}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-gray-400 text-[10px] uppercase tracking-widest">Implied Chance</span>
-              <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-neon animate-pulse" />
-                YES outcome
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-3 sm:gap-4">
-            <div className="text-right">
-              <div className="text-gray-400 text-[10px] uppercase tracking-widest mb-0.5">24h Vol</div>
-              <AnimatedValue
-                value={market?.volume24h ?? market?.volume}
-                format={formatVolume}
-                className="text-white text-sm font-bold block"
-              />
-            </div>
-            <div className="text-right">
-              <div className="text-gray-400 text-[10px] uppercase tracking-widest mb-0.5">Total Vol</div>
-              <AnimatedValue
-                value={market?.volume}
-                format={formatVolume}
-                className="text-white text-sm font-bold block"
-              />
-            </div>
-            <div className="text-right hidden sm:block">
-              <div className="text-gray-400 text-[10px] uppercase tracking-widest mb-0.5">Liquidity</div>
-              <AnimatedValue
-                value={market?.liquidity}
-                format={formatVolume}
-                className="text-white text-sm font-bold block"
-              />
-            </div>
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-gray-500">Vol <AnimatedValue value={market?.volume24h ?? market?.volume} format={formatVolume} className="text-white font-bold text-[10px]" /></span>
+          <span className="text-[9px] text-gray-500">Liq <AnimatedValue value={market?.liquidity} format={formatVolume} className="text-white font-bold text-[10px]" /></span>
+          <button onClick={() => loadAllData(true)} disabled={isRefreshing} className="p-1 rounded hover:bg-neon/10 transition-colors disabled:opacity-50">
+            <motion.div animate={isRefreshing ? { rotate: 360 } : {}} transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}>
+              <RefreshCw className="w-3 h-3 text-neon" />
+            </motion.div>
+          </button>
+          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/what-price-will-bitcoin-hit-before-2027`}
+            target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-neon transition-colors">
+            <ExternalLink className="w-3 h-3" />
+          </a>
         </div>
       </div>
 
+      {error && dataSource !== "live" && (
+        <div className="mx-3 mt-1.5 p-1.5 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[10px]">
+          Could not fetch live data. Try refreshing.
+        </div>
+      )}
+
       {/* Chart */}
-      <div className="p-3 sm:p-4">
-        <div className="h-40 sm:h-48 md:h-52">
+      <div className="px-3 py-2">
+        <div className="h-32 sm:h-36 md:h-40">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 5, bottom: 15 }}>
               <defs>
@@ -490,14 +421,12 @@ export default function PolymarketLiveChart({
           </ResponsiveContainer>
         </div>
 
-        <div className="mt-2 pt-2 border-t border-neon/10 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-neon animate-pulse" />
-            <p className="text-[10px] text-gray-500">Live from Polymarket · updates every {refreshInterval / 1000}s</p>
-          </div>
-          {lastUpdate && (
-            <p className="text-[10px] text-gray-400 font-mono">{lastUpdate.toLocaleTimeString()}</p>
-          )}
+        <div className="mt-1 pt-1 border-t border-neon/10 flex items-center justify-between">
+          <p className="text-[9px] text-gray-500 flex items-center gap-1">
+            <span className="w-1 h-1 rounded-full bg-neon animate-pulse" />
+            Live · {refreshInterval / 1000}s
+          </p>
+          {lastUpdate && <p className="text-[9px] text-gray-500 font-mono">{lastUpdate.toLocaleTimeString()}</p>}
         </div>
       </div>
     </motion.div>

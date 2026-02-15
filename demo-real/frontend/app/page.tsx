@@ -20,39 +20,20 @@ export default function Home() {
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-neon/30 bg-neon/10 text-neon text-xs font-medium mb-6">
             <div className="w-2 h-2 rounded-full bg-neon animate-pulse-neon" />
-            REAL ONCHAIN PROTOTYPE
+            BASE MAINNET · REAL USDC
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
             LM Protocol{" "}
             <span className="neon-text">Demo</span>
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
-            A real, minimal onchain prototype. Deposit USDC into the vault, borrow
-            against it for leveraged positions, and see real money flows on Polygon.
+            A real, minimal onchain prototype on Base. Deposit USDC into the vault,
+            borrow against it for leveraged positions, and see real money flows.
           </p>
         </div>
 
         {/* Cards */}
-        <div className="grid md:grid-cols-2 gap-6 mb-16">
-          <Link
-            href="/vault"
-            className="group rounded-2xl border border-gray-800/50 bg-gray-900/30 p-8 hover:border-neon/30 hover:bg-neon/5 transition-all duration-300"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-neon/10 flex items-center justify-center group-hover:bg-neon/20 transition">
-                <Vault className="w-6 h-6 text-neon" />
-              </div>
-              <h2 className="text-xl font-bold text-white">Vault</h2>
-            </div>
-            <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              Deposit USDC into the lending vault. Earn yield from borrow interest
-              and trading fees. Withdraw anytime (subject to liquidity).
-            </p>
-            <div className="flex items-center gap-2 text-neon text-sm font-medium">
-              Go to Vault <span className="group-hover:translate-x-1 transition-transform">&rarr;</span>
-            </div>
-          </Link>
-
+        <div className="grid md:grid-cols-3 gap-6 mb-16">
           <Link
             href="/trade-demo"
             className="group rounded-2xl border border-gray-800/50 bg-gray-900/30 p-8 hover:border-neon/30 hover:bg-neon/5 transition-all duration-300"
@@ -64,8 +45,46 @@ export default function Home() {
               <h2 className="text-xl font-bold text-white">Trade Demo</h2>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              Open leveraged positions with real USDC collateral. Borrow from the
-              vault. PnL simulated with mock prices, but all transfers are real.
+              Live Polymarket data + real USDC vault borrowing on Base.
+              Open leveraged positions (2-5x) and trade with real money flows.
+            </p>
+            <div className="flex items-center gap-2 text-neon text-sm font-medium">
+              Go to Trade Demo <span className="group-hover:translate-x-1 transition-transform">&rarr;</span>
+            </div>
+          </Link>
+
+          <Link
+            href="/base-vault"
+            className="group rounded-2xl border border-gray-800/50 bg-gray-900/30 p-8 hover:border-neon/30 hover:bg-neon/5 transition-all duration-300"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-neon/10 flex items-center justify-center group-hover:bg-neon/20 transition">
+                <Vault className="w-6 h-6 text-neon" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Base Vault</h2>
+            </div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-4">
+              Deposit native USDC on Base into the lending vault. Earn yield from
+              borrow interest and trading fees. Withdraw anytime.
+            </p>
+            <div className="flex items-center gap-2 text-neon text-sm font-medium">
+              Go to Vault <span className="group-hover:translate-x-1 transition-transform">&rarr;</span>
+            </div>
+          </Link>
+
+          <Link
+            href="/margin-trade"
+            className="group rounded-2xl border border-gray-800/50 bg-gray-900/30 p-8 hover:border-neon/30 hover:bg-neon/5 transition-all duration-300"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-neon/10 flex items-center justify-center group-hover:bg-neon/20 transition">
+                <TrendingUp className="w-6 h-6 text-neon" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Margin Trade</h2>
+            </div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-4">
+              Open leveraged positions (2-5x) with real USDC collateral on Base.
+              Borrow from the vault. PnL uses mock prices, but all transfers are real.
             </p>
             <div className="flex items-center gap-2 text-neon text-sm font-medium">
               Go to Trade <span className="group-hover:translate-x-1 transition-transform">&rarr;</span>
@@ -79,27 +98,27 @@ export default function Home() {
             {
               icon: <Zap className="w-5 h-5" />,
               title: "Real USDC Transfers",
-              desc: "All deposits, borrows, and repayments happen onchain with real tokens.",
+              desc: "All deposits, borrows, and repayments happen onchain with real native USDC on Base.",
             },
             {
               icon: <TrendingUp className="w-5 h-5" />,
-              title: "2-10x Leverage",
+              title: "2-5x Leverage",
               desc: "Borrow from the vault to amplify your position. Kink-based interest rates.",
             },
             {
               icon: <Shield className="w-5 h-5" />,
               title: "Insurance Fund",
-              desc: "Fees split between LPs, insurance, and protocol treasury automatically.",
+              desc: "Interest and fees split between LPs, insurance, and protocol treasury.",
             },
             {
               icon: <Lock className="w-5 h-5" />,
-              title: "Utilization Caps",
-              desc: "80% max utilization. Per-position and per-wallet borrow limits.",
+              title: "Security",
+              desc: "ReentrancyGuard, Pausable, and Ownable. Configurable lending caps.",
             },
             {
               icon: <ArrowLeftRight className="w-5 h-5" />,
               title: "Mock Prices",
-              desc: "PnL calculated with user-provided mock prices. Real Polymarket integration next.",
+              desc: "PnL calculated with user-provided mock prices. Real oracle integration next.",
             },
             {
               icon: <Vault className="w-5 h-5" />,
@@ -124,7 +143,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="text-center mt-16 text-gray-600 text-xs">
-          <p>LM Protocol Prototype &middot; Polygon Amoy Testnet &middot; Not for production use</p>
+          <p>LM Protocol Prototype &middot; Base Mainnet &middot; Use small amounts for testing</p>
         </div>
       </main>
     </>

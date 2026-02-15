@@ -24,7 +24,7 @@ export default function TxButton({
 
   const variants = {
     primary:
-      "bg-neon/20 text-neon border border-neon/30 hover:bg-neon/30 hover:border-neon/50 active:scale-[0.98]",
+      "bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:from-emerald-500/30 hover:to-emerald-600/30 hover:border-emerald-500/50 active:scale-[0.98] shadow-glow",
     secondary:
       "bg-white/5 text-gray-300 border border-gray-700 hover:bg-white/10 hover:border-gray-600 active:scale-[0.98]",
     danger:

@@ -1,69 +1,24 @@
-// ─── Contract ABIs (matching Base mainnet deployed contracts) ────────────────
-
 /**
- * Real USDC on Base (no faucet). Standard ERC20 read/write for balanceOf, allowance, approve.
+ * Reusable ABIs for Base mainnet: BaseVault, BaseMarginEngine, ERC20 USDC.
+ * Used by /base-vault and /margin-trade.
  */
-export const MOCK_USDC_ABI = [
-  {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-  {
-    name: "balanceOf",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "allowance",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "decimals",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint8" }],
-  },
-  {
-    name: "symbol",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "string" }],
-  },
-] as const;
 
-export const VAULT_ABI = [
-  // Deposit / Withdraw
+/** ABI for BaseVault v2 (deposit, withdraw, totalAssets, totalBorrowed, utilization, insurance, protocol, balanceOf, convertToAssets). */
+export const baseVaultAbi = [
   {
     name: "deposit",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [{ name: "usdcAmount", type: "uint256" }],
+    inputs: [{ name: "assets", type: "uint256" }],
     outputs: [{ name: "shares", type: "uint256" }],
   },
   {
     name: "withdraw",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [{ name: "usdcAmount", type: "uint256" }],
+    inputs: [{ name: "assets", type: "uint256" }],
     outputs: [{ name: "shares", type: "uint256" }],
   },
-  // Views
   {
     name: "totalAssets",
     type: "function",
@@ -113,17 +68,10 @@ export const VAULT_ABI = [
     inputs: [{ name: "shares", type: "uint256" }],
     outputs: [{ name: "", type: "uint256" }],
   },
-  {
-    name: "convertToShares",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "usdcAmount", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
 ] as const;
 
-export const MARGIN_ENGINE_ABI = [
-  // Open / Close / Liquidate
+/** ABI for BaseMarginEngine on Base mainnet. */
+export const baseMarginEngineAbi = [
   {
     name: "openPosition",
     type: "function",
@@ -156,7 +104,6 @@ export const MARGIN_ENGINE_ABI = [
     ],
     outputs: [],
   },
-  // Views
   {
     name: "getPosition",
     type: "function",
@@ -205,20 +152,17 @@ export const MARGIN_ENGINE_ABI = [
     outputs: [{ name: "", type: "uint256" }],
   },
   {
-    name: "isLiquidatable",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "positionId", type: "uint256" },
-      { name: "currentPriceMock", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-  {
     name: "nextPositionId",
     type: "function",
     stateMutability: "view",
     inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "walletBorrowed",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
@@ -235,46 +179,49 @@ export const MARGIN_ENGINE_ABI = [
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
-  // Events
+] as const;
+
+export const erc20Abi = [
   {
-    name: "PositionOpened",
-    type: "event",
-    inputs: [
-      { name: "positionId", type: "uint256", indexed: true },
-      { name: "owner", type: "address", indexed: true },
-      { name: "collateral", type: "uint256", indexed: false },
-      { name: "borrowed", type: "uint256", indexed: false },
-      { name: "notional", type: "uint256", indexed: false },
-      { name: "leverage", type: "uint256", indexed: false },
-      { name: "isLong", type: "bool", indexed: false },
-      { name: "entryPriceMock", type: "uint256", indexed: false },
-      { name: "openFee", type: "uint256", indexed: false },
-    ],
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
   },
   {
-    name: "PositionClosed",
-    type: "event",
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
     inputs: [
-      { name: "positionId", type: "uint256", indexed: true },
-      { name: "owner", type: "address", indexed: true },
-      { name: "exitPriceMock", type: "uint256", indexed: false },
-      { name: "pnl", type: "int256", indexed: false },
-      { name: "interest", type: "uint256", indexed: false },
-      { name: "returnedToUser", type: "uint256", indexed: false },
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
     ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    name: "symbol",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
   },
 ] as const;
 
-// ─── Contract Addresses (from .env – Base mainnet) ───────────────────────────
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
-
-export function getContractAddresses() {
-  const vaultEnv = (process.env.NEXT_PUBLIC_BASE_VAULT_ADDRESS || "").trim();
-  const marginEnv = (process.env.NEXT_PUBLIC_BASE_MARGIN_ENGINE_ADDRESS || "").trim();
-  return {
-    mockUsdc: ((process.env.NEXT_PUBLIC_BASE_USDC_ADDRESS || "").trim() || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") as `0x${string}`,
-    vault: (vaultEnv || ZERO_ADDRESS) as `0x${string}`,
-    marginEngine: (marginEnv || ZERO_ADDRESS) as `0x${string}`,
-  };
-}

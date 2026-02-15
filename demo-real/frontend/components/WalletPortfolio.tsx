@@ -60,7 +60,7 @@ export default function WalletPortfolio() {
       <div className="mb-4">
         <div className="text-gray-400 text-xs mb-1">Total Wallet Value</div>
         <div className="text-3xl font-bold text-neon">
-          ${totalValueUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          ${totalValueUsd.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
         </div>
       </div>
 
@@ -77,13 +77,13 @@ export default function WalletPortfolio() {
                 {nativeBalance?.symbol || "ETH"}
               </div>
               <div className="text-gray-500 text-xs">
-                {ethAmount.toFixed(4)} {nativeBalance?.symbol || "ETH"}
+                {ethAmount.toFixed(6)} {nativeBalance?.symbol || "ETH"}
               </div>
             </div>
           </div>
           <div className="text-right">
             <div className="text-white text-sm font-medium">
-              ${ethValueUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${ethValueUsd.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
             </div>
             <div className="text-gray-500 text-xs">@${ETH_PRICE_USD.toLocaleString()}</div>
           </div>
@@ -98,13 +98,13 @@ export default function WalletPortfolio() {
             <div>
               <div className="text-white text-sm font-medium">USDC</div>
               <div className="text-gray-500 text-xs">
-                {usdcAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                {usdcAmount.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })} USDC
               </div>
             </div>
           </div>
           <div className="text-right">
             <div className="text-white text-sm font-medium">
-              ${usdcAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${usdcAmount.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
             </div>
             <div className="text-gray-500 text-xs">1:1 USD</div>
           </div>
@@ -120,13 +120,13 @@ export default function WalletPortfolio() {
               <div>
                 <div className="text-white text-sm font-medium">Vault (lmUSDC)</div>
                 <div className="text-gray-500 text-xs">
-                  {formatUSDC(vaultShares as bigint)} shares
+                  {formatUSDC(vaultShares as bigint, 6)} shares
                 </div>
               </div>
             </div>
             <div className="text-right">
               <div className="text-white text-sm font-medium">
-                ${vaultValueUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${vaultValueUsd.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
               </div>
               <div className="text-gray-500 text-xs">vault value</div>
             </div>

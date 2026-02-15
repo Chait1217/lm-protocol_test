@@ -8,3 +8,4 @@
 
 # Broadcast artifacts
 /broadcast
+.env
