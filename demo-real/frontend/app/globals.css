@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --neon: #39FF14;
+  --neon-dim: #2bcc10;
+}
+
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: #0a0a0a;
+  color: #e5e5e5;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Neon glow */
+.neon-glow {
+  box-shadow: 0 0 20px rgba(57, 255, 20, 0.15), 0 0 40px rgba(57, 255, 20, 0.05);
+}
+
+.neon-border {
+  border: 1px solid rgba(57, 255, 20, 0.3);
+}
+
+.neon-text {
+  color: #39FF14;
+  text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+}
+
+/* Pulse animation for live indicators */
+@keyframes pulse-neon {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-neon {
+  animation: pulse-neon 2s ease-in-out infinite;
+}
+
+/* Spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  animation: spin 1s linear infinite;
+  border: 2px solid #333;
+  border-top-color: #39FF14;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+}

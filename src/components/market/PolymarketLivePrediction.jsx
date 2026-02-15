@@ -58,7 +58,7 @@ const AnimatedValue = ({ value, format, className, prefix = "", suffix = "" }) =
 export default function PolymarketLivePrediction({
   slug = "will-jesus-christ-return-before-2027",
   settlementDate = "Dec 31, 2026",
-  refreshInterval = 10000, // 10 seconds for real-time updates
+  refreshInterval = 5000, // 5 seconds for real-time quote updates
 }) {
   const [market, setMarket] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
@@ -71,13 +71,14 @@ export default function PolymarketLivePrediction({
   const prevProbability = useRef(null);
   const chartUpdateCount = useRef(0);
 
-  // Fetch market data from server-side endpoint
+  // Fetch market data from server-side endpoint (no cache for real-time quotes)
   const fetchMarket = useCallback(async (retryCount = 0) => {
     const maxRetries = 3;
-    
+
     try {
-      const response = await fetch('/api/polymarket-live', {
+      const response = await fetch(`/api/polymarket-live?t=${Date.now()}`, {
         method: 'GET',
+        cache: 'no-store',
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -135,10 +136,10 @@ export default function PolymarketLivePrediction({
     }
     
     const yesPrice = outcomePrices[0] ? parseFloat(outcomePrices[0]) : null;
-    
+    const noPrice = outcomePrices[1] ? parseFloat(outcomePrices[1]) : (yesPrice != null ? 1 - yesPrice : null);
+
     let probability;
     if (yesPrice !== null && yesPrice > 0 && yesPrice <= 1) {
-      // Keep one decimal for more precision in real-time
       probability = Math.round(yesPrice * 1000) / 10;
     } else if (m.lastTradePrice && parseFloat(m.lastTradePrice) <= 1) {
       probability = Math.round(parseFloat(m.lastTradePrice) * 1000) / 10;
@@ -148,7 +149,7 @@ export default function PolymarketLivePrediction({
 
     const totalVolume = parseFloat(m.volume) || parseFloat(m.volumeNum) || parseFloat(m.volumeClob) || 0;
     const volume24h = parseFloat(m.volume24hr) || parseFloat(m.volume24hrClob) || 0;
-    
+
     let clobTokenIds = [];
     try {
       if (typeof m.clobTokenIds === 'string') {
@@ -165,6 +166,8 @@ export default function PolymarketLivePrediction({
       slug: m.slug || slug,
       title: m.question || "Will Jesus Christ return before 2027?",
       probability,
+      yesPriceCents: yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null,
+      noPriceCents: noPrice != null ? Math.round(noPrice * 1000) / 10 : null,
       volume: totalVolume,
       volume24h,
       liquidity: parseFloat(m.liquidity) || parseFloat(m.liquidityNum) || 0,
@@ -403,6 +406,26 @@ export default function PolymarketLivePrediction({
           {market?.title || "Will Jesus Christ return before 2027?"}
         </h2>
 
+        {/* YES / NO quotes — live */}
+        <div className="flex gap-4 mb-2 md:mb-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] md:text-xs text-gray-500 uppercase">YES</span>
+            <AnimatedValue
+              value={market?.yesPriceCents}
+              className="text-[#00FF99] font-mono font-bold text-sm md:text-base"
+              suffix="¢"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] md:text-xs text-gray-500 uppercase">NO</span>
+            <AnimatedValue
+              value={market?.noPriceCents}
+              className="text-red-400 font-mono font-bold text-sm md:text-base"
+              suffix="¢"
+            />
+          </div>
+        </div>
+
         {/* Stats Row */}
         <div className="flex flex-wrap items-end justify-between gap-2 md:gap-4">
           <div className="flex items-baseline gap-2 md:gap-4">
@@ -439,7 +462,7 @@ export default function PolymarketLivePrediction({
               </span>
               <span className="inline-flex items-center gap-1 md:gap-1.5 text-[9px] md:text-xs text-gray-400">
                 <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
-                YES outcome • Updates every 10s
+                YES outcome • Live every {refreshInterval / 1000}s
               </span>
             </div>
           </div>
@@ -450,19 +473,29 @@ export default function PolymarketLivePrediction({
                 24h Volume
               </div>
               <AnimatedValue
-                value={market?.volume24h || market?.volume}
+                value={market?.volume24h ?? market?.volume}
                 format={formatVolume}
                 className="text-white text-sm md:text-xl sm:text-2xl font-bold block"
               />
             </div>
-            <div className="text-right hidden sm:block">
-              <div className="text-gray-400 text-xs uppercase tracking-widest mb-1">
+            <div className="text-right">
+              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
                 Total Volume
               </div>
               <AnimatedValue
                 value={market?.volume}
                 format={formatVolume}
-                className="text-white text-xl sm:text-2xl font-bold block"
+                className="text-white text-sm md:text-xl sm:text-2xl font-bold block"
+              />
+            </div>
+            <div className="text-right hidden sm:block">
+              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
+                Liquidity
+              </div>
+              <AnimatedValue
+                value={market?.liquidity}
+                format={formatVolume}
+                className="text-white text-sm md:text-xl font-bold block"
               />
             </div>
           </div>
@@ -519,7 +552,7 @@ export default function PolymarketLivePrediction({
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
             <p className="text-[10px] md:text-xs text-gray-500">
-              Real-time data from Polymarket • Auto-updates every 10s
+              Real-time data from Polymarket • Auto-updates every {refreshInterval / 1000}s
             </p>
           </div>
           {lastUpdate && (

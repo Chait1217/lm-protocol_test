@@ -1,0 +1,10 @@
+# Foundry
+/cache
+/out
+/lib
+
+# Env
+.env
+
+# Broadcast artifacts
+/broadcast
