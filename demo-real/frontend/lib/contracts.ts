@@ -1,9 +1,19 @@
-// ─── Contract ABIs (matching Base mainnet deployed contracts) ────────────────
+// ─── Contract ABIs (matching Polygon mainnet deployed contracts) ────────────────
 
 /**
- * Real USDC on Base (no faucet). Standard ERC20 read/write for balanceOf, allowance, approve.
+ * USDC.e on Polygon (bridged USDC). Standard ERC20 read/write for balanceOf, allowance, approve.
  */
-export const MOCK_USDC_ABI = [
+export const USDC_ABI = [
+  {
+    name: "transfer",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
   {
     name: "approve",
     type: "function",
@@ -46,6 +56,9 @@ export const MOCK_USDC_ABI = [
     outputs: [{ name: "", type: "string" }],
   },
 ] as const;
+
+/** @deprecated Use USDC_ABI instead */
+export const MOCK_USDC_ABI = USDC_ABI;
 
 export const VAULT_ABI = [
   // Deposit / Withdraw
@@ -265,15 +278,17 @@ export const MARGIN_ENGINE_ABI = [
   },
 ] as const;
 
-// ─── Contract Addresses (from .env – Base mainnet) ───────────────────────────
+// ─── Contract Addresses (from .env – Polygon mainnet) ───────────────────────────
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
 export function getContractAddresses() {
-  const vaultEnv = (process.env.NEXT_PUBLIC_BASE_VAULT_ADDRESS || "").trim();
-  const marginEnv = (process.env.NEXT_PUBLIC_BASE_MARGIN_ENGINE_ADDRESS || "").trim();
+  const vaultEnv = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || "").trim();
+  const marginEnv = (process.env.NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS || "").trim();
   return {
-    mockUsdc: ((process.env.NEXT_PUBLIC_BASE_USDC_ADDRESS || "").trim() || "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") as `0x${string}`,
+    usdc: ((process.env.NEXT_PUBLIC_USDC_ADDRESS || "").trim() || "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174") as `0x${string}`,
+    /** @deprecated Use usdc instead */
+    mockUsdc: ((process.env.NEXT_PUBLIC_USDC_ADDRESS || "").trim() || "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174") as `0x${string}`,
     vault: (vaultEnv || ZERO_ADDRESS) as `0x${string}`,
     marginEngine: (marginEnv || ZERO_ADDRESS) as `0x${string}`,
   };

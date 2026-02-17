@@ -5,7 +5,7 @@ import { Zap, TrendingUp, Shield } from "lucide-react";
 const takeaways = [
   {
     icon: Zap,
-    text: "Leverage x2–x10 on prediction markets",
+    text: "Leverage up to 5x on prediction markets",
   },
   {
     icon: TrendingUp,

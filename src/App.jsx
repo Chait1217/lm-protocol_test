@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useEnsAvatar, useEnsName } from "wagmi";
@@ -227,7 +227,6 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
     { key: "protocol", label: "Protocol" },
     { key: "market", label: "Market" },
     { key: "vault", label: "Vault" },
-    { key: "demo", label: "Demo" },
   ];
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
@@ -535,7 +534,7 @@ const POLYMARKET_APIS = {
 
 // Récupère un marché réel depuis Gamma API avec son vrai conditionId
 // Par défaut on pointe sur "Will Jesus Christ return before 2027?"
-const fetchRealMarket = async (slug = "will-jesus-christ-return-before-2027") => {
+const fetchRealMarket = async (slug = "will-bitcoin-reach-100000-by-december-31-2026-571") => {
   try {
     // Gamma API pour les marchés
     const res = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?slug=${slug}`);
@@ -576,7 +575,7 @@ const fetchRealMarket = async (slug = "will-jesus-christ-return-before-2027") =>
       conditionId: null,
       id: "fallback",
       slug: slug,
-      title: "Will Jesus Christ return before 2027?",
+      title: "Will Bitcoin reach $100,000 by December 31, 2026?",
       probability: 3,
       volume: 439674,
       url: `https://polymarket.com/market/${slug}`,
@@ -681,7 +680,7 @@ const CategoriesCarousel = () => {
 let realMarketCache = null;
 
 // Market Page
-const MarketPage = ({ setCurrentPage }) => {
+const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
   const [featuredMarket, setFeaturedMarket] = useState(null);
   const [leverage, setLeverage] = useState(2.5);
   const [positionSize, setPositionSize] = useState("1000"); // legacy, now used as collateral helper
@@ -990,7 +989,7 @@ const MarketPage = ({ setCurrentPage }) => {
           </p>
           <motion.button
             type="button"
-            onClick={() => setCurrentPage?.("alpha")}
+            onClick={() => (onAccessAlphaClick ? onAccessAlphaClick() : setCurrentPage?.("alpha"))}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="min-h-[48px] px-6 sm:px-8 py-3 sm:py-4 bg-[#00FF99] text-black font-bold rounded-lg text-base sm:text-lg shadow-[0_0_30px_rgba(0,255,153,0.3)] hover:shadow-[0_0_50px_rgba(0,255,153,0.5)] transition-all inline-flex items-center justify-center gap-2"
@@ -1021,32 +1020,36 @@ const MarketPage = ({ setCurrentPage }) => {
         </div>
       </div>
 
-      {/* Bloc marché principal – Live Polymarket Integration */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 sm:mt-12">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <h2 className="text-xl sm:text-3xl font-bold text-white">
+      {/* Bloc marché principal – Live Polymarket Integration (compact) */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-4 sm:mt-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+          <h2 className="text-lg sm:text-2xl font-bold text-white">
             Live Polymarket Integration
           </h2>
-          <span className="hidden md:inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] uppercase tracking-widest">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
+          <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full bg-[#00FF99]/10 border border-[#00FF99]/30 text-[#00FF99] uppercase tracking-widest">
+            <span className="w-1 h-1 rounded-full bg-[#00FF99] animate-pulse" />
             Powered by LM Protocol
           </span>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-3 md:gap-6 sm:gap-8 items-stretch">
-            {/* Carte marché – Composant réutilisable avec données live Polymarket */}
+        <div className="grid md:grid-cols-2 gap-3 md:gap-5 items-stretch">
             <PolymarketLivePrediction
-              slug="will-jesus-christ-return-before-2027"
+              slug="will-bitcoin-reach-100000-by-december-31-2026-571"
               settlementDate="Dec 31, 2026"
-              refreshInterval={30000}
+              refreshInterval={2000}
+              compact
             />
-
-            {/* Live Market Data Box with Leverage Info */}
             <PolymarketLivePredictionBoxLeverage
-              slug="will-jesus-christ-return-before-2027"
-              refreshInterval={5000}
+              slug="will-bitcoin-reach-100000-by-december-31-2026-571"
+              refreshInterval={2000}
+              compact
             />
         </div>
+      </div>
+
+      {/* Demo Trade – content from Demo page */}
+      <div className="mt-12 sm:mt-16">
+        <LeverageDemoTrade embedded />
       </div>
 
       {/* Value props */}
@@ -1538,16 +1541,21 @@ const VaultPage = ({ walletConnected }) => {
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-stretch mb-12 sm:mb-16">
-          <VaultCard
-            vault={usdcVault}
-            amount={amount}
-            error={error}
-            onAmountChange={handleAmountChange}
-            onDeposit={handleDeposit}
-            onWithdraw={handleWithdraw}
-            walletConnected={walletConnected}
-            userBalance={0}
-          />
+          <div>
+            <VaultCard
+              vault={usdcVault}
+              amount={amount}
+              error={error}
+              onAmountChange={handleAmountChange}
+              onDeposit={handleDeposit}
+              onWithdraw={handleWithdraw}
+              walletConnected={walletConnected}
+              userBalance={0}
+            />
+            <p className="mt-3 text-center sm:text-left text-xs text-gray-500">
+              Numbers shown are for demonstration only (fictional).
+            </p>
+          </div>
           <HowVaultsWorkSteps compact />
         </div>
 
@@ -1567,11 +1575,26 @@ const VaultPage = ({ walletConnected }) => {
 // App (pages)
 export default function App() {
   const [currentPage, setCurrentPage] = useState("market");
+  const [alphaInitialEmail, setAlphaInitialEmail] = useState(null);
+  const prevPageRef = useRef("market");
   const { isConnected } = useAccount();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [currentPage]);
+
+  useEffect(() => {
+    // Only clear email when leaving alpha page, not when entering it
+    if (prevPageRef.current === "alpha" && currentPage !== "alpha") {
+      setAlphaInitialEmail(null);
+    }
+    prevPageRef.current = currentPage;
+  }, [currentPage]);
+
+  const goToAlphaFromMarket = () => {
+    setAlphaInitialEmail("lmprotcol@gmail.com");
+    setCurrentPage("alpha");
+  };
 
   return (
     <div className="min-h-screen bg-black overflow-x-hidden">
@@ -1579,8 +1602,8 @@ export default function App() {
 
       {currentPage === "market" && <MarketTicker />}
 
-      {currentPage === "market" && <MarketPage setCurrentPage={setCurrentPage} />}
-      {currentPage === "alpha" && <AlphaAccessPage setCurrentPage={setCurrentPage} />}
+      {currentPage === "market" && <MarketPage setCurrentPage={setCurrentPage} onAccessAlphaClick={goToAlphaFromMarket} />}
+      {currentPage === "alpha" && <AlphaAccessPage setCurrentPage={setCurrentPage} initialEmail={alphaInitialEmail} />}
       {currentPage === "protocol" && <ProtocolPage />}
       {currentPage === "vault" && <VaultPage walletConnected={isConnected} />}
       {currentPage === "profile" && <ProfilePage />}

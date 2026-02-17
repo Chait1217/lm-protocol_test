@@ -15,7 +15,7 @@ import {
   useReadContract,
   useReadContracts,
 } from "wagmi";
-import { base } from "wagmi/chains";
+import { polygon } from "wagmi/chains";
 
 const PolymarketLiveChart = dynamic(() => import("@/components/PolymarketLiveChart"), { ssr: false });
 const PolymarketLeverageBox = dynamic(() => import("@/components/PolymarketLeverageBox"), { ssr: false });
@@ -76,17 +76,18 @@ export default function TradeDemoPage() {
   const { isConnected } = useAccount();
   const headerMarket = useHeaderMarket();
 
-  // ─── Vault stats ───
+  // ─── Vault stats (all on Polygon) ───
   const { data: vaultData, refetch: refetchVault } = useReadContracts({
     contracts: hasVault
       ? [
-          { address: addresses.vault, abi: VAULT_ABI, functionName: "totalAssets", chainId: base.id },
-          { address: addresses.vault, abi: VAULT_ABI, functionName: "totalBorrowed", chainId: base.id },
-          { address: addresses.vault, abi: VAULT_ABI, functionName: "utilization", chainId: base.id },
-          { address: addresses.vault, abi: VAULT_ABI, functionName: "insuranceBalance", chainId: base.id },
-          { address: addresses.vault, abi: VAULT_ABI, functionName: "protocolBalance", chainId: base.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "totalAssets", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "totalBorrowed", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "utilization", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "insuranceBalance", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "protocolBalance", chainId: polygon.id },
         ]
       : [],
+    query: { refetchInterval: 5000 },
   });
 
   const totalAssets = vaultData?.[0]?.result as bigint | undefined;
@@ -99,7 +100,7 @@ export default function TradeDemoPage() {
     address: hasVault ? addresses.marginEngine : undefined,
     abi: MARGIN_ENGINE_ABI,
     functionName: "borrowAPR",
-    chainId: base.id,
+    chainId: polygon.id,
   });
 
   const [positionRefreshTrigger, bumpPositionRefresh] = useReducer((x: number) => x + 1, 0);

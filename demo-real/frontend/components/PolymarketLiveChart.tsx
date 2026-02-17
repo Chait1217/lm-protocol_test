@@ -285,8 +285,6 @@ export default function PolymarketLiveChart({
     return () => clearInterval(interval);
   }, [refreshInterval]);
 
-  const marketKey = `${market?.probability ?? ""}-${market?.yesPriceCents ?? ""}-${market?.noPriceCents ?? ""}`;
-
   const formatVolume = (v: number) => {
     if (v === null || v === undefined || isNaN(v)) return "N/A";
     if (v >= 1000000) return `$${(v / 1000000).toFixed(2)}M`;
@@ -346,15 +344,10 @@ export default function PolymarketLiveChart({
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className={`flex items-center gap-0.5 text-[10px] font-semibold ${priceChange > 0 ? "text-green-400" : "text-red-400"}`}>
                 {priceChange > 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-                {Math.abs(priceChange).toFixed(1)}
+                {Math.abs(priceChange).toFixed(1)} pp
               </motion.span>
             )}
           </AnimatePresence>
-          <div className="w-px h-3.5 bg-gray-700" />
-          <div key={marketKey} className="flex gap-2.5">
-            <span className="text-[10px] text-gray-500">YES <AnimatedValue value={market?.yesPriceCents} className="text-neon font-mono font-bold text-[11px]" suffix="¢" /></span>
-            <span className="text-[10px] text-gray-500">NO <AnimatedValue value={market?.noPriceCents} className="text-red-400 font-mono font-bold text-[11px]" suffix="¢" /></span>
-          </div>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[9px] text-gray-500">Vol <AnimatedValue value={market?.volume24h ?? market?.volume} format={formatVolume} className="text-white font-bold text-[10px]" /></span>

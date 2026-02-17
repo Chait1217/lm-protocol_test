@@ -42,11 +42,11 @@ export default function VaultMetricsPanel({ totalAssets, totalBorrowed, utilizat
       <div className="grid grid-cols-4 gap-1">
         <div className="bg-black/40 rounded p-1.5 border border-emerald-900/20 text-center">
           <div className="text-gray-500 text-[8px]">TVL</div>
-          <div className="text-white font-bold font-mono text-[11px]">${formatUSDC(totalAssets, 2)}</div>
+          <div className="text-white font-bold font-mono text-[11px]">${formatUSDC(totalAssets, 6)}</div>
         </div>
         <div className="bg-black/40 rounded p-1.5 border border-emerald-900/20 text-center">
           <div className="text-gray-500 text-[8px]">Borrowed</div>
-          <div className="text-amber-400 font-bold font-mono text-[11px]">${formatUSDC(totalBorrowed, 2)}</div>
+          <div className="text-amber-400 font-bold font-mono text-[11px]">${formatUSDC(totalBorrowed, 6)}</div>
         </div>
         <div className="bg-black/40 rounded p-1.5 border border-emerald-900/20 text-center">
           <div className="text-gray-500 text-[8px]">Util</div>
@@ -73,11 +73,11 @@ export default function VaultMetricsPanel({ totalAssets, totalBorrowed, utilizat
       <div className="flex gap-1.5">
         <div className="flex-1 bg-black/40 rounded p-1.5 border border-emerald-900/20">
           <div className="text-gray-500 text-[8px] flex items-center gap-0.5"><Shield className="w-2 h-2" /> Insurance</div>
-          <div className="text-white font-mono text-[11px] font-semibold">${formatUSDC(insuranceBal, 2)}</div>
+          <div className="text-white font-mono text-[11px] font-semibold">${formatUSDC(insuranceBal, 6)}</div>
         </div>
         <div className="flex-1 bg-black/40 rounded p-1.5 border border-emerald-900/20">
           <div className="text-gray-500 text-[8px] flex items-center gap-0.5"><Activity className="w-2 h-2" /> Protocol</div>
-          <div className="text-white font-mono text-[11px] font-semibold">${formatUSDC(protocolBal, 2)}</div>
+          <div className="text-white font-mono text-[11px] font-semibold">${formatUSDC(protocolBal, 6)}</div>
         </div>
       </div>
 

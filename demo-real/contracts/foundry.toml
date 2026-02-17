@@ -9,6 +9,8 @@ optimizer_runs = 200
 # Base mainnet – set BASE_MAINNET_RPC_URL in .env (e.g. https://mainnet.base.org)
 [rpc_endpoints]
 base = "${BASE_MAINNET_RPC_URL}"
+polygon = "${POLYGON_RPC_URL}"
 
 [etherscan]
 base = { key = "${BASESCAN_API_KEY}" }
+polygon = { key = "${POLYGONSCAN_API_KEY}" }

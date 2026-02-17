@@ -41,8 +41,9 @@ const AnimatedValue = ({ value, format, className, prefix = "", suffix = "" }) =
 };
 
 export default function PolymarketLivePredictionBoxLeverage({
-  slug = "will-jesus-christ-return-before-2027",
+  slug = "will-bitcoin-reach-100000-by-december-31-2026-571",
   refreshInterval = 5000, // 5s for real-time feel
+  compact = false,
 }) {
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +99,7 @@ export default function PolymarketLivePredictionBoxLeverage({
     }
   }, []);
 
-  // Parse market data
+  // Parse market data – prefer CLOB bestBid/bestAsk for live cents
   const parseMarketData = (m) => {
     let outcomePrices = [];
     try {
@@ -111,30 +112,33 @@ export default function PolymarketLivePredictionBoxLeverage({
       outcomePrices = [];
     }
     
-    const yesPrice = outcomePrices[0] ? parseFloat(outcomePrices[0]) : null;
-    const noPrice = outcomePrices[1] ? parseFloat(outcomePrices[1]) : (yesPrice ? 1 - yesPrice : null);
-    
-    let yesProbability = null;
-    let noProbability = null;
-    
-    if (yesPrice !== null && yesPrice > 0 && yesPrice <= 1) {
-      yesProbability = Math.round(yesPrice * 1000) / 10;
-      noProbability = Math.round((1 - yesPrice) * 1000) / 10;
-    }
+    const bestBid = m.bestBid != null ? parseFloat(m.bestBid) : null;
+    const bestAsk = m.bestAsk != null ? parseFloat(m.bestAsk) : null;
+    const yesPriceFromGamma = outcomePrices[0] ? parseFloat(outcomePrices[0]) : null;
+    const noPriceFromGamma = outcomePrices[1] ? parseFloat(outcomePrices[1]) : (yesPriceFromGamma ? 1 - yesPriceFromGamma : null);
+    // Live cents: CLOB bestAsk = YES price (0–1), (1 - bestBid) = NO price
+    const yesCents = bestAsk != null && bestAsk >= 0 && bestAsk <= 1
+      ? Math.round(bestAsk * 1000) / 10
+      : (yesPriceFromGamma != null ? Math.round(yesPriceFromGamma * 1000) / 10 : null);
+    const noCents = bestBid != null && bestBid >= 0 && bestBid <= 1
+      ? Math.round((1 - bestBid) * 1000) / 10
+      : (noPriceFromGamma != null ? Math.round(noPriceFromGamma * 1000) / 10 : null);
+    const yesProbability = yesCents != null ? yesCents : null;
+    const noProbability = noCents != null ? noCents : null;
 
     return {
-      title: m.question || "Will Jesus Christ return before 2027?",
+      title: m.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
       yesProbability,
       noProbability,
-      yesPrice: yesPrice ? (yesPrice * 100).toFixed(1) : null,
-      noPrice: noPrice ? (noPrice * 100).toFixed(1) : null,
-      volume: parseFloat(m.volume) || parseFloat(m.volumeNum) || 0,
-      volume24h: parseFloat(m.volume24hr) || 0,
+      yesPrice: yesCents != null ? yesCents.toFixed(1) : null,
+      noPrice: noCents != null ? noCents.toFixed(1) : null,
+      volume: parseFloat(m.volume) || parseFloat(m.volumeNum) || parseFloat(m.volumeClob) || 0,
+      volume24h: parseFloat(m.volume24hr) || parseFloat(m.volume24hrClob) || 0,
       liquidity: parseFloat(m.liquidity) || parseFloat(m.liquidityNum) || 0,
       traders: parseInt(m.uniqueBettors) || parseInt(m.uniqueTraders) || null,
       oneDayChange: parseFloat(m.oneDayPriceChange) || 0,
-      bestBid: parseFloat(m.bestBid) || null,
-      bestAsk: parseFloat(m.bestAsk) || null,
+      bestBid: bestBid ?? null,
+      bestAsk: bestAsk ?? null,
     };
   };
 
@@ -213,9 +217,9 @@ export default function PolymarketLivePredictionBoxLeverage({
   }
 
   return (
-    <div className="bg-gray-950 p-2.5 md:p-4 sm:p-6 rounded-xl md:rounded-2xl border border-[#00FF99]/25 shadow-[0_0_40px_rgba(0,255,153,0.08)] h-full flex flex-col min-w-0">
+    <div className="bg-gray-950 rounded-xl md:rounded-2xl border border-[#00FF99]/25 h-full min-h-0 flex flex-col min-w-0 p-2.5 md:p-4 sm:p-6 shadow-[0_0_40px_rgba(0,255,153,0.08)]">
       {/* Header with Live Badge */}
-      <div className="flex items-center justify-between mb-2 md:mb-4">
+      <div className="flex items-center justify-between mb-2 md:mb-4 flex-shrink-0">
         <div className="flex items-center gap-1.5 md:gap-2">
           <span className="px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-full text-[0.55rem] md:text-[0.65rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-1 md:gap-1.5">
             <span className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
@@ -237,12 +241,13 @@ export default function PolymarketLivePredictionBoxLeverage({
         </button>
       </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto">
       {/* Market Question */}
       <h3 className="text-white font-bold text-xs md:text-lg sm:text-xl mb-2 md:mb-4 leading-tight">
-        {market?.title || "Will Jesus Christ return before 2027?"}
+        {market?.title || "Will Bitcoin reach $100,000 by December 31, 2026?"}
       </h3>
 
-      {/* Outcome Buttons - YES/NO */}
+      {/* Outcome Buttons - YES/NO (cents only) */}
       <div className="grid grid-cols-2 gap-1.5 md:gap-3 mb-2 md:mb-5">
         <motion.button
           onClick={() => setSelectedOutcome("YES")}
@@ -261,17 +266,11 @@ export default function PolymarketLivePredictionBoxLeverage({
               Yes
             </span>
             <AnimatedValue
-              value={market?.yesProbability}
-              className={`text-lg md:text-2xl sm:text-3xl font-bold ${
-                selectedOutcome === "YES" ? "text-[#00FF99]" : "text-white"
-              }`}
-              suffix="%"
+              value={market?.yesPrice != null ? parseFloat(market.yesPrice) : market?.yesProbability}
+              className={`text-lg md:text-2xl sm:text-3xl font-bold ${selectedOutcome === "YES" ? "text-[#00FF99]" : "text-white"}`}
+              suffix="¢"
             />
-            <span className="text-[10px] md:text-xs text-gray-500 mt-0.5 md:mt-1">
-              {market?.yesPrice ? `${market.yesPrice}¢` : '--'}
-            </span>
           </div>
-          {/* Price change indicator */}
           <AnimatePresence>
             {selectedOutcome === "YES" && priceChange !== 0 && (
               <motion.div
@@ -306,116 +305,60 @@ export default function PolymarketLivePredictionBoxLeverage({
               No
             </span>
             <AnimatedValue
-              value={market?.noProbability}
-              className={`text-lg md:text-2xl sm:text-3xl font-bold ${
-                selectedOutcome === "NO" ? "text-red-400" : "text-white"
-              }`}
-              suffix="%"
+              value={market?.noPrice != null ? parseFloat(market.noPrice) : market?.noProbability}
+              className={`text-lg md:text-2xl sm:text-3xl font-bold ${selectedOutcome === "NO" ? "text-red-400" : "text-white"}`}
+              suffix="¢"
             />
-            <span className="text-[10px] md:text-xs text-gray-500 mt-0.5 md:mt-1">
-              {market?.noPrice ? `${market.noPrice}¢` : '--'}
-            </span>
           </div>
         </motion.button>
       </div>
 
-      {/* Market Stats Grid - 1 row on mobile, 2x2 on desktop */}
+      {/* Market Stats Grid */}
       <div className="grid grid-cols-4 md:grid-cols-2 gap-1 md:gap-3 mb-2 md:mb-5">
         <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
-          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <Activity className="w-3.5 h-3.5" />
-            <span>24h Volume</span>
-          </div>
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1"><Activity className="w-3.5 h-3.5" /><span>24h Volume</span></div>
           <div className="text-gray-400 text-[7px] md:hidden mb-0.5">24h Vol</div>
-          <AnimatedValue
-            value={market?.volume24h || market?.volume}
-            format={formatVolume}
-            className="text-white font-bold text-[10px] md:text-lg"
-          />
+          <AnimatedValue value={market?.volume24h || market?.volume} format={formatVolume} className="text-white font-bold text-[10px] md:text-lg" />
         </div>
-        
         <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
-          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <DollarSign className="w-3.5 h-3.5" />
-            <span>Total Volume</span>
-          </div>
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1"><DollarSign className="w-3.5 h-3.5" /><span>Total Volume</span></div>
           <div className="text-gray-400 text-[7px] md:hidden mb-0.5">Total Vol</div>
-          <AnimatedValue
-            value={market?.volume}
-            format={formatVolume}
-            className="text-white font-bold text-[10px] md:text-lg"
-          />
+          <AnimatedValue value={market?.volume} format={formatVolume} className="text-white font-bold text-[10px] md:text-lg" />
         </div>
-
         <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
-          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <Zap className="w-3.5 h-3.5" />
-            <span>Liquidity</span>
-          </div>
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1"><Zap className="w-3.5 h-3.5" /><span>Liquidity</span></div>
           <div className="text-gray-400 text-[7px] md:hidden mb-0.5">Liquidity</div>
-          <AnimatedValue
-            value={market?.liquidity}
-            format={formatVolume}
-            className="text-white font-bold text-[10px] md:text-lg"
-          />
+          <AnimatedValue value={market?.liquidity} format={formatVolume} className="text-white font-bold text-[10px] md:text-lg" />
         </div>
-
         <div className="bg-black/40 rounded-lg p-1 md:p-3 border border-gray-800/50 text-center md:text-left">
-          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1">
-            <Users className="w-3.5 h-3.5" />
-            <span>Traders</span>
-          </div>
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs mb-1"><Users className="w-3.5 h-3.5" /><span>Traders</span></div>
           <div className="text-gray-400 text-[7px] md:hidden mb-0.5">Traders</div>
-          <AnimatedValue
-            value={market?.traders}
-            format={formatNumber}
-            className="text-white font-bold text-[10px] md:text-lg"
-          />
+          <AnimatedValue value={market?.traders} format={formatNumber} className="text-white font-bold text-[10px] md:text-lg" />
         </div>
       </div>
 
-      {/* Best Bid/Ask Display - updates by selected outcome (YES vs NO) */}
+      {/* Best Bid/Ask */}
       {(market?.bestBid != null || market?.bestAsk != null) && (
         <div className="bg-black/40 rounded-lg p-1.5 md:p-3 border border-gray-800/50 mb-2 md:mb-5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-400 text-xs">
-              Order book for <span className={selectedOutcome === "YES" ? "text-[#00FF99] font-medium" : "text-red-400 font-medium"}>{selectedOutcome}</span>
-            </span>
+            <span className="text-gray-400 text-xs">Order book for <span className={selectedOutcome === "YES" ? "text-[#00FF99] font-medium" : "text-red-400 font-medium"}>{selectedOutcome}</span></span>
           </div>
           <div className="flex justify-between items-center">
             <div>
               <span className="text-gray-400 text-xs">Best Bid</span>
-              <motion.div
-                key={`bid-${selectedOutcome}`}
-                initial={{ opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={selectedOutcome === "YES" ? "text-[#00FF99] font-mono font-bold" : "text-red-400 font-mono font-bold"}
-              >
-                {selectedOutcome === "YES"
-                  ? (market.bestBid != null ? `${(market.bestBid * 100).toFixed(1)}¢` : '--')
-                  : (market.bestAsk != null ? `${((1 - market.bestAsk) * 100).toFixed(1)}¢` : '--')}
+              <motion.div key={`bid-${selectedOutcome}`} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} className={`font-mono font-bold ${selectedOutcome === "YES" ? "text-[#00FF99]" : "text-red-400"}`}>
+                {selectedOutcome === "YES" ? (market.bestBid != null ? `${(market.bestBid * 100).toFixed(1)}¢` : '--') : (market.bestAsk != null ? `${((1 - market.bestAsk) * 100).toFixed(1)}¢` : '--')}
               </motion.div>
             </div>
             <div className="h-8 w-px bg-gray-700" />
             <div className="text-right">
               <span className="text-gray-400 text-xs">Best Ask</span>
-              <motion.div
-                key={`ask-${selectedOutcome}`}
-                initial={{ opacity: 0, x: 4 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={selectedOutcome === "YES" ? "text-[#00FF99] font-mono font-bold" : "text-red-400 font-mono font-bold"}
-              >
-                {selectedOutcome === "YES"
-                  ? (market.bestAsk != null ? `${(market.bestAsk * 100).toFixed(1)}¢` : '--')
-                  : (market.bestBid != null ? `${((1 - market.bestBid) * 100).toFixed(1)}¢` : '--')}
+              <motion.div key={`ask-${selectedOutcome}`} initial={{ opacity: 0, x: 4 }} animate={{ opacity: 1, x: 0 }} className={`font-mono font-bold ${selectedOutcome === "YES" ? "text-[#00FF99]" : "text-red-400"}`}>
+                {selectedOutcome === "YES" ? (market.bestAsk != null ? `${(market.bestAsk * 100).toFixed(1)}¢` : '--') : (market.bestBid != null ? `${((1 - market.bestBid) * 100).toFixed(1)}¢` : '--')}
               </motion.div>
             </div>
           </div>
-          <p className="text-[10px] text-gray-500 mt-1.5">
-            {selectedOutcome === "YES"
-              ? "Bid = buy YES · Ask = sell YES"
-              : "Bid = buy NO · Ask = sell NO (inverted from YES)"}
-          </p>
+          <p className="text-[10px] text-gray-500 mt-1.5">{selectedOutcome === "YES" ? "Bid = buy YES · Ask = sell YES" : "Bid = buy NO · Ask = sell NO (inverted from YES)"}</p>
         </div>
       )}
 
@@ -425,8 +368,6 @@ export default function PolymarketLivePredictionBoxLeverage({
           <span className="text-gray-400 text-[10px] md:text-xs font-semibold uppercase tracking-wider">Leverage demo</span>
           <span className="text-[9px] md:text-[10px] text-gray-500">Simulation only</span>
         </div>
-
-        {/* Leverage 1x–5x */}
         <div className="space-y-1.5 md:space-y-2 mb-2 md:mb-4">
           <div className="flex justify-between items-center">
             <label className="text-gray-400 text-xs md:text-sm">Leverage</label>
@@ -451,9 +392,7 @@ export default function PolymarketLivePredictionBoxLeverage({
                 type="button"
                 onClick={() => setLeverage(x)}
                 className={`flex-1 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-semibold border transition-colors cursor-pointer ${
-                  Math.round(leverage) === x
-                    ? "bg-[#00FF99] text-black border-[#00FF99]"
-                    : "bg-gray-900 text-gray-300 border-gray-700 hover:border-[#00FF99]/60"
+                  Math.round(leverage) === x ? "bg-[#00FF99] text-black border-[#00FF99]" : "bg-gray-900 text-gray-300 border-gray-700 hover:border-[#00FF99]/60"
                 }`}
               >
                 {x}x
@@ -462,7 +401,6 @@ export default function PolymarketLivePredictionBoxLeverage({
           </div>
         </div>
 
-        {/* Amount (margin) */}
         <div className="mb-2 md:mb-4">
           <label className="text-gray-400 text-xs md:text-sm block mb-0.5 md:mb-1">Amount (margin)</label>
           <div className="flex rounded-lg border border-gray-700 bg-black overflow-hidden">
@@ -479,35 +417,20 @@ export default function PolymarketLivePredictionBoxLeverage({
           </div>
         </div>
 
-        {/* Summary: Entry, Position, Liquidation, Max win (all update with live market) */}
         <div className="bg-black/50 rounded-lg p-2 md:p-3 border border-[#00FF99]/10 space-y-1 md:space-y-2 text-[10px] md:text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-400">Entry price</span>
-            <AnimatedValue value={entryPriceCents} format={(v) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" />
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">Position size</span>
-            <AnimatedValue value={positionSize} format={(v) => (v ?? 0).toFixed(2)} className="text-white font-medium" prefix="$" />
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">Liquidation price</span>
-            <AnimatedValue value={liquidationCents} format={(v) => (v ?? 0).toFixed(1)} className="text-red-400 font-semibold font-mono" suffix="¢" />
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">To win (max)</span>
-            <AnimatedValue value={maxWin} format={(v) => (v ?? 0).toFixed(2)} className="text-[#00FF99] font-semibold" prefix="$" />
-          </div>
+          <div className="flex justify-between"><span className="text-gray-400">Entry price</span><AnimatedValue value={entryPriceCents} format={(v) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" /></div>
+          <div className="flex justify-between"><span className="text-gray-400">Position size</span><AnimatedValue value={positionSize} format={(v) => (v ?? 0).toFixed(2)} className="text-white font-medium" prefix="$" /></div>
+          <div className="flex justify-between"><span className="text-gray-400">Liquidation price</span><AnimatedValue value={liquidationCents} format={(v) => (v ?? 0).toFixed(1)} className="text-red-400 font-semibold font-mono" suffix="¢" /></div>
+          <div className="flex justify-between"><span className="text-gray-400">To win (max)</span><AnimatedValue value={maxWin} format={(v) => (v ?? 0).toFixed(2)} className="text-[#00FF99] font-semibold" prefix="$" /></div>
         </div>
       </div>
 
-      {/* Spacer to push button to bottom */}
-      <div className="flex-1" />
+      </div>
 
-      {/* Footer with last update */}
-      <div className="flex items-center justify-between mt-2 md:mt-3 text-[10px] md:text-xs text-gray-500">
+      <div className="flex items-center justify-between mt-2 md:mt-3 text-[10px] md:text-xs text-gray-500 flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <span className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
-          <span>Real-time · every 5s</span>
+          <span>Real-time · every {refreshInterval / 1000}s</span>
         </div>
         {lastUpdate && (
           <span className="font-mono">{lastUpdate.toLocaleTimeString()}</span>

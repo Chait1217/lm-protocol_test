@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { AlertTriangle, ExternalLink, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
-import { useAccount, useSwitchChain, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { base } from "wagmi/chains";
+import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { POLYGON_CHAIN_ID, POLYMKT_USDCE_ADDRESS, POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
 import { erc20PolyAbi } from "@/lib/polymarketAbi";
-import { getContractAddresses, MOCK_USDC_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
+import { getContractAddresses, USDC_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 import { parseUSDC, parsePrice, formatUSDC, bpsToPercent } from "@/lib/utils";
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -25,13 +25,9 @@ export interface RealTradeMarket {
 interface Props {
   market: RealTradeMarket | null;
   selectedOutcome: "YES" | "NO";
-  /** Collateral in USDC (human-readable) */
   collateral: number;
-  /** Leverage multiplier (e.g. 3) */
   leverage: number;
-  /** Entry price as decimal (e.g. 0.41 for 41¢) */
   entryPrice: number;
-  /** Called after both steps succeed to refresh vault state */
   onSuccess?: () => void;
 }
 
@@ -40,20 +36,19 @@ const addresses = getContractAddresses();
 const ZERO = "0x0000000000000000000000000000000000000000";
 const hasVault = addresses.vault !== ZERO && addresses.vault.length === 42;
 
-type FlowStep = "idle" | "borrow" | "borrow-confirming" | "switch-polygon" | "polymarket" | "done";
+type FlowStep = "idle" | "borrow" | "borrow-confirming" | "polymarket" | "done";
 
 /* ────────────────────────────────────────────────────────────────── */
 
 export default function RealPolymarketTrade({ market, selectedOutcome, collateral, leverage, entryPrice, onSuccess }: Props) {
-  const { address, chain } = useAccount();
-  const { switchChainAsync, isPending: isSwitchPending } = useSwitchChain();
+  const { address } = useAccount();
 
   /* ── Derived values ── */
   const notional = collateral * leverage;
   const borrowed = notional - collateral;
   const isLong = selectedOutcome === "YES";
 
-  /* ── Polygon USDC.e balance (informational) ── */
+  /* ── Polygon USDC.e balance ── */
   const polygonBalance = useReadContract({
     address: POLYMKT_USDCE_ADDRESS,
     abi: erc20PolyAbi,
@@ -63,33 +58,23 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   });
   const polygonUsdc = polygonBalance.data != null ? Number(polygonBalance.data) / 1e6 : 0;
 
-  /* ── Base USDC allowance for MarginEngine ── */
+  /* ── USDC.e allowance for MarginEngine (all on Polygon now) ── */
   const { data: meAllowance, refetch: refetchAllowance } = useReadContract({
-    address: addresses.mockUsdc,
-    abi: MOCK_USDC_ABI,
+    address: addresses.usdc,
+    abi: USDC_ABI,
     functionName: "allowance",
     args: address ? [address, addresses.marginEngine] : undefined,
-    chainId: base.id,
+    chainId: polygon.id,
   });
   const needsApproval = meAllowance !== undefined
     ? (meAllowance as bigint) < parseUSDC(collateral.toString())
     : true;
 
-  /* ── Base USDC balance ── */
-  const { data: baseBalance } = useReadContract({
-    address: addresses.mockUsdc,
-    abi: MOCK_USDC_ABI,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: base.id,
-  });
-  const baseUsdc = baseBalance != null ? Number(baseBalance as bigint) / 1e6 : 0;
-
-  /* ── Write contract (for Base vault ops) ── */
+  /* ── Write contract (all on Polygon) ── */
   const { writeContract, isPending: isWritePending } = useWriteContract();
-  const [baseTxHash, setBaseTxHash] = useState<`0x${string}` | undefined>();
-  const { isLoading: isBaseConfirming, isSuccess: isBaseTxSuccess } =
-    useWaitForTransactionReceipt({ hash: baseTxHash });
+  const [vaultTxHash, setVaultTxHash] = useState<`0x${string}` | undefined>();
+  const { isLoading: isVaultConfirming, isSuccess: isVaultTxSuccess } =
+    useWaitForTransactionReceipt({ hash: vaultTxHash });
 
   /* ── Flow state ── */
   const [step, setStep] = useState<FlowStep>("idle");
@@ -97,7 +82,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   const [polymarketLoading, setPolymarketLoading] = useState(false);
   const [result, setResult] = useState<{
     positionId?: string;
-    baseTx?: string;
+    vaultTx?: string;
     orderId?: string;
     polyTxHash?: string;
     error?: string;
@@ -110,42 +95,38 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
     ? (market?.bestAsk ?? 0.5)
     : market?.bestBid != null ? 1 - market.bestBid : 0.5;
 
+  const meetsPolymarketMin = notional >= 1;
   const canTrade = Boolean(
-    address && tokenId && collateral >= 0.05 && leverage >= 2 && market
+    address && tokenId && collateral >= 0.5 && leverage >= 2 && market && meetsPolymarketMin
   );
 
-  /* ── Step 2: After Base tx confirms, place Polymarket order ── */
+  /* ── After vault tx confirms, place Polymarket order ── */
   useEffect(() => {
-    if (isBaseTxSuccess && step === "borrow-confirming") {
+    if (isVaultTxSuccess && step === "borrow-confirming") {
       placePolymarketOrder();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBaseTxSuccess, step]);
+  }, [isVaultTxSuccess, step]);
 
-  /* ── Step 1: Open position on Base vault (borrow) ── */
+  /* ── Step 1: Open position on Polygon vault (borrow) ── */
   const startBorrow = useCallback(async () => {
     if (!hasVault) {
-      setResult({ error: "Base vault not configured. Set NEXT_PUBLIC_BASE_VAULT_ADDRESS and NEXT_PUBLIC_BASE_MARGIN_ENGINE_ADDRESS." });
+      setResult({ error: "Vault not configured. Set NEXT_PUBLIC_VAULT_ADDRESS and NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS." });
       return;
     }
     try {
       setStep("borrow");
-      // Always switch to Base (don't rely on stale `chain` from closure)
-      await switchChainAsync?.({ chainId: base.id });
-      // Give wagmi/React time to propagate the chain change
-      await new Promise((r) => setTimeout(r, 1500));
 
-      // Approve if needed
+      // Approve if needed (all on Polygon — no chain switch needed)
       if (needsApproval) {
-        setStep("borrow");
         await new Promise<void>((resolve, reject) => {
           writeContract(
             {
-              address: addresses.mockUsdc,
-              abi: MOCK_USDC_ABI,
+              address: addresses.usdc,
+              abi: USDC_ABI,
               functionName: "approve",
               args: [addresses.marginEngine, parseUSDC("999999999")],
-              chainId: base.id,
+              chainId: polygon.id,
             },
             {
               onSuccess: () => { refetchAllowance(); resolve(); },
@@ -153,11 +134,10 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             }
           );
         });
-        // Wait a moment for approval to propagate
         await new Promise((r) => setTimeout(r, 2000));
       }
 
-      // Open position on MarginEngine
+      // Open position on MarginEngine (Polygon)
       const mockPrice = parsePrice(entryPrice.toString());
       writeContract(
         {
@@ -165,16 +145,16 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           abi: MARGIN_ENGINE_ABI,
           functionName: "openPosition",
           args: [parseUSDC(collateral.toString()), BigInt(leverage), isLong, mockPrice],
-          chainId: base.id, // Explicitly target Base chain
+          chainId: polygon.id,
         },
         {
           onSuccess: (hash) => {
-            setBaseTxHash(hash);
+            setVaultTxHash(hash);
             setStep("borrow-confirming");
           },
           onError: (err) => {
             setStep("idle");
-            setResult({ error: `Base vault borrow failed: ${err.message}` });
+            setResult({ error: `Vault borrow failed: ${err.message}` });
           },
         }
       );
@@ -183,9 +163,9 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       const msg = err instanceof Error ? err.message : String(err);
       setResult({ error: `Borrow step failed: ${msg}` });
     }
-  }, [switchChainAsync, needsApproval, writeContract, refetchAllowance, collateral, leverage, isLong, entryPrice]);
+  }, [needsApproval, writeContract, refetchAllowance, collateral, leverage, isLong, entryPrice]);
 
-  /* ── Step 2: Place real Polymarket order on Polygon ── */
+  /* ── Step 2: Place real Polymarket order (same chain!) ── */
   const placePolymarketOrder = useCallback(async () => {
     if (!market?.clobTokenIds?.length || !tokenId) {
       setResult({ error: "Missing market token IDs for Polymarket order" });
@@ -198,14 +178,10 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       return;
     }
 
-    setStep("switch-polygon");
+    setStep("polymarket");
     setPolymarketLoading(true);
 
     try {
-      // Switch to Polygon
-      await switchChainAsync?.({ chainId: POLYGON_CHAIN_ID });
-      setStep("polymarket");
-
       const { ethers } = await import("ethers");
       const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
 
@@ -230,7 +206,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       const resp = await client.createAndPostMarketOrder(
         {
           tokenID: tokenId,
-          amount: notional, // Full leveraged notional
+          amount: notional,
           side: Side.BUY,
         },
         { tickSize, negRisk },
@@ -241,8 +217,8 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;
 
       setResult({
-        positionId: baseTxHash ? "confirmed" : undefined,
-        baseTx: baseTxHash,
+        positionId: vaultTxHash ? "confirmed" : undefined,
+        vaultTx: vaultTxHash,
         orderId,
         polyTxHash,
       });
@@ -253,20 +229,19 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       const message = err instanceof Error ? err.message : String(err);
       setResult((prev) => ({
         ...prev,
-        error: `Polymarket order failed: ${message}. Base vault position was still opened.`,
+        error: `Polymarket order failed: ${message}. Vault position was still opened.`,
       }));
       setStep("done");
     } finally {
       setPolymarketLoading(false);
     }
-  }, [market, tokenId, notional, switchChainAsync, baseTxHash, onSuccess]);
+  }, [market, tokenId, notional, vaultTxHash, onSuccess]);
 
-  /* ── Combined execute: Base borrow → Polygon trade ── */
+  /* ── Combined execute ── */
   const handleExecute = useCallback(() => {
     setResult(null);
-    setBaseTxHash(undefined);
+    setVaultTxHash(undefined);
     if (!hasVault) {
-      // No vault configured: skip borrow, go straight to Polymarket
       placePolymarketOrder();
     } else {
       startBorrow();
@@ -280,15 +255,13 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
 
   return (
     <div className="glass-card rounded-xl p-3 space-y-3">
-      {/* Header */}
       <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
         <AlertTriangle className="w-4 h-4 flex-shrink-0" />
         Leveraged Real Polymarket Trade
       </div>
       <p className="text-slate-300 text-[11px] leading-relaxed">
-        This will <strong>borrow from the Base vault</strong> (leverage) and then place a{" "}
-        <strong>real trade on Polymarket on Polygon</strong> using the full leveraged notional.
-        Not a simulation. Use small size only.
+        This will <strong>borrow from the vault</strong> (leverage) and then place a{" "}
+        <strong>real BUY order on Polymarket</strong> with that notional — all on <strong>Polygon</strong>. You receive the outcome tokens; when you close a position we sell those same tokens. Polymarket requires a minimum of <strong>$1</strong> per order (notional = collateral × leverage).
       </p>
 
       {!address ? (
@@ -298,7 +271,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           {/* ── Trade Summary ── */}
           <div className="bg-black/50 rounded p-2.5 border border-emerald-900/20 space-y-1.5 text-[11px]">
             <div className="text-emerald-400 text-[10px] font-semibold uppercase tracking-wider mb-1">
-              Trade Summary
+              Trade Summary · Polygon
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Direction</span>
@@ -308,7 +281,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Collateral</span>
-              <span className="text-white font-mono">${collateral.toFixed(2)} USDC</span>
+              <span className="text-white font-mono">${collateral.toFixed(6)} USDC.e</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Leverage</span>
@@ -316,11 +289,11 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Notional (leveraged)</span>
-              <span className="text-white font-mono font-semibold">${notional.toFixed(2)} USDC</span>
+              <span className="text-white font-mono font-semibold">${notional.toFixed(6)} USDC.e</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Borrowed from vault</span>
-              <span className="text-yellow-400 font-mono">${borrowed.toFixed(2)} USDC</span>
+              <span className="text-yellow-400 font-mono">${borrowed.toFixed(6)} USDC.e</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">~Entry price</span>
@@ -328,26 +301,16 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             </div>
             <div className="border-t border-gray-800/50 pt-1.5 mt-1">
               <div className="flex justify-between text-[10px]">
-                <span className="text-gray-500">Base USDC balance</span>
-                <span className="text-gray-300 font-mono">${baseUsdc.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[10px]">
                 <span className="text-gray-500">Polygon USDC.e balance</span>
-                <span className="text-gray-300 font-mono">${polygonUsdc.toFixed(2)}</span>
+                <span className="text-gray-300 font-mono">${polygonUsdc.toFixed(6)}</span>
               </div>
             </div>
           </div>
 
-          {/* Balance warnings */}
-          {baseUsdc < collateral && hasVault && (
+          {/* Balance warning */}
+          {polygonUsdc < collateral && hasVault && (
             <p className="text-amber-400 text-[10px]">
-              Your Base USDC balance (${baseUsdc.toFixed(2)}) is below collateral (${collateral.toFixed(0)}). The vault borrow will fail.
-            </p>
-          )}
-          {polygonUsdc < notional && (
-            <p className="text-amber-400 text-[10px]">
-              Your Polygon USDC.e (${polygonUsdc.toFixed(2)}) is below the leveraged notional (${notional.toFixed(0)}).
-              The Polymarket order may fail unless you have enough USDC.e on Polygon.
+              Your USDC.e balance (${polygonUsdc.toFixed(6)}) is below collateral (${collateral.toFixed(6)}). The vault borrow will fail.
             </p>
           )}
 
@@ -355,40 +318,39 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            disabled={!canTrade || isAnyLoading || isSwitchPending}
+            disabled={!canTrade || isAnyLoading}
             className="w-full rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-500/40 text-emerald-400 py-2.5 text-sm font-semibold hover:from-emerald-500/30 hover:to-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
           >
             {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             {hasVault
-              ? `Borrow ${leverage}x from vault → Trade on Polymarket`
-              : `Execute $${notional.toFixed(0)} Polymarket trade`
+              ? `Borrow ${leverage}x → Trade on Polymarket`
+              : `Execute $${notional.toFixed(6)} Polymarket trade`
             }
           </button>
 
           {!canTrade && address && (
             <p className="text-[10px] text-gray-500">
               {clobTokenIds.length === 0 ? "Waiting for market token IDs…" : ""}
-              {collateral < 0.05 ? "Set collateral ≥ $0.05." : ""}
+              {collateral < 0.5 ? "Set collateral ≥ $0.50." : !meetsPolymarketMin ? "Notional must be ≥ $1 (Polymarket min)." : ""}
             </p>
           )}
 
           {/* ── Progress indicator ── */}
-          {isAnyLoading && (
-            <div className="rounded border border-emerald-900/20 bg-black/40 p-2.5 space-y-2">
-              <StepIndicator label="1. Borrow from Base vault" status={
-                step === "borrow" ? "active" : step === "borrow-confirming" ? "confirming" :
-                (step === "switch-polygon" || step === "polymarket" || step === "done") ? "done" : "pending"
-              } />
-              <StepIndicator label="2. Switch to Polygon" status={
-                step === "switch-polygon" ? "active" :
-                (step === "polymarket" || step === "done") ? "done" : "pending"
-              } />
-              <StepIndicator label="3. Place Polymarket order" status={
-                step === "polymarket" ? "active" :
-                step === "done" ? "done" : "pending"
-              } />
-            </div>
-          )}
+          {isAnyLoading && (() => {
+            type Status = "pending" | "active" | "confirming" | "done";
+            const stepStatus = (s: FlowStep): [Status, Status] => {
+              const step1: Status = s === "borrow" ? "active" : s === "borrow-confirming" ? "confirming" : (s === "polymarket" || s === "done") ? "done" : "pending";
+              const step2: Status = s === "polymarket" ? "active" : s === "done" ? "done" : "pending";
+              return [step1, step2];
+            };
+            const [step1Status, step2Status] = stepStatus(step);
+            return (
+              <div className="rounded border border-emerald-900/20 bg-black/40 p-2.5 space-y-2">
+                <StepIndicator label="1. Borrow from Polygon vault" status={step1Status} />
+                <StepIndicator label="2. Place Polymarket order" status={step2Status} />
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -402,60 +364,42 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             </p>
 
             <div className="bg-black/50 rounded p-3 border border-gray-800 space-y-2 text-[11px] mb-4">
-              <div className="text-amber-400 text-[10px] font-bold uppercase mb-1">Two-step execution</div>
+              <div className="text-emerald-400 text-[10px] font-bold uppercase mb-1">Single-chain execution (Polygon)</div>
 
               <div className="border-l-2 border-emerald-500/30 pl-2">
-                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Base Vault (Chain 8453)</div>
+                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Polygon Vault</div>
                 <div className="text-gray-300">
-                  Open position: ${collateral.toFixed(2)} collateral × {leverage}x = ${notional.toFixed(2)} notional
+                  Open position: ${collateral.toFixed(6)} collateral × {leverage}x = ${notional.toFixed(6)} notional
                 </div>
-                <div className="text-yellow-400">Borrows ${borrowed.toFixed(2)} from vault</div>
-              </div>
-
-              <div className="flex justify-center">
-                <ArrowRight className="w-3 h-3 text-gray-500" />
+                <div className="text-yellow-400">Borrows ${borrowed.toFixed(6)} from vault</div>
               </div>
 
               <div className="border-l-2 border-amber-500/30 pl-2">
-                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Polymarket (Polygon 137)</div>
+                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Polymarket (same chain!)</div>
                 <div className="text-gray-300">
-                  Buy {selectedOutcome} @ ~{(price * 100).toFixed(1)}¢ with ${notional.toFixed(2)} USDC
+                  Buy {selectedOutcome} @ ~{(price * 100).toFixed(1)}¢ with ${notional.toFixed(6)} USDC.e
                 </div>
               </div>
 
               <div className="border-t border-gray-800 pt-2 mt-2 space-y-1 text-[10px]">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Your Base USDC</span>
-                  <span className={`font-mono ${baseUsdc >= collateral ? "text-green-400" : "text-amber-400"}`}>
-                    ${baseUsdc.toFixed(2)} {baseUsdc < collateral && "(insufficient)"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-500">Your Polygon USDC.e</span>
-                  <span className={`font-mono ${polygonUsdc >= notional ? "text-green-400" : "text-amber-400"}`}>
-                    ${polygonUsdc.toFixed(2)} {polygonUsdc < notional && "(may fail)"}
+                  <span className={`font-mono ${polygonUsdc >= collateral ? "text-green-400" : "text-amber-400"}`}>
+                    ${polygonUsdc.toFixed(6)} {polygonUsdc < collateral && "(insufficient)"}
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={isAnyLoading}
-                className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800"
-              >
+              <button type="button" onClick={() => setConfirmOpen(false)} disabled={isAnyLoading}
+                className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800">
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={() => { setConfirmOpen(false); handleExecute(); }}
-                disabled={isAnyLoading}
-                className="flex-1 py-2 rounded-lg bg-amber-500/30 border border-amber-500/50 text-amber-400 font-semibold hover:bg-amber-500/40 disabled:opacity-50 flex items-center justify-center gap-1"
-              >
+              <button type="button" onClick={() => { setConfirmOpen(false); handleExecute(); }} disabled={isAnyLoading}
+                className="flex-1 py-2 rounded-lg bg-amber-500/30 border border-amber-500/50 text-amber-400 font-semibold hover:bg-amber-500/40 disabled:opacity-50 flex items-center justify-center gap-1">
                 {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Execute both steps
+                Execute trade
               </button>
             </div>
           </div>
@@ -465,18 +409,14 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       {/* ── Result ── */}
       {result && (
         <div className={`rounded border p-2.5 text-[11px] space-y-1.5 ${result.error ? "border-red-500/50 bg-red-500/10 text-red-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"}`}>
-          {result.baseTx && (
+          {result.vaultTx && (
             <div className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
               <span className="text-emerald-300">
-                Vault position opened on Base
-                <a
-                  href={`https://basescan.org/tx/${result.baseTx}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-0.5 ml-1 text-emerald-400 hover:underline"
-                >
-                  Basescan <ExternalLink className="w-3 h-3" />
+                Vault position opened on Polygon
+                <a href={`${POLYGONSCAN_TX}${result.vaultTx}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 ml-1 text-emerald-400 hover:underline">
+                  Polygonscan <ExternalLink className="w-3 h-3" />
                 </a>
               </span>
             </div>
@@ -492,19 +432,13 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           {result.polyTxHash && (
             <div className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-              <a
-                href={`${POLYGONSCAN_TX}${result.polyTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 text-emerald-400 hover:underline"
-              >
+              <a href={`${POLYGONSCAN_TX}${result.polyTxHash}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 text-emerald-400 hover:underline">
                 View on Polygonscan <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           )}
-          {result.error && (
-            <div className="text-red-300">{result.error}</div>
-          )}
+          {result.error && <div className="text-red-300">{result.error}</div>}
         </div>
       )}
     </div>

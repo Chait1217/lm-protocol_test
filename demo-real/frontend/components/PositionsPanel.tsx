@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Target } from "lucide-react";
 import {
   useAccount,
   useReadContract,
   useReadContracts,
 } from "wagmi";
-import { base } from "wagmi/chains";
+import { polygon } from "wagmi/chains";
 import {
   getContractAddresses,
   MARGIN_ENGINE_ABI,
@@ -97,7 +97,6 @@ export default function PositionsPanel({
   refreshTrigger,
   onVaultRefetch,
 }: {
-  /** Bump this number to trigger a refetch (e.g. after opening a new position) */
   refreshTrigger?: number;
   onVaultRefetch?: () => void;
 }) {
@@ -126,15 +125,15 @@ export default function PositionsPanel({
     return () => clearInterval(id);
   }, []);
 
-  // ─── Position contract reads (always target Base chain) ────────
+  // ─── Position contract reads (Polygon chain) ────────
 
   const { data: userPositionIdsRaw, refetch: refetchUserPositions } = useReadContract({
     address: addresses.marginEngine,
     abi: MARGIN_ENGINE_ABI,
     functionName: "getUserPositions",
     args: address ? [address] : undefined,
-    chainId: base.id,
-    query: { refetchInterval: 8000 }, // auto-poll every 8s
+    chainId: polygon.id,
+    query: { refetchInterval: 8000 },
   });
 
   const userPositionIds = (userPositionIdsRaw as bigint[] | undefined) ?? [];
@@ -146,22 +145,33 @@ export default function PositionsPanel({
       abi: MARGIN_ENGINE_ABI,
       functionName: "getPosition" as const,
       args: [id],
-      chainId: base.id,
+      chainId: polygon.id,
     })),
   });
 
   const positionsList = (positionsListData ?? []).map((r) => r.result as PositionData | undefined);
+  const openPositionEntries = recentPositionIds
+    .map((id, idx) => ({ id, pos: positionsList[idx] }))
+    .filter((entry): entry is { id: bigint; pos: PositionData } => entry.pos != null && entry.pos.isOpen);
+
+  const openIds = useMemo(() => new Set(openPositionEntries.map((e) => Number(e.id))), [openPositionEntries]);
 
   // ─── Active position ──────────────────────────────────────────
   const [activePositionId, setActivePositionId] = useState<number | null>(null);
   const prevPositionCountRef = useRef(userPositionIds.length);
+
+  useEffect(() => {
+    if (activePositionId !== null && !openIds.has(activePositionId)) {
+      setActivePositionId(null);
+    }
+  }, [activePositionId, openIds]);
 
   const { data: positionData, refetch: refetchPosition } = useReadContract({
     address: addresses.marginEngine,
     abi: MARGIN_ENGINE_ABI,
     functionName: "getPosition",
     args: activePositionId !== null ? [BigInt(activePositionId)] : undefined,
-    chainId: base.id,
+    chainId: polygon.id,
     query: { refetchInterval: activePositionId !== null ? 5000 : undefined },
   });
 
@@ -171,7 +181,6 @@ export default function PositionsPanel({
   useEffect(() => {
     const count = userPositionIds.length;
     if (count > prevPositionCountRef.current && count > 0) {
-      // A new position was just added — auto-select it
       const newestId = Number(userPositionIds[count - 1]);
       setActivePositionId(newestId);
     }
@@ -179,7 +188,6 @@ export default function PositionsPanel({
   }, [userPositionIds]);
 
   // ─── Refetch when parent signals a new trade ──────────────────
-  // Retry multiple times with delays to handle RPC propagation lag
   useEffect(() => {
     if (refreshTrigger != null && refreshTrigger > 0) {
       const doRefetch = () => {
@@ -187,7 +195,6 @@ export default function PositionsPanel({
         refetchPositionsList();
         if (activePositionId !== null) refetchPosition();
       };
-      // Immediate + staggered retries to catch the new position
       doRefetch();
       const t1 = setTimeout(doRefetch, 2000);
       const t2 = setTimeout(doRefetch, 5000);
@@ -206,62 +213,57 @@ export default function PositionsPanel({
 
   return (
     <div className="glass-card rounded-xl border border-emerald-500/20 shadow-glow p-2.5 mt-2">
-      {/* ── Positions list ── */}
+      {/* ── Open positions only ── */}
       <h4 className="text-white font-semibold text-[10px] mb-1.5 flex items-center gap-1">
         <Target className="w-2.5 h-2.5 text-emerald-400" />
-        Positions
+        Open positions
       </h4>
       <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-        {recentPositionIds.map((id, idx) => {
-          const pos = positionsList[idx];
-          if (!pos) return <div key={id.toString()} className="text-gray-500 text-[10px]">#{id.toString()} loading…</div>;
-          const isOpen = pos.isOpen;
-          const isSelected = activePositionId === Number(id);
-          return (
-            <div key={id.toString()} className="space-y-1">
-              {/* Position header card */}
-              <div
-                className={`rounded border p-1.5 text-[10px] ${
-                  isSelected ? "border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/20" :
-                  isOpen ? "border-emerald-500/30 bg-emerald-500/5" : "border-gray-800 bg-white/[0.02] opacity-70"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-mono font-semibold text-white text-[10px]">
-                    #{id.toString()} {pos.isLong ? <span className="text-green-400">L</span> : <span className="text-red-400">S</span>} {Number(pos.leverage)}x
-                  </span>
-                  <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
-                    <span>${formatUSDC(pos.collateral, 2)} / ${formatUSDC(pos.notional, 2)}</span>
-                    <span className={`px-1 py-0.5 rounded text-[8px] font-semibold ${isOpen ? "bg-emerald-500/20 text-emerald-400" : "bg-gray-700 text-gray-400"}`}>
-                      {isOpen ? "OPEN" : "CLOSED"}
+        {openPositionEntries.length === 0 ? (
+          <p className="text-gray-500 text-[10px] py-2">No open positions</p>
+        ) : (
+          openPositionEntries.map(({ id, pos }) => {
+            const isSelected = activePositionId === Number(id);
+            return (
+              <div key={id.toString()} className="space-y-1">
+                <div
+                  className={`rounded border p-1.5 text-[10px] ${
+                    isSelected ? "border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/20" : "border-emerald-500/30 bg-emerald-500/5"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-mono font-semibold text-white text-[10px]">
+                      #{id.toString()} {pos.isLong ? <span className="text-green-400">L</span> : <span className="text-red-400">S</span>} {Number(pos.leverage)}x
                     </span>
+                    <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
+                      <span>${formatUSDC(pos.collateral, 6)} / ${formatUSDC(pos.notional, 6)}</span>
+                      <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-emerald-500/20 text-emerald-400">OPEN</span>
+                    </div>
                   </div>
+                  {!isSelected && (
+                    <button type="button" onClick={() => setActivePositionId(Number(id))}
+                      className="mt-1 w-full rounded bg-amber-500/20 py-1 text-[9px] font-semibold text-amber-400 hover:bg-amber-500/30 transition">
+                      Track & close
+                    </button>
+                  )}
+                  {isSelected && <div className="mt-0.5 text-[8px] text-emerald-400/70 text-center">▼ tracking</div>}
                 </div>
-                {isOpen && !isSelected && (
-                  <button type="button" onClick={() => setActivePositionId(Number(id))}
-                    className="mt-1 w-full rounded bg-amber-500/20 py-1 text-[9px] font-semibold text-amber-400 hover:bg-amber-500/30 transition">
-                    Track & close
-                  </button>
-                )}
-                {isSelected && <div className="mt-0.5 text-[8px] text-emerald-400/70 text-center">▼ tracking</div>}
-              </div>
 
-              {/* ── Live Tracker (shown for selected open position) ── */}
-              {isOpen && isSelected && market && (
-                <LivePositionTracker
-                  positionId={Number(id)}
-                  position={pos}
-                  liveBestBid={market.bestBid}
-                  liveBestAsk={market.bestAsk}
-                  yesProbability={market.yesProbability}
-                />
-              )}
-            </div>
-          );
-        })}
+                {isSelected && market && (
+                  <LivePositionTracker
+                    positionId={Number(id)}
+                    position={pos}
+                    liveBestBid={market.bestBid}
+                    liveBestAsk={market.bestAsk}
+                    yesProbability={market.yesProbability}
+                  />
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
-      {/* ── Active Position: Close controls ── */}
       {activePositionId !== null && position && position.isOpen && (
         <div className="border border-emerald-900/20 rounded p-2 bg-black/30 mt-1.5">
           <h4 className="text-white font-semibold text-[10px] mb-1 flex items-center gap-1">
@@ -269,7 +271,7 @@ export default function PositionsPanel({
             Close #{activePositionId}
           </h4>
 
-          {market && (
+          {market ? (
             <RealPolymarketClose
               positionId={activePositionId}
               position={position}
@@ -289,6 +291,13 @@ export default function PositionsPanel({
                 onVaultRefetch?.();
               }}
             />
+          ) : (
+            <div className="text-amber-400/90 text-[11px] space-y-1">
+              <p>Loading market data for closing…</p>
+              <button type="button" onClick={() => fetchRef.current()} className="text-emerald-400 hover:underline">
+                Retry
+              </button>
+            </div>
           )}
         </div>
       )}

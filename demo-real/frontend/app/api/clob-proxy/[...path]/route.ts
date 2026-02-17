@@ -143,7 +143,8 @@ async function handleRequest(req: NextRequest, { params }: { params: { path: str
     resHeaders.set("Access-Control-Allow-Headers", "*");
     if (resp.headers["content-type"]) resHeaders.set("content-type", resp.headers["content-type"]);
 
-    return new NextResponse(resp.body, { status: resp.status, headers: resHeaders });
+    const bodyInit: BodyInit = new Uint8Array(resp.body);
+    return new NextResponse(bodyInit, { status: resp.status, headers: resHeaders });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Proxy error";
     console.error("[clob-proxy]", req.method, fullPath, msg);

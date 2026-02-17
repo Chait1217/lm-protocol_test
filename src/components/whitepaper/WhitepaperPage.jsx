@@ -50,7 +50,7 @@ export default function WhitepaperPage() {
                 </h2>
                 <p className="text-gray-300 leading-relaxed">
                   LM Protocol (Lever Market) is a decentralized leverage layer built for prediction markets. 
-                  By introducing margin accounts and leverage (x2–x10) on top of existing platforms like Polymarket, 
+                  By introducing margin accounts and leverage (max 5x) on top of existing platforms like Polymarket, 
                   we enable professional traders to optimize capital and casual users to amplify returns—while 
                   providing real yield to liquidity providers through borrow interest and trading fees.
                 </p>
@@ -64,7 +64,7 @@ export default function WhitepaperPage() {
                 <div className="space-y-6 text-gray-300 leading-relaxed">
                   <div>
                     <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Spot limitation</h3>
-                    <p>Prediction markets operate almost exclusively on a spot basis. Professional traders are capped by liquidity; casual users find low returns on favorites (e.g., 80% outcomes). LM breaks this ceiling with leverage (x2–x10).</p>
+                    <p>Prediction markets operate almost exclusively on a spot basis. Professional traders are capped by liquidity; casual users find low returns on favorites (e.g., 80% outcomes). LM breaks this ceiling with leverage (max 5x).</p>
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Non-binary market structure</h3>
@@ -88,8 +88,8 @@ export default function WhitepaperPage() {
                 </h2>
                 <div className="space-y-6 text-gray-300 leading-relaxed">
                   <div>
-                    <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Leverage layer (x2–x10, cross-margin, liquidation price)</h3>
-                    <p>LM acts as a decentralized margin engine: cross-margin accounts, flexible leverage slider (x2–x10), real-time liquidation price, instant execution on L2.</p>
+                    <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Leverage layer (max 5x, cross-margin, liquidation price)</h3>
+                    <p>LM acts as a decentralized margin engine: cross-margin accounts, flexible leverage slider (max 5x), real-time liquidation price, instant execution on L2.</p>
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Yield vaults (peer-to-pool)</h3>
@@ -129,7 +129,7 @@ export default function WhitepaperPage() {
                 <div className="space-y-6 text-gray-300 leading-relaxed">
                   <div>
                     <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Open/close fees (fees on leveraged exposure)</h3>
-                    <p>0.1%–0.3% on total leveraged position size. Example: $1,000 with x10 = $10,000 exposure → fee on $10,000.</p>
+                    <p>0.1%–0.3% on total leveraged position size. Example: $1,000 with 5x = $5,000 exposure → fee on $5,000.</p>
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Borrow interest + protocol performance fee</h3>

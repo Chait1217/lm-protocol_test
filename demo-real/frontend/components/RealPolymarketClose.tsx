@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { AlertTriangle, ExternalLink, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
-import { useAccount, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { base } from "wagmi/chains";
+import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
+import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { POLYGON_CHAIN_ID, POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
-import { getContractAddresses, MARGIN_ENGINE_ABI } from "@/lib/contracts";
+import { getContractAddresses, MARGIN_ENGINE_ABI, USDC_ABI } from "@/lib/contracts";
 import { parsePrice, formatUSDC, formatPrice } from "@/lib/utils";
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -25,22 +25,58 @@ interface PositionData {
 interface Props {
   positionId: number;
   position: PositionData;
-  /** Current live market price (decimal, e.g. 0.41 for YES) */
   livePrice: number;
-  /** CLOB token IDs: [yesTokenId, noTokenId] */
   clobTokenIds: string[];
   tickSize?: string;
   negRisk?: boolean;
   marketTitle: string;
-  /** Called after close succeeds to refresh state */
   onSuccess?: () => void;
 }
 
 const POLYGONSCAN_TX = "https://polygonscan.com/tx/";
-const BASESCAN_TX = "https://basescan.org/tx/";
 const addresses = getContractAddresses();
 
-type CloseStep = "idle" | "switch-polygon" | "selling" | "switch-base" | "closing-vault" | "vault-confirming" | "done";
+type CloseStep = "idle" | "selling" | "transfer-repay" | "transfer-confirming" | "closing-vault" | "vault-confirming" | "done";
+
+/** Turn thrown errors into a short message and suggested action. */
+function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { message: string; action: string } {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+
+  if (step === "sell") {
+    if (lower.includes("user rejected") || lower.includes("user denied") || lower.includes("rejected the request"))
+      return { message: "You rejected the transaction in your wallet.", action: "Try again and approve the signature and transaction." };
+    if (lower.includes("invalid amounts") || lower.includes("maker amount") || lower.includes("2 decimals") || lower.includes("accuracy"))
+      return { message: "Polymarket rejected the order (decimal precision).", action: "Try again; we rounded the order. If it still fails, try closing when the market is less volatile." };
+    if (lower.includes("insufficient") && (lower.includes("liquidity") || lower.includes("balance")))
+      return { message: "Not enough liquidity or balance to fill the sell order.", action: "Try again in a few minutes or when there’s more market activity." };
+    if (lower.includes("liquidity") || lower.includes("fill") || lower.includes("fok"))
+      return { message: "The instant sell couldn’t be filled at current prices.", action: "Try again shortly or refresh; liquidity may have been low." };
+    if (lower.includes("network") || lower.includes("fetch") || lower.includes("timeout"))
+      return { message: "Network or Polymarket API issue.", action: "Check your connection and try again." };
+    if (lower.includes("api") || lower.includes("key") || lower.includes("signature"))
+      return { message: "Polymarket API or signature error.", action: "Refresh the page and try again. If it persists, try another browser or clear site data." };
+  }
+
+  if (step === "transfer") {
+    if (lower.includes("user rejected") || lower.includes("user denied"))
+      return { message: "You rejected the USDC transfer.", action: "You still have the sale proceeds. Try closing again and approve the transfer." };
+    if (lower.includes("insufficient") || lower.includes("exceeds balance"))
+      return { message: "Not enough USDC to send (borrowed + interest).", action: "Ensure the Polymarket sell completed and you have enough USDC, then try closing again." };
+  }
+
+  if (step === "vault") {
+    if (lower.includes("user rejected") || lower.includes("user denied"))
+      return { message: "You rejected the close transaction.", action: "Try again and approve. Your repay was already sent." };
+    if (lower.includes("position") || lower.includes("closed") || lower.includes("invalid"))
+      return { message: "Vault close was rejected.", action: "Repay was sent. Contact support or try refreshing and closing again." };
+  }
+
+  return {
+    message: raw.length > 120 ? raw.slice(0, 120) + "…" : raw,
+    action: step === "sell" ? "Try again. If it keeps failing, liquidity may be low." : "Try again or refresh the page.",
+  };
+}
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -54,25 +90,39 @@ export default function RealPolymarketClose({
   marketTitle,
   onSuccess,
 }: Props) {
-  const { address, chain } = useAccount();
-  const { switchChainAsync, isPending: isSwitchPending } = useSwitchChain();
+  const { address } = useAccount();
   const { writeContract, isPending: isWritePending } = useWriteContract();
+
+  /* ── Interest (needed to repay vault: user must send borrowed + interest to MarginEngine) ── */
+  const { data: interestRaw } = useReadContract({
+    address: addresses.marginEngine,
+    abi: MARGIN_ENGINE_ABI,
+    functionName: "calculateInterest",
+    args: [position.borrowed, position.openTimestamp],
+    chainId: polygon.id,
+  });
+  const interest = (interestRaw as bigint | undefined) ?? BigInt(0);
+  const repayTotal = position.borrowed + interest;
 
   /* ── State ── */
   const [step, setStep] = useState<CloseStep>("idle");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [exitPriceAfterSell, setExitPriceAfterSell] = useState<number | null>(null);
+  const [transferTxHash, setTransferTxHash] = useState<`0x${string}` | undefined>();
+  const { isSuccess: isTransferSuccess } = useWaitForTransactionReceipt({ hash: transferTxHash });
   const [result, setResult] = useState<{
     polyOrderId?: string;
     polyTxHash?: string;
-    baseTxHash?: string;
+    vaultTxHash?: string;
     actualExitPrice?: number;
     pnl?: number;
     error?: string;
+    errorAction?: string;
   } | null>(null);
 
-  /* ── Base tx tracking ── */
-  const [baseTxHash, setBaseTxHash] = useState<`0x${string}` | undefined>();
-  const { isSuccess: isBaseTxSuccess } = useWaitForTransactionReceipt({ hash: baseTxHash });
+  /* ── Vault tx tracking ── */
+  const [vaultTxHash, setVaultTxHash] = useState<`0x${string}` | undefined>();
+  const { isSuccess: isVaultTxSuccess } = useWaitForTransactionReceipt({ hash: vaultTxHash });
 
   /* ── Derived values ── */
   const entryPrice = Number(position.entryPriceMock) / 1e6;
@@ -80,39 +130,20 @@ export default function RealPolymarketClose({
   const collateralUsdc = Number(position.collateral) / 1e6;
   const borrowedUsdc = Number(position.borrowed) / 1e6;
   const leverageNum = Number(position.leverage);
-
-  // Live exit price for the direction of this position
   const exitPrice = livePrice;
 
-  // PnL calculation
   const pnlPreview = position.isLong
     ? notionalUsdc * ((exitPrice - entryPrice) / (entryPrice || 1))
     : notionalUsdc * ((entryPrice - exitPrice) / (entryPrice || 1));
 
-  // Token ID based on position direction
   const tokenId = position.isLong ? clobTokenIds[0] : clobTokenIds[1];
   const canClose = Boolean(address && tokenId && position.isOpen);
-
   const isAnyLoading = step !== "idle" && step !== "done";
 
-  /* ── When base tx confirms, we're done ── */
-  useEffect(() => {
-    if (isBaseTxSuccess && step === "vault-confirming") {
-      setResult((prev) => ({ ...prev, baseTxHash: baseTxHash }));
-      setStep("done");
-      onSuccess?.();
-    }
-  }, [isBaseTxSuccess, step, baseTxHash, onSuccess]);
-
-  /* ── Step 1: Sell outcome tokens on Polymarket ── */
+  /* ── Step 1: Sell outcome tokens on Polymarket (Polygon) ── */
   const sellOnPolymarket = useCallback(async (): Promise<number> => {
     if (!tokenId) throw new Error("Missing token ID for Polymarket sell");
     if (typeof window === "undefined" || !window.ethereum) throw new Error("No wallet found");
-
-    setStep("switch-polygon");
-    if (chain?.id !== POLYGON_CHAIN_ID) {
-      await switchChainAsync?.({ chainId: POLYGON_CHAIN_ID });
-    }
 
     setStep("selling");
 
@@ -131,13 +162,8 @@ export default function RealPolymarketClose({
     const ts = (tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
     const nr = negRisk ?? false;
 
-    // Sell the outcome tokens — amount is the notional we want to close
     const resp = await client.createAndPostMarketOrder(
-      {
-        tokenID: tokenId,
-        amount: notionalUsdc,
-        side: Side.SELL,
-      },
+      { tokenID: tokenId, amount: notionalUsdc, side: Side.SELL },
       { tickSize: ts, negRisk: nr },
       OrderType.FOK
     );
@@ -146,26 +172,37 @@ export default function RealPolymarketClose({
     const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;
     const fillPrice = resp?.averagePrice ?? resp?.avg_price ?? exitPrice;
 
-    setResult((prev) => ({
-      ...prev,
-      polyOrderId: orderId,
-      polyTxHash,
-      actualExitPrice: fillPrice,
-    }));
-
+    setResult((prev) => ({ ...prev, polyOrderId: orderId, polyTxHash, actualExitPrice: fillPrice }));
     return typeof fillPrice === "number" ? fillPrice : parseFloat(String(fillPrice)) || exitPrice;
-  }, [tokenId, chain, switchChainAsync, notionalUsdc, tickSize, negRisk, exitPrice]);
+  }, [tokenId, notionalUsdc, tickSize, negRisk, exitPrice]);
 
-  /* ── Step 2: Close position on Base vault ── */
-  const closeOnBase = useCallback(async (realExitPrice: number) => {
-    setStep("switch-base");
+  /* ── Step 2a: Transfer borrowed + interest to MarginEngine (so it can repay the vault) ── */
+  const transferRepayToEngine = useCallback((): Promise<void> => {
+    if (repayTotal === BigInt(0)) return Promise.resolve();
+    setStep("transfer-repay");
+    return new Promise<void>((resolve, reject) => {
+      writeContract(
+        {
+          address: addresses.usdc,
+          abi: USDC_ABI,
+          functionName: "transfer",
+          args: [addresses.marginEngine, repayTotal],
+          chainId: polygon.id,
+        },
+        {
+          onSuccess: (hash) => {
+            setTransferTxHash(hash);
+            setStep("transfer-confirming");
+            resolve();
+          },
+          onError: (err) => reject(err),
+        }
+      );
+    });
+  }, [writeContract, repayTotal]);
 
-    // Always switch to Base (don't rely on stale `chain` from closure)
-    await switchChainAsync?.({ chainId: base.id });
-    // Give wagmi/React time to propagate the chain change
-    await new Promise((r) => setTimeout(r, 1500));
-
-    setStep("closing-vault");
+  /* ── Step 2b: Close position on Polygon vault ── */
+  const closeOnVault = useCallback(async (realExitPrice: number) => {
     const exitPriceBigInt = parsePrice(realExitPrice.toString());
 
     return new Promise<void>((resolve, reject) => {
@@ -175,11 +212,11 @@ export default function RealPolymarketClose({
           abi: MARGIN_ENGINE_ABI,
           functionName: "closePosition",
           args: [BigInt(positionId), exitPriceBigInt],
-          chainId: base.id, // Explicitly target Base chain
+          chainId: polygon.id,
         },
         {
           onSuccess: (hash) => {
-            setBaseTxHash(hash);
+            setVaultTxHash(hash);
             setStep("vault-confirming");
             resolve();
           },
@@ -187,49 +224,77 @@ export default function RealPolymarketClose({
         }
       );
     });
-  }, [switchChainAsync, writeContract, positionId]);
+  }, [writeContract, positionId]);
 
-  /* ── Combined close: Polymarket sell → Base vault close ── */
+  /* ── When transfer confirms, call closePosition ── */
+  useEffect(() => {
+    if (isTransferSuccess && step === "transfer-confirming" && exitPriceAfterSell != null) {
+      setStep("closing-vault");
+      closeOnVault(exitPriceAfterSell);
+    }
+  }, [isTransferSuccess, step, exitPriceAfterSell, closeOnVault]);
+
+  /* ── When vault tx confirms, we're done ── */
+  useEffect(() => {
+    if (isVaultTxSuccess && step === "vault-confirming") {
+      setResult((prev) => ({ ...prev, vaultTxHash: vaultTxHash }));
+      setStep("done");
+      onSuccess?.();
+    }
+  }, [isVaultTxSuccess, step, vaultTxHash, onSuccess]);
+
+  /* ── Combined close: Sell on Polymarket → transfer (borrowed+interest) to engine → closePosition ── */
   const handleClose = useCallback(async () => {
     setResult(null);
-    setBaseTxHash(undefined);
+    setVaultTxHash(undefined);
+    setTransferTxHash(undefined);
+    setExitPriceAfterSell(null);
     setConfirmOpen(false);
 
     let sellDone = false;
+    let transferDone = false;
     try {
-      // Step 1: Sell on Polymarket
       const realExitPrice = await sellOnPolymarket();
+      setExitPriceAfterSell(realExitPrice);
       sellDone = true;
 
-      // Step 2: Close on Base vault with the real price
-      await closeOnBase(realExitPrice);
+      if (repayTotal === BigInt(0)) {
+        setStep("closing-vault");
+        await closeOnVault(realExitPrice);
+      } else {
+        await transferRepayToEngine();
+        transferDone = true;
+        // closeOnVault is triggered by useEffect when transfer confirms
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const step: "sell" | "transfer" | "vault" = sellDone ? (transferDone ? "vault" : "transfer") : "sell";
+      const { message, action } = parseCloseError(err, step);
+      const prefix = step === "sell" ? "Sell failed" : step === "transfer" ? "Transfer failed" : "Vault close failed";
       setResult((prev) => ({
         ...prev,
-        error: sellDone
-          ? `Polymarket sell succeeded, but Base vault close failed: ${msg}. Your position on Base is still open. Switch to Base and close it manually in "Simulated PnL" mode.`
-          : `Polymarket sell failed: ${msg}. Nothing was changed.`,
+        error: `${prefix}: ${message}`,
+        errorAction: action,
       }));
       setStep("done");
     }
-  }, [sellOnPolymarket, closeOnBase]);
+  }, [sellOnPolymarket, transferRepayToEngine, repayTotal, closeOnVault]);
 
   /* ── Render ── */
   if (!position.isOpen) return null;
 
   return (
     <div className="glass-card rounded-xl p-3 space-y-3 mt-2">
-      {/* Header */}
       <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
         <AlertTriangle className="w-4 h-4 flex-shrink-0" />
         Close position live on Polymarket
       </div>
+      <p className="text-gray-400 text-[10px]">
+        You’re selling the outcome tokens that were bought when you opened this position (with collateral + vault borrow).
+      </p>
 
-      {/* Live PnL preview */}
       <div className="bg-black/50 rounded p-2.5 border border-emerald-900/20 space-y-1.5 text-[11px]">
         <div className="text-emerald-400 text-[10px] font-semibold uppercase tracking-wider mb-1">
-          Live Close Preview
+          Live Close Preview · Polygon
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Position</span>
@@ -247,88 +312,85 @@ export default function RealPolymarketClose({
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Notional</span>
-          <span className="text-white font-mono">${notionalUsdc.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-400">Collateral</span>
-          <span className="text-white font-mono">${collateralUsdc.toFixed(2)}</span>
+          <span className="text-white font-mono">${notionalUsdc.toFixed(6)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Borrowed</span>
-          <span className="text-yellow-400 font-mono">${borrowedUsdc.toFixed(2)}</span>
+          <span className="text-yellow-400 font-mono">${borrowedUsdc.toFixed(6)}</span>
         </div>
         <div className="border-t border-emerald-900/20 pt-1.5">
           <div className="flex justify-between">
             <span className="text-gray-400 font-semibold">Estimated PnL</span>
             <span className={`font-mono font-bold ${pnlPreview >= 0 ? "text-green-400" : "text-red-400"}`}>
-              {pnlPreview >= 0 ? "+" : ""}${pnlPreview.toFixed(2)}
+              {pnlPreview >= 0 ? "+" : ""}${pnlPreview.toFixed(6)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Execute button */}
-      <button
-        type="button"
-        onClick={() => setConfirmOpen(true)}
-        disabled={!canClose || isAnyLoading || isSwitchPending}
-        className="w-full rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-500/40 text-emerald-400 py-2.5 text-sm font-semibold hover:from-emerald-500/30 hover:to-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-      >
+      {!address && (
+        <p className="text-amber-400/90 text-[11px]">Connect your wallet to close this position.</p>
+      )}
+      {address && !tokenId && (
+        <p className="text-amber-400/90 text-[11px]">Market token IDs not loaded. Refresh the page or try again in a moment.</p>
+      )}
+      {address && tokenId && notionalUsdc > 0 && notionalUsdc < 1 && (
+        <p className="text-amber-400/90 text-[11px]">This position’s notional (${notionalUsdc.toFixed(2)}) is below Polymarket’s $1 minimum; the sell step may be rejected.</p>
+      )}
+      <button type="button" onClick={() => setConfirmOpen(true)} disabled={!canClose || isAnyLoading}
+        className="w-full rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-500/40 text-emerald-400 py-2.5 text-sm font-semibold hover:from-emerald-500/30 hover:to-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
         {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
         Sell on Polymarket → Close vault position
       </button>
 
       {/* Progress indicator */}
-      {isAnyLoading && (
-        <div className="rounded border border-emerald-900/20 bg-black/40 p-2.5 space-y-2">
-          <StepIndicator label="1. Switch to Polygon" status={
-            step === "switch-polygon" ? "active" :
-            (step === "selling" || step === "switch-base" || step === "closing-vault" || step === "vault-confirming" || step === "done") ? "done" : "pending"
-          } />
-          <StepIndicator label="2. Sell outcome tokens on Polymarket" status={
-            step === "selling" ? "active" :
-            (step === "switch-base" || step === "closing-vault" || step === "vault-confirming" || step === "done") ? "done" : "pending"
-          } />
-          <StepIndicator label="3. Switch to Base" status={
-            step === "switch-base" ? "active" :
-            (step === "closing-vault" || step === "vault-confirming" || step === "done") ? "done" : "pending"
-          } />
-          <StepIndicator label="4. Close vault position" status={
-            step === "closing-vault" ? "active" :
-            step === "vault-confirming" ? "confirming" :
-            step === "done" ? "done" : "pending"
-          } />
-        </div>
-      )}
+      {isAnyLoading && (() => {
+        type Status = "pending" | "active" | "confirming" | "done";
+        const stepStatus = (s: CloseStep): [Status, Status, Status] => {
+          const done1 = !(s === "idle" || s === "selling");
+          const done2 = s === "closing-vault" || s === "vault-confirming" || s === "done";
+          const step1: Status = s === "selling" ? "active" : done1 ? "done" : "pending";
+          const step2: Status = s === "transfer-repay" ? "active" : s === "transfer-confirming" ? "confirming" : done2 ? "done" : "pending";
+          const step3: Status = s === "closing-vault" ? "active" : s === "vault-confirming" ? "confirming" : s === "done" ? "done" : "pending";
+          return [step1, step2, step3];
+        };
+        const [step1Status, step2Status, step3Status] = stepStatus(step);
+        return (
+          <div className="rounded border border-emerald-900/20 bg-black/40 p-2.5 space-y-2">
+            <StepIndicator label="1. Sell outcome tokens on Polymarket" status={step1Status} />
+            <StepIndicator label="2. Transfer repay (borrowed + interest) to engine" status={step2Status} />
+            <StepIndicator label="3. Close vault position" status={step3Status} />
+          </div>
+        );
+      })()}
 
       {/* Confirmation modal */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
           <div className="rounded-xl border border-gray-700 bg-gray-900 p-4 max-w-sm w-full shadow-xl">
             <h4 className="text-white font-semibold mb-2">Confirm Live Close</h4>
-            <p className="text-gray-400 text-sm mb-3 truncate" title={marketTitle}>
-              {marketTitle}
-            </p>
+            <p className="text-gray-400 text-sm mb-3 truncate" title={marketTitle}>{marketTitle}</p>
 
             <div className="bg-black/50 rounded p-3 border border-gray-800 space-y-2 text-[11px] mb-4">
-              <div className="text-emerald-400 text-[10px] font-bold uppercase mb-1">Two-step close</div>
+              <div className="text-emerald-400 text-[10px] font-bold uppercase mb-1">Single-chain close (Polygon)</div>
 
               <div className="border-l-2 border-emerald-500/30 pl-2">
-                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Sell on Polymarket (Polygon)</div>
+                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Sell on Polymarket</div>
                 <div className="text-gray-300">
-                  Sell {position.isLong ? "YES" : "NO"} tokens · ~${notionalUsdc.toFixed(2)} notional
+                  Sell {position.isLong ? "YES" : "NO"} tokens · ~${notionalUsdc.toFixed(6)} notional
                 </div>
-                <div className="text-gray-400">Current price: {(exitPrice * 100).toFixed(1)}¢</div>
-              </div>
-
-              <div className="flex justify-center">
-                <ArrowRight className="w-3 h-3 text-gray-500" />
               </div>
 
               <div className="border-l-2 border-amber-500/30 pl-2">
-                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Close on Base Vault</div>
+                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Transfer repay to engine</div>
                 <div className="text-gray-300">
-                  Close position #{positionId} · repay ${borrowedUsdc.toFixed(2)} + interest
+                  Send ${(Number(repayTotal) / 1e6).toFixed(6)} USDC.e to MarginEngine (borrowed + interest)
+                </div>
+              </div>
+              <div className="border-l-2 border-emerald-500/30 pl-2">
+                <div className="text-emerald-400 font-semibold text-[10px]">Step 3: Close vault position</div>
+                <div className="text-gray-300">
+                  Close #{positionId} · vault repaid, you receive collateral back
                 </div>
               </div>
 
@@ -336,27 +398,17 @@ export default function RealPolymarketClose({
                 <div className="flex justify-between">
                   <span className="text-gray-500">Estimated PnL</span>
                   <span className={`font-mono font-bold ${pnlPreview >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {pnlPreview >= 0 ? "+" : ""}${pnlPreview.toFixed(2)}
+                    {pnlPreview >= 0 ? "+" : ""}${pnlPreview.toFixed(6)}
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={isAnyLoading}
-                className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isAnyLoading}
-                className="flex-1 py-2 rounded-lg bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 font-semibold hover:bg-emerald-500/40 disabled:opacity-50 flex items-center justify-center gap-1"
-              >
+              <button type="button" onClick={() => setConfirmOpen(false)} disabled={isAnyLoading}
+                className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800">Cancel</button>
+              <button type="button" onClick={handleClose} disabled={isAnyLoading}
+                className="flex-1 py-2 rounded-lg bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 font-semibold hover:bg-emerald-500/40 disabled:opacity-50 flex items-center justify-center gap-1">
                 {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Close position
               </button>
@@ -371,9 +423,7 @@ export default function RealPolymarketClose({
           {result.polyOrderId && (
             <div className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-              <span className="text-emerald-300">
-                Sold on Polymarket: {String(result.polyOrderId).slice(0, 16)}…
-              </span>
+              <span className="text-emerald-300">Sold on Polymarket: {String(result.polyOrderId).slice(0, 16)}…</span>
             </div>
           )}
           {result.polyTxHash && (
@@ -382,14 +432,14 @@ export default function RealPolymarketClose({
               Polygonscan <ExternalLink className="w-3 h-3" />
             </a>
           )}
-          {result.baseTxHash && (
+          {result.vaultTxHash && (
             <div className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-amber-400 flex-shrink-0" />
               <span className="text-amber-300">
                 Vault position closed
-                <a href={`${BASESCAN_TX}${result.baseTxHash}`} target="_blank" rel="noopener noreferrer"
+                <a href={`${POLYGONSCAN_TX}${result.vaultTxHash}`} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 ml-1 text-amber-400 hover:underline">
-                  Basescan <ExternalLink className="w-3 h-3" />
+                  Polygonscan <ExternalLink className="w-3 h-3" />
                 </a>
               </span>
             </div>
@@ -397,20 +447,23 @@ export default function RealPolymarketClose({
           {result.actualExitPrice != null && !result.error && (
             <div className="text-gray-300">
               Exit price: {(result.actualExitPrice * 100).toFixed(1)}¢
-              {result.pnl != null && (
-                <span className={`ml-2 font-bold ${result.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  PnL: {result.pnl >= 0 ? "+" : ""}${result.pnl.toFixed(2)}
-                </span>
+            </div>
+          )}
+          {result.vaultTxHash && !result.error && (
+            <div className="border-t border-emerald-900/20 pt-1.5 mt-1 text-gray-300">
+              Your collateral ± PnL has been returned to your wallet on <strong className="text-emerald-400">Polygon</strong>.
+            </div>
+          )}
+          {result.error && (
+            <div className="space-y-1">
+              <div className="text-red-300">{result.error}</div>
+              {result.errorAction && (
+                <div className="text-amber-200/90 text-[10px]">
+                  What to do: {result.errorAction}
+                </div>
               )}
             </div>
           )}
-          {result.baseTxHash && !result.error && (
-            <div className="border-t border-emerald-900/20 pt-1.5 mt-1 text-gray-300">
-              Your collateral ± PnL has been returned to your wallet on <strong className="text-emerald-400">Base</strong>.
-              Switch your wallet to Base to see your updated USDC balance.
-            </div>
-          )}
-          {result.error && <div className="text-red-300">{result.error}</div>}
         </div>
       )}
     </div>

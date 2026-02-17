@@ -20,15 +20,15 @@ export default function Home() {
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-neon/30 bg-neon/10 text-neon text-xs font-medium mb-6">
             <div className="w-2 h-2 rounded-full bg-neon animate-pulse-neon" />
-            BASE MAINNET · REAL USDC
+            POLYGON PoS · REAL USDC.e
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
             LM Protocol{" "}
             <span className="neon-text">Demo</span>
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
-            A real, minimal onchain prototype on Base. Deposit USDC into the vault,
-            borrow against it for leveraged positions, and see real money flows.
+            A real, minimal onchain prototype on Polygon. Deposit USDC.e into the vault,
+            borrow against it for leveraged positions, and trade on Polymarket — all on one chain.
           </p>
         </div>
 
@@ -45,8 +45,8 @@ export default function Home() {
               <h2 className="text-xl font-bold text-white">Trade Demo</h2>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              Live Polymarket data + real USDC vault borrowing on Base.
-              Open leveraged positions (2-5x) and trade with real money flows.
+              Live Polymarket data + real USDC.e vault borrowing on Polygon.
+              Open leveraged positions (2-5x) and trade — no bridging needed.
             </p>
             <div className="flex items-center gap-2 text-neon text-sm font-medium">
               Go to Trade Demo <span className="group-hover:translate-x-1 transition-transform">&rarr;</span>
@@ -61,10 +61,10 @@ export default function Home() {
               <div className="w-12 h-12 rounded-xl bg-neon/10 flex items-center justify-center group-hover:bg-neon/20 transition">
                 <Vault className="w-6 h-6 text-neon" />
               </div>
-              <h2 className="text-xl font-bold text-white">Base Vault</h2>
+              <h2 className="text-xl font-bold text-white">Polygon Vault</h2>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              Deposit native USDC on Base into the lending vault. Earn yield from
+              Deposit USDC.e on Polygon into the lending vault. Earn yield from
               borrow interest and trading fees. Withdraw anytime.
             </p>
             <div className="flex items-center gap-2 text-neon text-sm font-medium">
@@ -83,7 +83,7 @@ export default function Home() {
               <h2 className="text-xl font-bold text-white">Margin Trade</h2>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              Open leveraged positions (2-5x) with real USDC collateral on Base.
+              Open leveraged positions (2-5x) with real USDC.e collateral on Polygon.
               Borrow from the vault. PnL uses mock prices, but all transfers are real.
             </p>
             <div className="flex items-center gap-2 text-neon text-sm font-medium">
@@ -98,7 +98,7 @@ export default function Home() {
             {
               icon: <Zap className="w-5 h-5" />,
               title: "Real USDC Transfers",
-              desc: "All deposits, borrows, and repayments happen onchain with real native USDC on Base.",
+              desc: "All deposits, borrows, and repayments happen onchain with real USDC.e on Polygon.",
             },
             {
               icon: <TrendingUp className="w-5 h-5" />,
@@ -143,7 +143,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="text-center mt-16 text-gray-600 text-xs">
-          <p>LM Protocol Prototype &middot; Base Mainnet &middot; Use small amounts for testing</p>
+          <p>LM Protocol Prototype &middot; Polygon PoS &middot; Use small amounts for testing</p>
         </div>
       </main>
     </>

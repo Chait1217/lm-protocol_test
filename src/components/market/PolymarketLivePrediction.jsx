@@ -56,9 +56,10 @@ const AnimatedValue = ({ value, format, className, prefix = "", suffix = "" }) =
 };
 
 export default function PolymarketLivePrediction({
-  slug = "will-jesus-christ-return-before-2027",
+  slug = "will-bitcoin-reach-100000-by-december-31-2026-571",
   settlementDate = "Dec 31, 2026",
   refreshInterval = 5000, // 5 seconds for real-time quote updates
+  compact = false,
 }) {
   const [market, setMarket] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
@@ -161,16 +162,23 @@ export default function PolymarketLivePrediction({
       clobTokenIds = [];
     }
 
+    // Prefer live CLOB best bid/ask for cents when available
+    const bestBid = m.bestBid != null ? parseFloat(m.bestBid) : null;
+    const bestAsk = m.bestAsk != null ? parseFloat(m.bestAsk) : null;
+    const yesCentsFromClob = bestAsk != null && bestAsk >= 0 && bestAsk <= 1 ? Math.round(bestAsk * 1000) / 10 : null;
+    const noCentsFromClob = bestBid != null && bestBid >= 0 && bestBid <= 1 ? Math.round((1 - bestBid) * 1000) / 10 : null;
+
     return {
       conditionId: m.conditionId || m.id,
       slug: m.slug || slug,
-      title: m.question || "Will Jesus Christ return before 2027?",
+      title: m.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
       probability,
-      yesPriceCents: yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null,
-      noPriceCents: noPrice != null ? Math.round(noPrice * 1000) / 10 : null,
+      yesPriceCents: yesCentsFromClob ?? (yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null),
+      noPriceCents: noCentsFromClob ?? (noPrice != null ? Math.round(noPrice * 1000) / 10 : null),
       volume: totalVolume,
       volume24h,
       liquidity: parseFloat(m.liquidity) || parseFloat(m.liquidityNum) || 0,
+      traders: parseInt(m.uniqueBettors) || parseInt(m.uniqueTraders) || null,
       lastPrice: yesPrice || parseFloat(m.lastTradePrice) || 0.04,
       clobTokenIds,
       oneDayPriceChange: parseFloat(m.oneDayPriceChange) || 0,
@@ -306,6 +314,12 @@ export default function PolymarketLivePrediction({
     return `$${Math.round(v).toLocaleString()}`;
   };
 
+  const formatNumber = (n) => {
+    if (n === null || n === undefined || isNaN(n)) return "N/A";
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return n.toLocaleString();
+  };
+
   const handleManualRefresh = () => {
     loadAllData(true);
   };
@@ -354,7 +368,7 @@ export default function PolymarketLivePrediction({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="rounded-xl md:rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_60px_rgba(0,255,153,0.08)]"
+      className="h-full rounded-xl md:rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_60px_rgba(0,255,153,0.08)]"
     >
       {/* Header */}
       <div className="p-2.5 md:p-4 sm:p-6 border-b border-[#00FF99]/10">
@@ -383,7 +397,7 @@ export default function PolymarketLivePrediction({
               </motion.div>
             </button>
             <a
-              href="https://polymarket.com/event/will-jesus-christ-return-before-2027"
+              href={`https://polymarket.com/market/${slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00FF99] transition-colors underline underline-offset-4 cursor-pointer"
@@ -403,10 +417,10 @@ export default function PolymarketLivePrediction({
 
         {/* Market Question */}
         <h2 className="text-sm md:text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 md:mb-6 leading-tight">
-          {market?.title || "Will Jesus Christ return before 2027?"}
+          {market?.title || "Will Bitcoin reach $100,000 by December 31, 2026?"}
         </h2>
 
-        {/* YES / NO quotes — live */}
+        {/* YES / NO quotes — live (from CLOB best bid/ask when available) */}
         <div className="flex gap-4 mb-2 md:mb-3">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] md:text-xs text-gray-500 uppercase">YES</span>
@@ -498,6 +512,16 @@ export default function PolymarketLivePrediction({
                 className="text-white text-sm md:text-xl font-bold block"
               />
             </div>
+            <div className="text-right hidden sm:block">
+              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
+                Traders
+              </div>
+              <AnimatedValue
+                value={market?.traders}
+                format={formatNumber}
+                className="text-white text-sm md:text-xl font-bold block"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -566,7 +590,7 @@ export default function PolymarketLivePrediction({
       {/* Comments Section - Link to Polymarket */}
       <div className="p-2.5 md:p-4 sm:p-6 border-t border-[#00FF99]/10">
         <a
-          href="https://polymarket.com/event/will-jesus-christ-return-before-2027"
+          href={`https://polymarket.com/market/${slug}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-between p-2 md:p-4 rounded-lg md:rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/30 hover:bg-gray-800/70 transition-all group cursor-pointer"
@@ -579,9 +603,7 @@ export default function PolymarketLivePrediction({
               <h3 className="text-white font-semibold text-xs md:text-base group-hover:text-[#00FF99] transition-colors">
                 View Comments & Discussion
               </h3>
-              <p className="text-[10px] md:text-sm text-gray-400">
-                Join the conversation on Polymarket
-              </p>
+              <p className="text-[10px] md:text-sm text-gray-400">Join the conversation on Polymarket</p>
             </div>
           </div>
           <ExternalLink className="w-3.5 h-3.5 md:w-5 md:h-5 text-gray-500 group-hover:text-[#00FF99] transition-colors flex-shrink-0" />

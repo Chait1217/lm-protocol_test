@@ -1,10 +1,12 @@
 /**
- * Reusable ABIs for Base mainnet: BaseVault, BaseMarginEngine, ERC20 USDC.
- * Used by /base-vault and /margin-trade.
+ * Reusable ABIs for Polygon mainnet: Vault, MarginEngine, ERC20 USDC.e.
+ * Used by /base-vault (Polygon Vault) and /margin-trade.
+ *
+ * Note: Contract code is identical to Base deployment. Only the chain + token changed.
  */
 
-/** ABI for BaseVault v2 (deposit, withdraw, totalAssets, totalBorrowed, utilization, insurance, protocol, balanceOf, convertToAssets). */
-export const baseVaultAbi = [
+/** ABI for Vault v2 (deposit, withdraw, totalAssets, totalBorrowed, utilization, insurance, protocol, balanceOf, convertToAssets). */
+export const vaultAbi = [
   {
     name: "deposit",
     type: "function",
@@ -70,8 +72,11 @@ export const baseVaultAbi = [
   },
 ] as const;
 
-/** ABI for BaseMarginEngine on Base mainnet. */
-export const baseMarginEngineAbi = [
+/** @deprecated Use vaultAbi */
+export const baseVaultAbi = vaultAbi;
+
+/** ABI for MarginEngine on Polygon mainnet. */
+export const marginEngineAbi = [
   {
     name: "openPosition",
     type: "function",
@@ -181,6 +186,9 @@ export const baseMarginEngineAbi = [
   },
 ] as const;
 
+/** @deprecated Use marginEngineAbi */
+export const baseMarginEngineAbi = marginEngineAbi;
+
 export const erc20Abi = [
   {
     name: "balanceOf",
@@ -224,4 +232,3 @@ export const erc20Abi = [
     outputs: [{ name: "", type: "string" }],
   },
 ] as const;
-

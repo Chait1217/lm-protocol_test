@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Unlock, ArrowUpRight } from "lucide-react";
 
@@ -12,15 +12,22 @@ const ROLE_OPTIONS = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function AlphaAccessPage({ setCurrentPage }) {
+export default function AlphaAccessPage({ setCurrentPage, initialEmail }) {
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    email: "",
+    email: initialEmail || "",
     role: "",
     message: "",
   });
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (initialEmail && initialEmail.trim()) {
+      setForm((prev) => ({ ...prev, email: initialEmail }));
+    }
+  }, [initialEmail]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -38,10 +45,31 @@ export default function AlphaAccessPage({ setCurrentPage }) {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    setSubmitted(true);
+
+    setLoading(true);
+    setErrors({});
+
+    try {
+      const res = await fetch("/api/alpha-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        setSubmitted(true);
+      } else {
+        setErrors({ submit: data.error || "Something went wrong. Please try again." });
+      }
+    } catch (err) {
+      setErrors({ submit: "Failed to submit. Please try again." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const scrollToForm = () => {
@@ -228,12 +256,19 @@ export default function AlphaAccessPage({ setCurrentPage }) {
             </div>
           </div>
 
+          {errors.submit && (
+            <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+              <p className="text-red-400 text-sm">{errors.submit}</p>
+            </div>
+          )}
+
           <div className="mt-8">
             <button
               type="submit"
-              className="w-full min-h-[48px] py-3 rounded-lg bg-[#00FF99] text-black font-bold shadow-[0_0_24px_rgba(0,255,153,0.25)] hover:bg-[#00FF99]/90 hover:shadow-[0_0_32px_rgba(0,255,153,0.4)] transition-all"
+              disabled={loading}
+              className="w-full min-h-[48px] py-3 rounded-lg bg-[#00FF99] text-black font-bold shadow-[0_0_24px_rgba(0,255,153,0.25)] hover:bg-[#00FF99]/90 hover:shadow-[0_0_32px_rgba(0,255,153,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Submit
+              {loading ? "Submitting..." : "Submit"}
             </button>
           </div>
         </motion.form>

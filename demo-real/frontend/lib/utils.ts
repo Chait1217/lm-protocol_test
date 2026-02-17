@@ -1,6 +1,6 @@
 /// Format USDC amount (6 decimals) to display string
-export function formatUSDC(amount: bigint | undefined, decimals = 2): string {
-  if (amount === undefined) return "0.00";
+export function formatUSDC(amount: bigint | undefined, decimals = 6): string {
+  if (amount === undefined) return "0.000000";
   const num = Number(amount) / 1e6;
   return num.toLocaleString("en-US", {
     minimumFractionDigits: decimals,

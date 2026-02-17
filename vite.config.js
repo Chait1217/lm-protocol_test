@@ -66,6 +66,38 @@ export default defineConfig({
       },
     },
     {
+      name: 'api-alpha-access',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/api/alpha-access' && req.method === 'POST') {
+            let body = ''
+            req.on('data', (chunk) => { body += chunk })
+            req.on('end', async () => {
+              try {
+                const data = JSON.parse(body)
+                if (!data.name || !data.email || !data.role) {
+                  res.writeHead(400, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ ok: false, error: 'Validation failed' }))
+                  return
+                }
+                console.log('[Alpha Access]', data)
+                
+                // In production, this would send an email via Resend or similar service
+                // For now, log it (in production, the Vercel serverless function will handle email sending)
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ ok: true }))
+              } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ ok: false, error: e.message }))
+              }
+            })
+          } else {
+            next()
+          }
+        })
+      },
+    },
+    {
       name: 'polymarket-live-data',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
@@ -85,112 +117,87 @@ export default defineConfig({
               return
             }
             
-            // Async function to fetch data
+            // Async function to fetch data (BTC $100k by Dec 31 2026 – same as trade-demo)
+            const BTC100K_SLUG = 'will-bitcoin-reach-100000-by-december-31-2026-571'
             const fetchData = async () => {
               try {
-                console.log('[Polymarket] Fetching live market data for "Will Jesus Christ return before 2027?"...')
+                console.log('[Polymarket] Fetching live market data for "Will Bitcoin reach $100,000 by December 31, 2026?"...')
                 
                 let marketData = null
                 
-                // Approach 1: Try direct slug search first (most specific)
-                console.log('[Polymarket] Trying direct slug search...')
-                const slugResult = await fetchHttps('https://gamma-api.polymarket.com/events?slug=will-jesus-christ-return-before-2027')
-                if (slugResult.status === 200 && slugResult.data) {
-                  const events = Array.isArray(slugResult.data) ? slugResult.data : [slugResult.data]
-                  if (events.length > 0 && events[0].markets && events[0].markets.length > 0) {
-                    marketData = events[0].markets[0]
-                    console.log('[Polymarket] Found via slug:', marketData.question)
+                // Approach 1: Market slug directly
+                console.log('[Polymarket] Trying market slug...')
+                const marketSlugResult = await fetchHttps(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(BTC100K_SLUG)}`)
+                if (marketSlugResult.status === 200 && marketSlugResult.data) {
+                  const raw = marketSlugResult.data
+                  const markets = Array.isArray(raw) ? raw : raw.markets || raw.data || [raw]
+                  if (markets.length > 0) {
+                    marketData = markets[0]
+                    console.log('[Polymarket] Found via market slug:', marketData.question)
                   }
                 }
                 
-                // Approach 2: Search by market slug directly
+                // Approach 2: Events API with slug
                 if (!marketData) {
-                  console.log('[Polymarket] Trying market slug search...')
-                  const marketSlugResult = await fetchHttps('https://gamma-api.polymarket.com/markets?slug=will-jesus-christ-return-before-2027')
-                  if (marketSlugResult.status === 200 && marketSlugResult.data) {
-                    const markets = Array.isArray(marketSlugResult.data) ? marketSlugResult.data : [marketSlugResult.data]
-                    if (markets.length > 0) {
-                      marketData = markets[0]
-                      console.log('[Polymarket] Found via market slug:', marketData.question)
+                  console.log('[Polymarket] Trying events slug...')
+                  const slugResult = await fetchHttps(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(BTC100K_SLUG)}`)
+                  if (slugResult.status === 200 && slugResult.data) {
+                    const events = Array.isArray(slugResult.data) ? slugResult.data : [slugResult.data]
+                    if (events.length > 0 && events[0].markets && events[0].markets.length > 0) {
+                      marketData = events[0].markets[0]
+                      console.log('[Polymarket] Found via events slug:', marketData.question)
                     }
                   }
                 }
                 
-                // Approach 3: Try Gamma API endpoints and search for SPECIFIC "2027" market
+                // Approach 3: Search all markets for BTC 100k Dec 31 2026
                 if (!marketData) {
                   const gammaEndpoints = [
                     'https://gamma-api.polymarket.com/markets?closed=false&limit=1000',
                     'https://gamma-api.polymarket.com/markets?active=true&limit=1000',
-                    'https://gamma-api.polymarket.com/markets?limit=2000',
                   ]
-                  
                   for (const endpoint of gammaEndpoints) {
-                    console.log('[Polymarket] Trying:', endpoint)
                     const result = await fetchHttps(endpoint)
-                    
                     if (result.status === 200 && result.data) {
                       const markets = Array.isArray(result.data) ? result.data : []
-                      console.log(`[Polymarket] Got ${markets.length} markets`)
-                      
-                      // Search specifically for "2027" market (must include 2027 to avoid GTA VI market)
-                      const jesusMarket = markets.find(m => {
-                        const q = (m.question || '').toLowerCase()
+                      const btcMarket = markets.find(m => {
                         const s = (m.slug || '').toLowerCase()
-                        // Must include "2027" to be specific
-                        return (q.includes('jesus') && q.includes('christ') && q.includes('2027')) ||
-                               s.includes('jesus-christ-return-before-2027')
+                        const q = (m.question || '').toLowerCase()
+                        return s.includes('bitcoin') && (s.includes('100000') || s.includes('100k')) ||
+                               (q.includes('bitcoin') && q.includes('100') && q.includes('2026'))
                       })
-                      
-                      if (jesusMarket) {
-                        console.log('[Polymarket] Found market:', jesusMarket.question)
-                        marketData = jesusMarket
+                      if (btcMarket) {
+                        marketData = btcMarket
+                        console.log('[Polymarket] Found via search:', marketData.question)
                         break
                       }
                     }
                   }
                 }
                 
-                // Approach 4: Try Strapi API with 2027 filter
-                if (!marketData) {
-                  console.log('[Polymarket] Trying Strapi API...')
-                  const strapiResult = await fetchHttps('https://strapi-matic.poly.market/markets?slug_contains=jesus-christ-return-before-2027')
-                  if (strapiResult.status === 200 && strapiResult.data) {
-                    const markets = Array.isArray(strapiResult.data) ? strapiResult.data : []
-                    const filtered = markets.filter(m => (m.question || m.title || '').toLowerCase().includes('2027'))
-                    if (filtered.length > 0) {
-                      marketData = filtered[0]
-                      console.log('[Polymarket] Found via Strapi:', marketData.question || marketData.title)
-                    }
-                  }
-                }
-                
-                // Approach 5: Direct CLOB API for specific token (known 2027 market tokens)
-                if (!marketData) {
-                  console.log('[Polymarket] Trying CLOB API with known token IDs...')
-                  const tokenIds = [
-                    '69324317355037271422943965141382095011871956039434394956830818206664869608517',
-                    '51797157743046504218541616681751597845468055908324407922581755135522797852101'
-                  ]
-                  
-                  for (const tokenId of tokenIds) {
-                    const clobResult = await fetchHttps(`https://clob.polymarket.com/markets/${tokenId}`)
-                    if (clobResult.status === 200 && clobResult.data) {
-                      console.log('[Polymarket] Found via CLOB:', clobResult.data)
-                      marketData = {
-                        question: 'Will Jesus Christ return before 2027?',
-                        outcomePrices: JSON.stringify([clobResult.data.price || 0.04, 1 - (clobResult.data.price || 0.04)]),
-                        volume: clobResult.data.volume || 0,
-                        volume24hr: 0,
-                        uniqueBettors: clobResult.data.traders || 0,
-                        slug: 'will-jesus-christ-return-before-2027',
-                        clobSource: true,
-                      }
-                      break
-                    }
-                  }
-                }
-                
                 if (marketData) {
+                  // Enrich with live best bid/ask from CLOB
+                  let tokenIds = marketData.clobTokenIds
+                  if (!tokenIds && marketData.tokens) tokenIds = marketData.tokens.map(t => t.token_id || t.tokenId)
+                  if (Array.isArray(tokenIds) && tokenIds.length > 0) {
+                    try {
+                      const bookResult = await fetchHttps(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenIds[0])}`)
+                      if (bookResult.status === 200 && bookResult.data) {
+                        const book = bookResult.data
+                        const bids = book.bids || []
+                        const asks = book.asks || []
+                        if (bids.length > 0 || asks.length > 0) {
+                          const bestBid = bids.length > 0 ? parseFloat(bids[0].price) : null
+                          const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : null
+                          if (bestBid != null || bestAsk != null) {
+                            marketData = { ...marketData, bestBid: bestBid ?? marketData.bestBid, bestAsk: bestAsk ?? marketData.bestAsk }
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      console.log('[Polymarket] CLOB book failed:', e.message)
+                    }
+                  }
                   console.log('[Polymarket] SUCCESS - Returning market data:', marketData.question)
                   res.writeHead(200)
                   res.end(JSON.stringify({ success: true, market: marketData, source: 'live' }))

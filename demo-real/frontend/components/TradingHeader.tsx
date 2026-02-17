@@ -1,10 +1,8 @@
 "use client";
 
-import { useAccount, useBalance, useReadContract } from "wagmi";
-import { base } from "wagmi/chains";
-import { getContractAddresses, MOCK_USDC_ABI } from "@/lib/contracts";
-import { POLYGON_CHAIN_ID, POLYMKT_USDCE_ADDRESS } from "@/lib/polymarketConfig";
-import { erc20PolyAbi } from "@/lib/polymarketAbi";
+import { useAccount, useReadContract } from "wagmi";
+import { polygon } from "wagmi/chains";
+import { getContractAddresses, USDC_ABI } from "@/lib/contracts";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 
 const addresses = getContractAddresses();
@@ -21,25 +19,15 @@ interface Props {
 export default function TradingHeader({ yesProbability, noProbability, bestBid, bestAsk, oneDayChange, spread }: Props) {
   const { address, isConnected } = useAccount();
 
-  /* Base USDC */
-  const { data: baseUsdc } = useReadContract({
-    address: addresses.mockUsdc,
-    abi: MOCK_USDC_ABI,
+  /* Polygon USDC.e balance */
+  const { data: usdcBalance } = useReadContract({
+    address: addresses.usdc,
+    abi: USDC_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    chainId: base.id,
+    chainId: polygon.id,
   });
-  const baseUsdcNum = baseUsdc != null ? Number(baseUsdc as bigint) / 1e6 : 0;
-
-  /* Polygon USDC.e */
-  const { data: polyUsdc } = useReadContract({
-    address: POLYMKT_USDCE_ADDRESS,
-    abi: erc20PolyAbi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: POLYGON_CHAIN_ID,
-  });
-  const polyUsdcNum = polyUsdc != null ? Number(polyUsdc as bigint) / 1e6 : 0;
+  const usdcNum = usdcBalance != null ? Number(usdcBalance as bigint) / 1e6 : 0;
 
   const yesUp = oneDayChange >= 0;
 
@@ -86,10 +74,8 @@ export default function TradingHeader({ yesProbability, noProbability, bestBid, 
               <>
                 <div className="w-px h-3.5 bg-gray-800" />
                 <span className="text-gray-500 text-[10px]">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
-                <span className="text-emerald-400 font-mono text-[10px] font-semibold">{baseUsdcNum.toFixed(2)}</span>
-                <span className="text-gray-600 text-[10px]">Base</span>
-                <span className="text-emerald-400 font-mono text-[10px] font-semibold">{polyUsdcNum.toFixed(2)}</span>
-                <span className="text-gray-600 text-[10px]">Poly</span>
+                <span className="text-emerald-400 font-mono text-[10px] font-semibold">{usdcNum.toFixed(6)}</span>
+                <span className="text-gray-600 text-[10px]">USDC.e</span>
               </>
             )}
           </div>

@@ -22,7 +22,7 @@ import {
   useAccount,
   useReadContract,
 } from "wagmi";
-import { base } from "wagmi/chains";
+import { polygon } from "wagmi/chains";
 
 const addresses = getContractAddresses();
 
@@ -115,9 +115,12 @@ export default function PolymarketLeverageBox({
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // ─── Trade state ─────────────────────────────────────────────────
-  const [selectedOutcome, setSelectedOutcome] = useState<"YES" | "NO">("YES");
+  type TradeSide = "Buy YES" | "Buy NO";
+  const [selectedSide, setSelectedSide] = useState<TradeSide>("Buy YES");
   const [leverage, setLeverage] = useState<number>(3);
   const [collateralInput, setCollateralInput] = useState("50");
+
+  const selectedOutcome: "YES" | "NO" = selectedSide === "Buy YES" ? "YES" : "NO";
   // ─── Contract reads ──────────────────────────────────────────────
 
   const { data: userBalance } = useReadContract({
@@ -125,14 +128,14 @@ export default function PolymarketLeverageBox({
     abi: MOCK_USDC_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    chainId: base.id,
+    chainId: polygon.id,
   });
 
   const { data: openFeeBpsData } = useReadContract({
     address: addresses.marginEngine,
     abi: MARGIN_ENGINE_ABI,
     functionName: "openFeeBps",
-    chainId: base.id,
+    chainId: polygon.id,
   });
 
   // ─── Market data fetching ────────────────────────────────────────
@@ -247,12 +250,15 @@ export default function PolymarketLeverageBox({
 
   // ─── Trade computations ──────────────────────────────────────────
 
-  // Entry price from live market: YES uses bestAsk, NO uses (1 - bestBid)
-  const entryPriceDecimal =
-    selectedOutcome === "YES"
-      ? (market?.bestAsk ?? (market?.yesProbability != null ? market.yesProbability / 100 : 0.41))
-      : (market?.bestBid != null ? 1 - market.bestBid : (market?.noProbability != null ? market.noProbability / 100 : 0.59));
-  const entryPriceCents = Math.round(entryPriceDecimal * 1000) / 10;
+  // Entry price: Buy YES = ask, Buy NO = NO ask (1 - YES bid)
+  const entryPriceDisplay = selectedSide === "Buy YES"
+    ? (market?.bestAsk ?? (market?.yesProbability != null ? market.yesProbability / 100 : 0.41))
+    : (market?.bestBid != null ? 1 - market.bestBid : (market?.noProbability != null ? market.noProbability / 100 : 0.59));
+  const entryPriceCents = Math.round(entryPriceDisplay * 1000) / 10;
+  const entryPriceOutcome = entryPriceDisplay;
+
+  const buyYesCents = market?.bestAsk != null ? market.bestAsk * 100 : (market?.yesProbability ?? null);
+  const buyNoCents = market?.bestBid != null ? (1 - market.bestBid) * 100 : (market?.noProbability ?? null);
 
   const collateralUsdc = parseFloat(collateralInput) || 0;
   const isLong = selectedOutcome === "YES"; // true=LONG, false=SHORT
@@ -261,11 +267,11 @@ export default function PolymarketLeverageBox({
   const openFeeBps = openFeeBpsData ? Number(openFeeBpsData as bigint) : 15;
   const openFee = (notional * openFeeBps) / 10000;
 
-  // Leverage box calcs
-  const shares = entryPriceDecimal > 0 ? notional / entryPriceDecimal : 0;
-  const liquidationDecimal = entryPriceDecimal * (1 - 1 / leverage);
+  // Leverage box calcs (use outcome price so PnL/liq match contract)
+  const shares = entryPriceOutcome > 0 ? notional / entryPriceOutcome : 0;
+  const liquidationDecimal = entryPriceOutcome * (1 - 1 / leverage);
   const liquidationCents = Math.max(0, Math.round(liquidationDecimal * 1000) / 10);
-  const maxWin = entryPriceDecimal > 0 && entryPriceDecimal < 1 ? shares * (1 - entryPriceDecimal) : 0;
+  const maxWin = entryPriceOutcome > 0 && entryPriceOutcome < 1 ? shares * (1 - entryPriceOutcome) : 0;
 
   // ─── Actions ─────────────────────────────────────────────────────
 
@@ -328,49 +334,49 @@ export default function PolymarketLeverageBox({
         </div>
       </div>
 
-      {/* ── YES / NO Buttons (compact inline) ── */}
+      {/* ── Buy YES / Buy NO only ── */}
       <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <motion.button onClick={() => setSelectedOutcome("YES")} whileTap={{ scale: 0.97 }}
-          className={`relative px-2 py-1.5 rounded-lg border transition-all ${
-            selectedOutcome === "YES" ? "bg-emerald-500/10 border-emerald-500 shadow-glow" : "bg-black/40 border-gray-700 hover:border-emerald-500/50"}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <TrendingUp className={`w-3 h-3 ${selectedOutcome === "YES" ? "text-emerald-400" : "text-gray-500"}`} />
-              <span className={`text-[10px] font-semibold uppercase ${selectedOutcome === "YES" ? "text-emerald-400" : "text-gray-400"}`}>Yes</span>
-            </div>
-            <AnimatedValue value={market?.yesProbability} className={`text-sm font-bold font-mono ${selectedOutcome === "YES" ? "text-emerald-400" : "text-white"}`} suffix="%" />
+        <motion.button
+          type="button"
+          onClick={() => setSelectedSide("Buy YES")}
+          whileTap={{ scale: 0.97 }}
+          className={`relative px-2 py-1.5 rounded-lg border transition-all text-left ${
+            selectedSide === "Buy YES" ? "bg-emerald-500/10 border-emerald-500 shadow-glow" : "bg-black/40 border-gray-700 hover:border-emerald-500/50"
+          }`}
+        >
+          <div className="text-[9px] text-gray-500 uppercase font-semibold">Buy</div>
+          <div className="flex items-center justify-between gap-1">
+            <span className={`text-[10px] font-semibold ${selectedSide === "Buy YES" ? "text-emerald-400" : "text-gray-400"}`}>YES</span>
+            <AnimatedValue value={buyYesCents} format={(v: number) => (v != null ? v.toFixed(1) : "--")} className={`text-sm font-bold font-mono ${selectedSide === "Buy YES" ? "text-emerald-400" : "text-white"}`} suffix="¢" />
           </div>
         </motion.button>
-
-        <motion.button onClick={() => setSelectedOutcome("NO")} whileTap={{ scale: 0.97 }}
-          className={`relative px-2 py-1.5 rounded-lg border transition-all ${
-            selectedOutcome === "NO" ? "bg-red-500/10 border-red-500" : "bg-black/40 border-gray-700 hover:border-red-500/50"}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <TrendingDown className={`w-3 h-3 ${selectedOutcome === "NO" ? "text-red-400" : "text-gray-500"}`} />
-              <span className={`text-[10px] font-semibold uppercase ${selectedOutcome === "NO" ? "text-red-400" : "text-gray-400"}`}>No</span>
-            </div>
-            <AnimatedValue value={market?.noProbability} className={`text-sm font-bold font-mono ${selectedOutcome === "NO" ? "text-red-400" : "text-white"}`} suffix="%" />
+        <motion.button
+          type="button"
+          onClick={() => setSelectedSide("Buy NO")}
+          whileTap={{ scale: 0.97 }}
+          className={`relative px-2 py-1.5 rounded-lg border transition-all text-left ${
+            selectedSide === "Buy NO" ? "bg-red-500/10 border-red-500" : "bg-black/40 border-gray-700 hover:border-red-500/50"
+          }`}
+        >
+          <div className="text-[9px] text-gray-500 uppercase font-semibold">Buy</div>
+          <div className="flex items-center justify-between gap-1">
+            <span className={`text-[10px] font-semibold ${selectedSide === "Buy NO" ? "text-red-400" : "text-gray-400"}`}>NO</span>
+            <AnimatedValue value={buyNoCents} format={(v: number) => (v != null ? v.toFixed(1) : "--")} className={`text-sm font-bold font-mono ${selectedSide === "Buy NO" ? "text-red-400" : "text-white"}`} suffix="¢" />
           </div>
         </motion.button>
       </div>
+      {market?.bestBid != null && market?.bestAsk != null && (
+        <p className="text-[10px] text-gray-500 mb-2 text-center">
+          Spread <span className="font-mono text-gray-400">{(Math.abs((market.bestAsk - market.bestBid) * 100)).toFixed(1)}¢</span>
+        </p>
+      )}
 
-      {/* ── Bid/Ask inline ── */}
-      <div key={`ob-${market?.bestBid ?? ""}-${market?.bestAsk ?? ""}`}
-        className="flex items-center justify-between bg-black/50 rounded px-2 py-1 border border-emerald-900/20 mb-2 text-[10px]">
-        <span className="text-gray-500">{selectedOutcome} Bid</span>
-        <AnimatedValue
-          value={selectedOutcome === "YES" ? (market?.bestBid != null ? market.bestBid * 100 : null) : (market?.bestAsk != null ? (1 - market.bestAsk) * 100 : null)}
-          format={(v: number) => (v != null ? v.toFixed(1) : "--")}
-          className={`font-mono font-bold ${selectedOutcome === "YES" ? "text-emerald-400" : "text-red-400"}`}
-          suffix="¢" />
-        <div className="w-px h-3 bg-gray-700" />
-        <span className="text-gray-500">Ask</span>
-        <AnimatedValue
-          value={selectedOutcome === "YES" ? (market?.bestAsk != null ? market.bestAsk * 100 : null) : (market?.bestBid != null ? (1 - market.bestBid) * 100 : null)}
-          format={(v: number) => (v != null ? v.toFixed(1) : "--")}
-          className={`font-mono font-bold ${selectedOutcome === "YES" ? "text-emerald-400" : "text-red-400"}`}
-          suffix="¢" />
+      {/* ── Selected side summary ── */}
+      <div className="flex items-center justify-between bg-black/50 rounded px-2 py-1 border border-emerald-900/20 mb-2 text-[10px]">
+        <span className="text-gray-500">Selected</span>
+        <span className={`font-semibold ${selectedOutcome === "YES" ? "text-emerald-400" : "text-red-400"}`}>
+          {selectedSide} @ {entryPriceCents.toFixed(1)}¢
+        </span>
       </div>
 
       {/* ═══ Leverage Controls ═══ */}
@@ -391,8 +397,8 @@ export default function PolymarketLeverageBox({
             <label className="text-gray-400 text-[9px] block mb-0.5">Collateral</label>
             <div className="flex rounded border border-gray-700 bg-black overflow-hidden">
               <span className="px-1.5 py-1 text-gray-500 text-xs border-r border-gray-700"><DollarSign className="w-3 h-3" /></span>
-              <input type="number" min="0.05" step="0.05" value={collateralInput}
-                onChange={(e) => setCollateralInput(e.target.value)} placeholder="50"
+              <input type="number" min="0.5" step="0.5" value={collateralInput}
+                onChange={(e) => setCollateralInput(e.target.value)} placeholder="5"
                 className="flex-1 bg-transparent px-1.5 py-1 text-white text-xs focus:outline-none w-0" />
               {isConnected && (
                 <button onClick={() => setCollateralInput((Number(userBalance ?? BigInt(0)) / 1e6).toString())}
@@ -417,11 +423,11 @@ export default function PolymarketLeverageBox({
         {/* Trade Summary — compact 2-col grid */}
         <div className="bg-black/50 rounded px-2 py-1.5 border border-emerald-500/10 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] mb-1.5">
           <div className="flex justify-between"><span className="text-gray-400">Entry</span><AnimatedValue value={entryPriceCents} format={(v: number) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" /></div>
-          <div className="flex justify-between"><span className="text-gray-400">Notional</span><span className="text-white font-medium">${notional.toLocaleString()}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Borrowed</span><span className="text-yellow-400 font-medium">${borrowed.toLocaleString()}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Fee ({bpsToPercent(openFeeBps)})</span><span className="text-gray-300">${openFee.toFixed(4)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-400">Notional</span><span className="text-white font-medium">${notional.toFixed(6)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-400">Borrowed</span><span className="text-yellow-400 font-medium">${borrowed.toFixed(6)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-400">Fee ({bpsToPercent(openFeeBps)})</span><span className="text-gray-300">${openFee.toFixed(6)}</span></div>
           <div className="flex justify-between"><span className="text-gray-400">Liq.</span><span className="text-red-400 font-semibold font-mono">{liquidationCents.toFixed(1)}¢</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Max profit</span><span className="text-emerald-400 font-semibold">${maxWin.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-400">Max profit</span><span className="text-emerald-400 font-semibold">${maxWin.toFixed(6)}</span></div>
         </div>
 
         {/* Trade action */}
@@ -430,7 +436,7 @@ export default function PolymarketLeverageBox({
           selectedOutcome={selectedOutcome}
           collateral={collateralUsdc}
           leverage={leverage}
-          entryPrice={entryPriceDecimal}
+          entryPrice={entryPriceOutcome}
           onSuccess={onVaultRefetch}
         />
       </div>

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * /base-vault – Deposit/withdraw native USDC on Base mainnet (real funds).
+ * /base-vault – Deposit/withdraw USDC.e on Polygon PoS mainnet (real funds).
  * Shows vault TVL, totalBorrowed, utilization, insurance, protocol balances.
- * Chain: Base mainnet (8453). Network guard prompts user to switch if on wrong chain.
+ * Chain: Polygon PoS mainnet (137). Network guard prompts user to switch if on wrong chain.
  */
 import { useState, useEffect, useCallback } from "react";
 import { formatUnits, parseUnits } from "viem";
@@ -31,13 +31,13 @@ import {
   Building2,
 } from "lucide-react";
 
-const BASE_CHAIN_ID = 8453;
+const POLYGON_CHAIN_ID = 137;
 const USDC_DECIMALS = 6;
 
 function fmtUSDC(value: bigint | undefined): string {
-  if (value === undefined) return "0.00";
+  if (value === undefined) return "0.000000";
   const n = Number(formatUnits(value, USDC_DECIMALS));
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 });
 }
 
 function parseUSDC(amount: string): bigint {
@@ -64,7 +64,7 @@ export default function BaseVaultPage() {
   const [actionLabel, setActionLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const isWrongNetwork = isConnected && chain?.id !== BASE_CHAIN_ID;
+  const isWrongNetwork = isConnected && chain?.id !== POLYGON_CHAIN_ID;
 
   // ─── Vault reads (TVL, borrowed, util, insurance, protocol) ──────
   const { data: vaultData, refetch: refetchVault } = useReadContracts({
@@ -75,6 +75,7 @@ export default function BaseVaultPage() {
       { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "insuranceBalance" },
       { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "protocolBalance" },
     ],
+    query: { refetchInterval: 5000 },
   });
 
   const totalAssets    = vaultData?.[0]?.result as bigint | undefined;
@@ -89,6 +90,7 @@ export default function BaseVaultPage() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    query: { refetchInterval: 5000 },
   });
 
   const { data: userShares, refetch: refetchShares } = useReadContract({
@@ -96,6 +98,7 @@ export default function BaseVaultPage() {
     abi: baseVaultAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    query: { refetchInterval: 5000 },
   });
 
   const { data: shareValue } = useReadContract({
@@ -182,7 +185,7 @@ export default function BaseVaultPage() {
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
           <p className="text-sm">
-            This vault is on <strong>Base mainnet</strong> and uses <strong>real USDC</strong>. Use only small amounts for testing.
+            This vault is on <strong>Polygon PoS</strong> and uses <strong>real USDC.e</strong>. Use only small amounts for testing.
           </p>
         </div>
 
@@ -193,9 +196,9 @@ export default function BaseVaultPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neon/10">
                 <Vault className="h-5 w-5 text-neon" />
               </div>
-              <h1 className="text-2xl font-bold text-white sm:text-3xl">Base USDC Vault</h1>
+              <h1 className="text-2xl font-bold text-white sm:text-3xl">Polygon USDC.e Vault</h1>
             </div>
-            <p className="text-sm text-gray-400">Deposit native USDC on Base to earn yield from leveraged trading</p>
+            <p className="text-sm text-gray-400">Deposit USDC.e on Polygon to earn yield from leveraged trading</p>
           </div>
           <button onClick={refetchAll} className="rounded-lg p-2 text-gray-400 transition hover:bg-white/10 hover:text-white">
             <RefreshCw className="h-4 w-4" />
@@ -237,8 +240,8 @@ export default function BaseVaultPage() {
         {/* Network guard */}
         {isWrongNetwork && (
           <div className="mb-8 rounded-2xl border border-orange-500/40 bg-orange-500/10 p-6 text-center">
-            <p className="mb-4 text-orange-200">Please switch your wallet to Base mainnet.</p>
-            <TxButton onClick={() => switchChain?.({ chainId: BASE_CHAIN_ID })} variant="primary">Switch to Base</TxButton>
+            <p className="mb-4 text-orange-200">Please switch your wallet to Polygon PoS.</p>
+            <TxButton onClick={() => switchChain?.({ chainId: POLYGON_CHAIN_ID })} variant="primary">Switch to Polygon</TxButton>
           </div>
         )}
 
@@ -246,7 +249,7 @@ export default function BaseVaultPage() {
           <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-12 text-center">
             <Vault className="mx-auto mb-4 h-12 w-12 text-gray-600" />
             <h2 className="mb-2 text-lg font-semibold text-white">Connect Your Wallet</h2>
-            <p className="text-sm text-gray-500">Connect to deposit or withdraw USDC on Base</p>
+            <p className="text-sm text-gray-500">Connect to deposit or withdraw USDC.e on Polygon</p>
           </div>
         ) : !isWrongNetwork ? (
           <div className="space-y-6">

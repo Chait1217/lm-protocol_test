@@ -33,7 +33,7 @@ const FAKE_MARKETS = [
   { question: "Will Apple release AR glasses in 2026?", baseProb: 55 },
 ];
 
-const LeverageDemoTrade = () => {
+const LeverageDemoTrade = ({ embedded }) => {
   // State
   const [collateral, setCollateral] = useState(1000);
   const [leverage, setLeverage] = useState(3);
@@ -229,15 +229,15 @@ const LeverageDemoTrade = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-black pt-20 md:pt-24 pb-12 md:pb-20 px-3 md:px-4">
+    <div className={embedded ? "bg-black pt-6 md:pt-8 pb-12 md:pb-16 px-3 md:px-4" : "min-h-screen bg-black pt-20 md:pt-24 pb-12 md:pb-20 px-3 md:px-4"}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-6 md:mb-12"
+          className={`text-center ${embedded ? "mb-4 md:mb-8" : "mb-6 md:mb-12"}`}
         >
-          <h1 className="text-2xl md:text-5xl font-bold text-white mb-2 md:mb-4">
+          <h1 className={`font-bold text-white mb-2 md:mb-4 ${embedded ? "text-xl md:text-3xl" : "text-2xl md:text-5xl"}`}>
             Demo <span className="text-[#00FF99]">Trade</span>
           </h1>
           <p className="text-gray-400 text-sm md:text-lg max-w-2xl mx-auto">
@@ -367,48 +367,6 @@ const LeverageDemoTrade = () => {
               </div>
             </div>
 
-            {/* Trade Details */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-6">
-              <h3 className="text-white font-semibold mb-2 md:mb-4 flex items-center gap-2 text-sm md:text-base">
-                <Info className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
-                Trade Details
-              </h3>
-              <div className="space-y-1.5 md:space-y-3 text-xs md:text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total Exposure</span>
-                  <span className="text-white font-mono">${totalExposure.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Borrowed Amount</span>
-                  <span className="text-[#00FF99] font-mono">${borrowedAmount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Trading Fee (0.2%)</span>
-                  <span className="text-yellow-400 font-mono">${tradingFee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Borrow Fee (0.1%)</span>
-                  <span className="text-yellow-400 font-mono">${borrowFee.toFixed(2)}</span>
-                </div>
-                <div className="hidden md:flex justify-between">
-                  <span className="text-gray-400">Interest (7 days @ 20% APR)</span>
-                  <span className="text-yellow-400 font-mono">${interest.toFixed(2)}</span>
-                </div>
-                <div className="border-t border-gray-700 pt-2 md:pt-3 flex justify-between">
-                  <span className="text-gray-400">Total Fees</span>
-                  <span className="text-yellow-400 font-mono font-semibold">${(totalFees + interest).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Entry Price ({selectedOutcome})</span>
-                  <span className="text-white font-mono">{entryPrice.toFixed(2)}¢</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Liquidation Price</span>
-                  <span className="text-red-400 font-mono">{liquidationPrice.toFixed(2)}¢</span>
-                </div>
-              </div>
-            </div>
-
             {/* Execute Button */}
             <button
               onClick={isTrading ? undefined : executeTrade}
@@ -442,27 +400,59 @@ const LeverageDemoTrade = () => {
             )}
           </motion.div>
 
-          {/* Right: Visual Flow & Chart */}
+          {/* Right: Status + Trade Details row, then Visual Flow & Chart */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             className="lg:col-span-2 space-y-3 md:space-y-6"
           >
-            {/* Status Bar */}
-            <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-4">
-              <div className="flex items-center justify-between text-sm md:text-base">
-                <span className="text-gray-400">Status:</span>
-                <span className={`font-semibold ${tradeStep === 5 ? "text-[#00FF99]" : tradeStep > 0 ? "text-yellow-400" : "text-gray-400"}`}>
-                  {stepLabels[tradeStep]}
-                </span>
+            {/* Top row: Status Bar + Trade Details side by side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+              {/* Status Bar */}
+              <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-4">
+                <div className="flex items-center justify-between text-sm md:text-base">
+                  <span className="text-gray-400">Status:</span>
+                  <span className={`font-semibold ${tradeStep === 5 ? "text-[#00FF99]" : tradeStep > 0 ? "text-yellow-400" : "text-gray-400"}`}>
+                    {stepLabels[tradeStep]}
+                  </span>
+                </div>
+                <div className="mt-2 md:mt-3 h-1.5 md:h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-[#00FF99]"
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${(tradeStep / 5) * 100}%` }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
               </div>
-              <div className="mt-2 md:mt-3 h-1.5 md:h-2 bg-gray-800 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-[#00FF99]"
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${(tradeStep / 5) * 100}%` }}
-                  transition={{ duration: 0.5 }}
-                />
+              {/* Trade Details - beside Status to avoid blank space */}
+              <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-xl md:rounded-2xl p-3 md:p-4">
+                <h3 className="text-white font-semibold mb-2 md:mb-3 flex items-center gap-2 text-sm md:text-base">
+                  <Info className="w-4 h-4 md:w-5 md:h-5 text-[#00FF99]" />
+                  Trade Details
+                </h3>
+                <div className="space-y-1 md:space-y-2 text-xs md:text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total Exposure</span>
+                    <span className="text-white font-mono">${totalExposure.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Borrowed</span>
+                    <span className="text-[#00FF99] font-mono">${borrowedAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total Fees</span>
+                    <span className="text-yellow-400 font-mono font-semibold">${(totalFees + interest).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Entry ({selectedOutcome})</span>
+                    <span className="text-white font-mono">{entryPrice.toFixed(2)}¢</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Liquidation</span>
+                    <span className="text-red-400 font-mono">{liquidationPrice.toFixed(2)}¢</span>
+                  </div>
+                </div>
               </div>
             </div>
 
