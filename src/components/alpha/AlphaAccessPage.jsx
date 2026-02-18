@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Unlock, ArrowUpRight } from "lucide-react";
 
@@ -12,22 +12,16 @@ const ROLE_OPTIONS = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function AlphaAccessPage({ setCurrentPage, initialEmail }) {
+export default function AlphaAccessPage({ setCurrentPage }) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    email: initialEmail || "",
+    email: "",
     role: "",
     message: "",
   });
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (initialEmail && initialEmail.trim()) {
-      setForm((prev) => ({ ...prev, email: initialEmail }));
-    }
-  }, [initialEmail]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

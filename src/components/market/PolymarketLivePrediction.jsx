@@ -56,10 +56,14 @@ const AnimatedValue = ({ value, format, className, prefix = "", suffix = "" }) =
 };
 
 export default function PolymarketLivePrediction({
-  slug = "will-bitcoin-reach-100000-by-december-31-2026-571",
-  settlementDate = "Dec 31, 2026",
+  slug = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+  settlementDate = "Nov 7, 2028",
   refreshInterval = 5000, // 5 seconds for real-time quote updates
   compact = false,
+  demoAmount,
+  demoLeverage,
+  demoOutcome,
+  onExecuteDemoTrade,
 }) {
   const [market, setMarket] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
@@ -139,15 +143,6 @@ export default function PolymarketLivePrediction({
     const yesPrice = outcomePrices[0] ? parseFloat(outcomePrices[0]) : null;
     const noPrice = outcomePrices[1] ? parseFloat(outcomePrices[1]) : (yesPrice != null ? 1 - yesPrice : null);
 
-    let probability;
-    if (yesPrice !== null && yesPrice > 0 && yesPrice <= 1) {
-      probability = Math.round(yesPrice * 1000) / 10;
-    } else if (m.lastTradePrice && parseFloat(m.lastTradePrice) <= 1) {
-      probability = Math.round(parseFloat(m.lastTradePrice) * 1000) / 10;
-    } else {
-      probability = null;
-    }
-
     const totalVolume = parseFloat(m.volume) || parseFloat(m.volumeNum) || parseFloat(m.volumeClob) || 0;
     const volume24h = parseFloat(m.volume24hr) || parseFloat(m.volume24hrClob) || 0;
 
@@ -162,16 +157,18 @@ export default function PolymarketLivePrediction({
       clobTokenIds = [];
     }
 
-    // Prefer live CLOB best bid/ask for cents when available
+    // Live CLOB: bestAsk = YES price (0–1). Use it for YES cents, NO cents (100 - YES), and implied probability.
     const bestBid = m.bestBid != null ? parseFloat(m.bestBid) : null;
     const bestAsk = m.bestAsk != null ? parseFloat(m.bestAsk) : null;
     const yesCentsFromClob = bestAsk != null && bestAsk >= 0 && bestAsk <= 1 ? Math.round(bestAsk * 1000) / 10 : null;
-    const noCentsFromClob = bestBid != null && bestBid >= 0 && bestBid <= 1 ? Math.round((1 - bestBid) * 1000) / 10 : null;
+    const noCentsFromClob = yesCentsFromClob != null ? Math.round((100 - yesCentsFromClob) * 10) / 10 : (bestBid != null && bestBid >= 0 && bestBid <= 1 ? Math.round((1 - bestBid) * 1000) / 10 : null);
+    // Probability = live YES implied chance (same as YES cents when we have CLOB)
+    const probability = yesCentsFromClob != null ? yesCentsFromClob : (yesPrice !== null && yesPrice > 0 && yesPrice <= 1 ? Math.round(yesPrice * 1000) / 10 : (m.lastTradePrice != null && parseFloat(m.lastTradePrice) <= 1 ? Math.round(parseFloat(m.lastTradePrice) * 1000) / 10 : null));
 
     return {
       conditionId: m.conditionId || m.id,
       slug: m.slug || slug,
-      title: m.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
+      title: m.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
       probability,
       yesPriceCents: yesCentsFromClob ?? (yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null),
       noPriceCents: noCentsFromClob ?? (noPrice != null ? Math.round(noPrice * 1000) / 10 : null),
@@ -363,19 +360,49 @@ export default function PolymarketLivePrediction({
     );
   }
 
+  if (!market) {
+    return (
+      <div className="rounded-xl md:rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black p-6 md:p-8">
+        <div className="flex flex-col items-center justify-center py-8 md:py-12 text-center">
+          <p className="text-gray-400 mb-4">
+            {error || "Could not load market data from Polymarket."}
+          </p>
+          <button
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              loadAllData(true);
+            }}
+            className="px-4 py-2 rounded-lg bg-[#00FF99]/20 text-[#00FF99] border border-[#00FF99]/40 hover:bg-[#00FF99]/30 transition-colors"
+          >
+            Retry
+          </button>
+          <a
+            href="https://polymarket.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 text-sm text-gray-500 hover:text-[#00FF99] transition-colors"
+          >
+            Open Polymarket →
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="h-full rounded-xl md:rounded-2xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_60px_rgba(0,255,153,0.08)]"
+      className="h-full rounded-lg md:rounded-xl border border-[#00FF99]/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_40px_rgba(0,255,153,0.06)]"
     >
-      {/* Header */}
-      <div className="p-2.5 md:p-4 sm:p-6 border-b border-[#00FF99]/10">
-        <div className="flex flex-wrap items-center justify-between gap-1.5 md:gap-3 mb-2 md:mb-4">
+      {/* Header – compact */}
+      <div className="p-2 md:p-3 border-b border-[#00FF99]/10">
+        <div className="flex flex-wrap items-center justify-between gap-1 md:gap-2 mb-1 md:mb-2">
           <div className="flex items-center gap-1.5 md:gap-3">
-            <span className="px-2 py-1 md:px-3 md:py-1.5 rounded-full text-[0.6rem] md:text-[0.7rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
+            <span className="px-1.5 py-0.5 md:px-2 md:py-1 rounded-full text-[0.55rem] md:text-[0.65rem] bg-[#00FF99]/15 text-[#00FF99] border border-[#00FF99]/40 uppercase tracking-widest font-semibold flex items-center gap-0.5">
+              <span className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
               {dataSource === 'live' ? 'LIVE' : 'Polymarket'}
             </span>
             <span className="text-[10px] md:text-xs text-gray-500">
@@ -397,7 +424,7 @@ export default function PolymarketLivePrediction({
               </motion.div>
             </button>
             <a
-              href={`https://polymarket.com/market/${slug}`}
+              href={`https://polymarket.com/market/${market?.slug || slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00FF99] transition-colors underline underline-offset-4 cursor-pointer"
@@ -416,37 +443,37 @@ export default function PolymarketLivePrediction({
         )}
 
         {/* Market Question */}
-        <h2 className="text-sm md:text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 md:mb-6 leading-tight">
-          {market?.title || "Will Bitcoin reach $100,000 by December 31, 2026?"}
+        <h2 className="text-xs md:text-base sm:text-lg font-bold text-white mb-1 md:mb-2 leading-tight">
+          {market?.title || "Will Gavin Newsom win the 2028 Democratic presidential nomination?"}
         </h2>
 
-        {/* YES / NO quotes — live (from CLOB best bid/ask when available) */}
-        <div className="flex gap-4 mb-2 md:mb-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] md:text-xs text-gray-500 uppercase">YES</span>
+        {/* YES / NO quotes — live */}
+        <div className="flex gap-3 mb-1 md:mb-2">
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] md:text-[10px] text-gray-500 uppercase">YES</span>
             <AnimatedValue
               value={market?.yesPriceCents}
-              className="text-[#00FF99] font-mono font-bold text-sm md:text-base"
+              className="text-[#00FF99] font-mono font-bold text-xs md:text-sm"
               suffix="¢"
             />
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] md:text-xs text-gray-500 uppercase">NO</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] md:text-[10px] text-gray-500 uppercase">NO</span>
             <AnimatedValue
               value={market?.noPriceCents}
-              className="text-red-400 font-mono font-bold text-sm md:text-base"
+              className="text-red-400 font-mono font-bold text-xs md:text-sm"
               suffix="¢"
             />
           </div>
         </div>
 
-        {/* Stats Row */}
-        <div className="flex flex-wrap items-end justify-between gap-2 md:gap-4">
-          <div className="flex items-baseline gap-2 md:gap-4">
+        {/* Stats Row – compact */}
+        <div className="flex flex-wrap items-end justify-between gap-1.5 md:gap-2">
+          <div className="flex items-baseline gap-1.5 md:gap-2">
             <div className="relative">
               <AnimatedValue
                 value={market?.probability}
-                className="text-3xl md:text-5xl sm:text-6xl md:text-7xl font-extrabold text-[#00FF99] leading-none"
+                className="text-2xl md:text-4xl sm:text-5xl font-extrabold text-[#00FF99] leading-none"
                 suffix="%"
               />
               {/* Price change indicator */}
@@ -470,65 +497,65 @@ export default function PolymarketLivePrediction({
                 )}
               </AnimatePresence>
             </div>
-            <div className="flex flex-col gap-0.5 md:gap-1">
-              <span className="text-gray-400 text-[9px] md:text-xs uppercase tracking-widest">
+            <div className="flex flex-col gap-0">
+              <span className="text-gray-400 text-[8px] md:text-[9px] uppercase tracking-wider">
                 Implied Chance
               </span>
-              <span className="inline-flex items-center gap-1 md:gap-1.5 text-[9px] md:text-xs text-gray-400">
+              <span className="inline-flex items-center gap-0.5 text-[8px] md:text-[9px] text-gray-400">
                 <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
                 YES outcome • Live every {refreshInterval / 1000}s
               </span>
             </div>
           </div>
 
-          <div className="flex gap-3 md:gap-6">
+          <div className="flex gap-2 md:gap-3">
             <div className="text-right">
-              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
-                24h Volume
+              <div className="text-gray-400 text-[8px] md:text-[9px] uppercase tracking-wider mb-0">
+                24h Vol
               </div>
               <AnimatedValue
                 value={market?.volume24h ?? market?.volume}
                 format={formatVolume}
-                className="text-white text-sm md:text-xl sm:text-2xl font-bold block"
+                className="text-white text-xs md:text-base font-bold block"
               />
             </div>
             <div className="text-right">
-              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
-                Total Volume
+              <div className="text-gray-400 text-[8px] md:text-[9px] uppercase tracking-wider mb-0">
+                Volume
               </div>
               <AnimatedValue
                 value={market?.volume}
                 format={formatVolume}
-                className="text-white text-sm md:text-xl sm:text-2xl font-bold block"
+                className="text-white text-xs md:text-base font-bold block"
               />
             </div>
             <div className="text-right hidden sm:block">
-              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
+              <div className="text-gray-400 text-[8px] md:text-[9px] uppercase tracking-wider mb-0">
                 Liquidity
               </div>
               <AnimatedValue
                 value={market?.liquidity}
                 format={formatVolume}
-                className="text-white text-sm md:text-xl font-bold block"
+                className="text-white text-xs md:text-base font-bold block"
               />
             </div>
             <div className="text-right hidden sm:block">
-              <div className="text-gray-400 text-[10px] md:text-xs uppercase tracking-widest mb-0.5 md:mb-1">
+              <div className="text-gray-400 text-[8px] md:text-[9px] uppercase tracking-wider mb-0">
                 Traders
               </div>
               <AnimatedValue
                 value={market?.traders}
                 format={formatNumber}
-                className="text-white text-sm md:text-xl font-bold block"
+                className="text-white text-xs md:text-base font-bold block"
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Real-time Chart */}
-      <div className="p-2.5 md:p-4 sm:p-6">
-        <div className="h-32 md:h-56 sm:h-64 md:h-72">
+      {/* Real-time Chart – compact */}
+      <div className="p-2 md:p-3">
+        <div className="h-24 md:h-36 sm:h-40">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 5, bottom: 15 }}>
               <defs>
@@ -571,11 +598,11 @@ export default function PolymarketLivePrediction({
           </ResponsiveContainer>
         </div>
 
-        {/* Data source note with live indicator */}
-        <div className="mt-2 md:mt-4 pt-2 md:pt-4 border-t border-[#00FF99]/10 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#00FF99] animate-pulse" />
-            <p className="text-[10px] md:text-xs text-gray-500">
+        {/* Data source note */}
+        <div className="mt-1 md:mt-2 pt-1 md:pt-2 border-t border-[#00FF99]/10 flex flex-wrap items-center justify-between gap-1">
+          <div className="flex items-center gap-1">
+            <span className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-[#00FF99] animate-pulse" />
+            <p className="text-[9px] md:text-[10px] text-gray-500">
               Real-time data from Polymarket • Auto-updates every {refreshInterval / 1000}s
             </p>
           </div>
@@ -587,27 +614,42 @@ export default function PolymarketLivePrediction({
         </div>
       </div>
 
-      {/* Comments Section - Link to Polymarket */}
-      <div className="p-2.5 md:p-4 sm:p-6 border-t border-[#00FF99]/10">
+      {/* Comments + Execute – compact */}
+      <div className="p-2 md:p-3 border-t border-[#00FF99]/10">
         <a
-          href={`https://polymarket.com/market/${slug}`}
+          href={`https://polymarket.com/market/${market?.slug || slug}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-between p-2 md:p-4 rounded-lg md:rounded-xl bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/30 hover:bg-gray-800/70 transition-all group cursor-pointer"
+          className="flex items-center justify-between p-1.5 md:p-2 rounded-lg bg-gray-800/50 border border-gray-700/50 hover:border-[#00FF99]/30 hover:bg-gray-800/70 transition-all group cursor-pointer"
         >
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="w-7 h-7 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-3.5 h-3.5 md:w-5 md:h-5 text-[#00FF99]" />
+          <div className="flex items-center gap-1.5 md:gap-2">
+            <div className="w-5 h-5 md:w-7 md:h-7 rounded-full bg-gradient-to-br from-[#00FF99]/30 to-[#00FF99]/10 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 text-[#00FF99]" />
             </div>
             <div>
-              <h3 className="text-white font-semibold text-xs md:text-base group-hover:text-[#00FF99] transition-colors">
+              <h3 className="text-white font-semibold text-[10px] md:text-xs group-hover:text-[#00FF99] transition-colors">
                 View Comments & Discussion
               </h3>
-              <p className="text-[10px] md:text-sm text-gray-400">Join the conversation on Polymarket</p>
+              <p className="text-[9px] md:text-[10px] text-gray-400">Join the conversation on Polymarket</p>
             </div>
           </div>
-          <ExternalLink className="w-3.5 h-3.5 md:w-5 md:h-5 text-gray-500 group-hover:text-[#00FF99] transition-colors flex-shrink-0" />
+          <ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-gray-500 group-hover:text-[#00FF99] transition-colors flex-shrink-0" />
         </a>
+
+        {typeof onExecuteDemoTrade === "function" && (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={onExecuteDemoTrade}
+              className="w-full py-2 md:py-2.5 rounded-lg font-bold text-xs md:text-sm transition-all cursor-pointer bg-[#00FF99] text-black hover:bg-[#00FF99]/90 hover:shadow-[0_0_20px_rgba(0,255,153,0.25)]"
+            >
+              Execute Demo Trade
+            </button>
+            <p className="text-[9px] md:text-[10px] text-gray-500 mt-0.5 text-center">
+              ${demoAmount || "100"} @ {demoLeverage ?? 2}x {demoOutcome || "YES"} from leverage box →
+            </p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

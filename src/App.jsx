@@ -248,7 +248,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black border-b-2 border-[#00FF99]/20 shadow-[0_4px_24px_rgba(0,0,0,0.5)] md:bg-black/90 md:backdrop-blur-xl md:border-b md:border-[#00FF99]/10 safe-area-inset-top">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-3 min-h-[72px] sm:min-h-[80px]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-3 min-h-[72px] sm:min-h-[80px] relative">
         <div className="flex-shrink-0 flex items-center gap-2">
           <button
             type="button"
@@ -264,7 +264,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
             className="h-10 sm:h-12 w-auto"
           />
         </div>
-        <div className="hidden md:flex justify-center gap-8 flex-1">
+        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 justify-center gap-8">
           {navLinks.map((link) => (
             <button
               key={link.key}
@@ -511,7 +511,7 @@ const Footer = ({ setCurrentPage }) => {
           <div>
             <h4 className="text-white font-medium mb-3">Community</h4>
             <div className="space-y-2 text-sm text-gray-400">
-              <a href="https://x.com/lm_protocole?s=21" target="_blank" rel="noopener noreferrer" className="block hover:text-[#00FF99] transition-colors">X</a>
+              <a href="https://x.com/lm_protocol?s=11" target="_blank" rel="noopener noreferrer" className="block hover:text-[#00FF99] transition-colors">X</a>
               <a href="#" className="block hover:text-[#00FF99] transition-colors">Telegram</a>
               <button onClick={() => setCurrentPage?.("faq")} className="block text-left hover:text-[#00FF99] transition-colors">FAQ</button>
             </div>
@@ -534,7 +534,7 @@ const POLYMARKET_APIS = {
 
 // Récupère un marché réel depuis Gamma API avec son vrai conditionId
 // Par défaut on pointe sur "Will Jesus Christ return before 2027?"
-const fetchRealMarket = async (slug = "will-bitcoin-reach-100000-by-december-31-2026-571") => {
+const fetchRealMarket = async (slug = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568") => {
   try {
     // Gamma API pour les marchés
     const res = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?slug=${slug}`);
@@ -575,7 +575,7 @@ const fetchRealMarket = async (slug = "will-bitcoin-reach-100000-by-december-31-
       conditionId: null,
       id: "fallback",
       slug: slug,
-      title: "Will Bitcoin reach $100,000 by December 31, 2026?",
+      title: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
       probability: 3,
       volume: 439674,
       url: `https://polymarket.com/market/${slug}`,
@@ -584,97 +584,73 @@ const fetchRealMarket = async (slug = "will-bitcoin-reach-100000-by-december-31-
   }
 };
 
-// Catégories Polymarket pour le carrousel (label FR → URL predictions + images)
+// Polymarket categories (label, slug, icon, description, background image)
 const POLYMARKET_CATEGORIES = [
-  { id: "sports", label: "Sport", slug: "sports", icon: Trophy, image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=560&fit=crop" },
-  { id: "politics", label: "Politics", slug: "politics", icon: Landmark, image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
-  { id: "crypto", label: "Crypto", slug: "crypto", icon: Bitcoin, image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400&h=560&fit=crop" },
-  { id: "finance", label: "Finance", slug: "finance", icon: DollarSign, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=560&fit=crop" },
-  { id: "elections", label: "Elections", slug: "elections", icon: Vote, image: "https://images.unsplash.com/photo-1580128660010-fd027e1e587a?w=400&h=560&fit=crop" },
-  { id: "esports", label: "Esports", slug: "esports", icon: Gamepad2, image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=560&fit=crop" },
-  { id: "culture", label: "Culture", slug: "pop-culture", icon: Film, image: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=560&fit=crop" },
-  { id: "economy", label: "Economy", slug: "economy", icon: TrendingUp, image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=560&fit=crop" },
+  { id: "sports", label: "Sport", slug: "sports", icon: Trophy, description: "Predict outcomes in sports and major events.", image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=560&fit=crop" },
+  { id: "politics", label: "Politics", slug: "politics", icon: Landmark, description: "Political events, policies, and governance.", image: "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400&h=560&fit=crop" },
+  { id: "crypto", label: "Crypto", slug: "crypto", icon: Bitcoin, description: "Digital assets, protocols, and market moves.", image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400&h=560&fit=crop" },
+  { id: "finance", label: "Finance", slug: "finance", icon: DollarSign, description: "Markets, rates, and macroeconomic bets.", image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=560&fit=crop" },
+  { id: "elections", label: "Elections", slug: "elections", icon: Vote, description: "Election results and electoral outcomes.", image: "https://images.unsplash.com/photo-1580128660010-fd027e1e587a?w=400&h=560&fit=crop" },
+  { id: "esports", label: "Esports", slug: "esports", icon: Gamepad2, description: "Competitive gaming and esports events.", image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=560&fit=crop" },
+  { id: "culture", label: "Culture", slug: "pop-culture", icon: Film, description: "Pop culture, entertainment, and media.", image: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=560&fit=crop" },
+  { id: "economy", label: "Economy", slug: "economy", icon: TrendingUp, description: "Economic indicators and trends.", image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=560&fit=crop" },
 ];
 
-// Carrousel des catégories Polymarket sur la page Market
-const CategoriesCarousel = () => {
-  const scrollRef = React.useRef(null);
-  const cardWidthPx = 240;
-  const cardHeightPx = 340;
-  const gap = 20;
-
-  const scroll = (dir) => {
-    if (!scrollRef.current) return;
-    const step = (cardWidthPx + gap) * (dir === "next" ? 1 : -1);
-    scrollRef.current.scrollBy({ left: step, behavior: "smooth" });
-  };
-
+// Category card with image, label, and link (used in grid)
+const CategoryCard = ({ category }) => {
+  const Icon = category.icon;
+  const url = `https://polymarket.com/predictions/${category.slug}`;
+  const image = category.image || "";
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20 mb-8">
-      <h2 className="text-lg sm:text-xl font-semibold text-white mb-4 sm:mb-6 flex items-center gap-2">
-        <span className="text-[#00FF99]">Categories</span> Polymarket
-      </h2>
-      <div className="relative flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => scroll("prev")}
-          className="flex-shrink-0 z-10 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
-          aria-label="Previous categories"
-        >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden flex gap-4 sm:gap-5 pb-2 scroll-smooth snap-x snap-mandatory -webkit-overflow-scrolling-touch"
-          style={{ scrollbarWidth: "thin" }}
-        >
-          {POLYMARKET_CATEGORIES.map((cat) => {
-            const url = `https://polymarket.com/predictions/${cat.slug}`;
-            return (
-              <a
-                key={cat.id}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-shrink-0 snap-center w-[220px] sm:w-[240px]"
-              >
-                <motion.div
-                  whileHover={{ scale: 1.03, y: -4 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 hover:border-[#00FF99]/50 hover:shadow-[0_0_30px_rgba(0,255,153,0.2)] transition-all flex flex-col"
-                  style={{ height: cardHeightPx }}
-                >
-                  <div className="relative w-full flex-1 min-h-0">
-                    <img
-                      src={cat.image}
-                      alt={cat.label}
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-4 flex flex-col gap-1">
-                      <span className="text-white font-bold text-lg">{cat.label}</span>
-                      <span className="text-[#00FF99] text-sm flex items-center gap-1">
-                        View on Polymarket <ArrowUpRight className="w-4 h-4" />
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-              </a>
-            );
-          })}
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block h-full min-h-[180px] rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 transition-all hover:border-[#00FF99]/50 hover:shadow-[0_0_28px_rgba(0,255,153,0.15)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00FF99]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+    >
+      <div className="relative w-full h-full min-h-[180px]">
+        {image && (
+          <>
+            <img
+              src={image}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-black/30" />
+          </>
+        )}
+        <div className="absolute inset-0 flex flex-col justify-end p-4">
+          <span className="flex items-center gap-2 text-white font-bold text-lg drop-shadow-lg">
+            <Icon className="w-6 h-6 text-[#00FF99] flex-shrink-0" aria-hidden />
+            {category.label}
+          </span>
+          <span className="mt-1.5 inline-flex items-center gap-1 text-[#00FF99] text-sm font-medium">
+            View on Polymarket
+            <ArrowUpRight className="w-4 h-4" />
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={() => scroll("next")}
-          className="flex-shrink-0 z-10 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/80 border border-[#00FF99]/30 text-[#00FF99] flex items-center justify-center hover:bg-[#00FF99]/10 active:scale-95 transition-transform touch-manipulation"
-          aria-label="Next categories"
-        >
-          <ChevronRight className="w-6 h-6" />
-        </button>
       </div>
-    </div>
+    </a>
   );
 };
+
+// Categories – Polymarket: responsive grid so cards are visible and work on all screens
+const CategoriesPolymarketSection = () => (
+  <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-10 sm:mt-14 mb-10 sm:mb-14" aria-labelledby="categories-heading">
+    <h2 id="categories-heading" className="text-xl sm:text-2xl font-bold text-white mb-2 flex items-center gap-2">
+      <span className="text-[#00FF99]">Categories</span>
+      <span>Polymarket</span>
+    </h2>
+    <p className="text-gray-400 text-sm sm:text-base mb-6 max-w-2xl">
+      Browse prediction markets by category. Click a card to open Polymarket.
+    </p>
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+      {POLYMARKET_CATEGORIES.map((cat) => (
+        <CategoryCard key={cat.id} category={cat} />
+      ))}
+    </div>
+  </section>
+);
 
 // État global pour le marché réel (sera initialisé dans MarketPage)
 let realMarketCache = null;
@@ -694,6 +670,13 @@ const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
   const [orderBookSide, setOrderBookSide] = useState("YES"); // YES ou NO
   const [loadingOrderBook, setLoadingOrderBook] = useState(true);
   const [priceHistoryChart, setPriceHistoryChart] = useState(null); // Polymarket CLOB prices-history
+
+  // Shared state for Live Polymarket Integration ↔ Execute demo trade (amount, leverage, outcome)
+  const [demoAmount, setDemoAmount] = useState("100");
+  const [demoLeverage, setDemoLeverage] = useState(2);
+  const [demoOutcome, setDemoOutcome] = useState("YES");
+  const [demoExecuteKey, setDemoExecuteKey] = useState(0);
+  const demoTradeSectionRef = useRef(null);
 
   const probability = featuredMarket?.probability ?? 62;
   const chartData = useMemo(() => {
@@ -979,7 +962,7 @@ const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-4xl md:text-6xl font-bold mb-4 sm:mb-6">
             <span className="text-white">Institutional-Grade</span>
             <br />
             <span className="text-[#00FF99]">Leverage Trading</span>
@@ -1034,108 +1017,101 @@ const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
 
         <div className="grid md:grid-cols-2 gap-3 md:gap-5 items-stretch">
             <PolymarketLivePrediction
-              slug="will-bitcoin-reach-100000-by-december-31-2026-571"
+              slug="will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568"
               settlementDate="Dec 31, 2026"
               refreshInterval={2000}
               compact
+              demoAmount={demoAmount}
+              demoLeverage={demoLeverage}
+              demoOutcome={demoOutcome}
+              onExecuteDemoTrade={() => {
+                setDemoExecuteKey((k) => k + 1);
+                demoTradeSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+              }}
             />
             <PolymarketLivePredictionBoxLeverage
-              slug="will-bitcoin-reach-100000-by-december-31-2026-571"
+              slug="will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568"
               refreshInterval={2000}
               compact
+              valueAmount={demoAmount}
+              valueLeverage={demoLeverage}
+              valueOutcome={demoOutcome}
+              onAmountChange={setDemoAmount}
+              onLeverageChange={setDemoLeverage}
+              onOutcomeChange={setDemoOutcome}
             />
         </div>
       </div>
 
-      {/* Demo Trade – content from Demo page */}
-      <div className="mt-12 sm:mt-16">
-        <LeverageDemoTrade embedded />
+      {/* Demo Trade – same width as rest of page */}
+      <div ref={demoTradeSectionRef} className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-16">
+        <LeverageDemoTrade
+          key={demoExecuteKey}
+          embedded
+          initialCollateral={parseFloat(demoAmount) || 100}
+          initialLeverage={demoLeverage}
+          initialOutcome={demoOutcome}
+          triggerExecuteKey={demoExecuteKey}
+        />
       </div>
 
-      {/* Value props */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20">
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-          {[
-            { icon: Activity, title: "Mark-Based Liquidation", desc: "Liquidation follows mark price (probability move). Your liquidation level is shown before you trade. No hidden triggers." },
-            { icon: Lock, title: "Isolated Margin", desc: "Margin is per position. One liquidated position does not pull collateral from your other positions; no cross-margin contagion." },
-            { icon: Database, title: "Fees & Mark Transparency", desc: "Borrow cost and fees disclosed upfront. Mark from Polymarket CLOB mid (or TWAP) for fair, on-chain valuation." },
-          ].map((prop, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-gray-900 p-6 rounded-xl border border-[#00FF99]/20"
-            >
-              <prop.icon className="w-12 h-12 text-[#00FF99] mb-4" />
-              <h3 className="text-white font-bold text-lg mb-2">{prop.title}</h3>
-              <p className="text-gray-400">{prop.desc}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Carrousel catégories Polymarket (sous les trois cases) */}
-      <CategoriesCarousel />
+      {/* Categories Polymarket */}
+      <CategoriesPolymarketSection />
     </div>
   );
 };
 
 // Protocol page data + charts (5x example trade)
-const interestSplitData = [
-  { name: "LPs: $13.04", value: 85, color: "#00FF99" },
-  { name: "Protocol: $2.30", value: 15, color: "#888888" },
-];
-const InterestSplitChart = () => (
-  <div className="relative min-w-0">
-    <div className="h-[240px] sm:h-[280px] min-h-[200px]">
+const FeeSplitDonut = ({ title, total, data }) => (
+  <div className="flex flex-col items-center min-w-0">
+    <h4 className="text-sm sm:text-base font-bold text-white mb-1 text-center">{title}</h4>
+    <p className="text-[10px] sm:text-xs text-gray-500 mb-2 text-center">{total}</p>
+    <div className="h-[160px] sm:h-[200px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart margin={{ top: 12, right: 24, bottom: 12, left: 24 }}>
+        <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
           <Pie
-            data={interestSplitData}
+            data={data}
             cx="50%"
             cy="50%"
-            innerRadius="38%"
-            outerRadius="88%"
-            paddingAngle={0}
+            innerRadius="40%"
+            outerRadius="80%"
+            paddingAngle={1}
             dataKey="value"
             stroke="none"
-            label={({ name, cx, cy, midAngle, outerRadius, fill }) => {
-              const RADIAN = Math.PI / 180;
-              const r = typeof outerRadius === "number" ? outerRadius : 80;
-              const labelRadius = r + 14;
-              const x = cx + labelRadius * Math.cos(-midAngle * RADIAN);
-              const y = cy + labelRadius * Math.sin(-midAngle * RADIAN);
-              const textAnchor = x >= cx ? "start" : "end";
-              return (
-                <text x={x} y={y} fill={fill === "#00FF99" ? "#00FF99" : "#aaaaaa"} textAnchor={textAnchor} dominantBaseline="middle" fontSize={12} fontWeight={600}>
-                  {name}
-                </text>
-              );
-            }}
-            labelLine={{ stroke: "#666", strokeWidth: 1, length: 10, lengthType: "straight" }}
           >
-            {interestSplitData.map((entry, index) => (
+            {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
     </div>
-    <div className="mt-3 sm:mt-4 flex flex-wrap justify-center gap-4 sm:gap-8 text-xs sm:text-sm">
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-sm bg-[#00FF99]" />
-        <span className="text-gray-400">LPs:</span>
-        <span className="text-[#00FF99] font-medium">$13.04</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-sm bg-[#888888]" />
-        <span className="text-gray-400">Protocol:</span>
-        <span className="text-gray-400 font-medium">$2.30</span>
-      </div>
+    <div className="mt-2 flex flex-col gap-1 text-[10px] sm:text-xs">
+      {data.map((d, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: d.color }} />
+          <span style={{ color: d.color }} className="font-medium">{d.name}</span>
+        </div>
+      ))}
     </div>
   </div>
 );
+
+const interestSplitData = [
+  { name: "LPs 88%: $13.50", value: 88, color: "#00FF99" },
+  { name: "Insurance 7%: $1.07", value: 7, color: "#EAB308" },
+  { name: "Protocol 5%: $0.77", value: 5, color: "#888888" },
+];
+const openFeeSplitData = [
+  { name: "LPs 50%: $10", value: 50, color: "#00FF99" },
+  { name: "$LMP Buyback 30%: $6", value: 30, color: "#22D3EE" },
+  { name: "Treasury 20%: $4", value: 20, color: "#F59E0B" },
+];
+const liquidationFeeSplitData = [
+  { name: "LPs 50%: $25", value: 50, color: "#00FF99" },
+  { name: "$LMP Buyback 30%: $15", value: 30, color: "#22D3EE" },
+  { name: "Treasury 20%: $10", value: 20, color: "#F59E0B" },
+];
 
 // Protocol Page (from current repo – full version)
 const ProtocolPage = () => {
@@ -1152,32 +1128,6 @@ const ProtocolPage = () => {
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
           <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">Prediction markets, but with leverage</p>
         </motion.div>
-        <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-12 rounded-2xl border border-[#00FF99]/20 mb-8 sm:mb-16">
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-6 sm:mb-8 md:mb-12 text-center">Protocol Architecture</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 relative">
-            <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-[#00FF99]/0 via-[#00FF99]/50 to-[#00FF99]/0" />
-            {[
-              { icon: Database, title: "LP Deposits", desc: "USDC into Vaults" },
-              { icon: TrendingUp, title: "Margin Engine", desc: "Traders borrow with leverage" },
-              { icon: Activity, title: "Oracle Monitor", desc: "Real-time price tracking" },
-              { icon: Shield, title: "Liquidation", desc: "Position secured on market" },
-            ].map((step, i) => (
-              <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.2 }} className="relative z-10 bg-black p-6 rounded-xl border border-[#00FF99]/30 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 bg-[#00FF99]/10 rounded-full flex items-center justify-center">
-                  <step.icon className="w-8 h-8 text-[#00FF99]" />
-                </div>
-                <h3 className="text-white font-bold mb-2">{step.title}</h3>
-                <p className="text-gray-400 text-sm">{step.desc}</p>
-                {i < 3 && (
-                  <>
-                    <ChevronRight className="hidden md:block absolute -right-4 top-1/2 -translate-y-1/2 text-[#00FF99]" />
-                    <ChevronRight className="md:hidden absolute -bottom-4 left-1/2 -translate-x-1/2 rotate-90 text-[#00FF99]" />
-                  </>
-                )}
-              </motion.div>
-            ))}
-          </div>
-        </div>
         <div className="mb-10 sm:mb-16">
           <HowLMWorksSixBoxes />
         </div>
@@ -1187,7 +1137,7 @@ const ProtocolPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {[
               { icon: TrendingUp, title: "Position", rows: [["Collateral:", "$1,000 USDC"], ["Side:", "YES"], ["Leverage:", "5x"], ["Entry price:", "$0.60"], ["Exposure:", "$5,000"], ["Approx. shares:", "8,333.33"]] },
-              { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee (0.2% of exposure):", "$10"], ["Borrowed from Vaults:", "~$4,000"], ["APR:", "20%"], ["Duration:", "7 days"], ["Interest paid:", "$15.34"], ["Protocol cut (15%):", "$2.30"], ["LPs receive:", "$13.04"]] },
+              { icon: DollarSign, title: "Fees & Borrow", rows: [["Open fee (0.4% of exposure):", "$20"], ["Borrowed from Vaults:", "~$4,000"], ["APR:", "20%"], ["Duration:", "7 days"], ["Interest paid:", "$15.34"]] },
               {
                 icon: Lightbulb,
                 title: "Outcomes",
@@ -1195,7 +1145,7 @@ const ProtocolPage = () => {
                   ["If price moves up:", "$0.60 → $0.66"],
                   ["P&L (before fees/interest):", "+$500"],
                   ["If maintenance margin hit:", "Position liquidated"],
-                  ["Liquidation fee (3–8%):", "Liquidators, insurance, treasury"],
+                  ["Liquidation penalty (5%):", "Split: LPs, insurance, treasury"],
                 ],
               },
             ].map((box, i) => (
@@ -1213,10 +1163,14 @@ const ProtocolPage = () => {
             ))}
           </div>
         </div>
-        <div className="space-y-4 sm:space-y-6 mb-10 sm:mb-16">
+        <div className="mb-10 sm:mb-16">
           <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
-            <h3 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4">Interest Split ($15.34 total)</h3>
-            <InterestSplitChart />
+            <h3 className="text-base sm:text-lg font-bold text-white mb-4 sm:mb-6 text-center">Fee Distribution Breakdown</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
+              <FeeSplitDonut title="Open/Close Fee" total="0.4% of $5,000 = $20" data={openFeeSplitData} />
+              <FeeSplitDonut title="Borrowing Interest" total="$15.34 (7 days @ 20% APR)" data={interestSplitData} />
+              <FeeSplitDonut title="Liquidation Penalty" total="5% of $1,000 = $50" data={liquidationFeeSplitData} />
+            </div>
           </div>
         </div>
         <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16 overflow-x-hidden">
@@ -1225,7 +1179,15 @@ const ProtocolPage = () => {
             <div>
               <h3 className="text-[#00FF99] font-bold text-xl mb-4">Utility</h3>
               <ul className="space-y-3">
-                {["Governance voting rights", "Trading fee discounts up to 50%", "Staking for yield boost", "Access to exclusive markets"].map((item, i) => (
+                {[
+                  "Governance voting over key protocol decisions",
+                  "Staking to boost LP and vault yields",
+                  "Access to exclusive and early markets",
+                  "Increased max leverage up to 7.5x (vs 5x regular)",
+                  "Reduced borrow and mirroring costs by up to 50%",
+                  "Priority execution queue for faster fills and lower slippage",
+                  "Additional 30% liquidation buffer for safer high-leverage trading",
+                ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-300">
                     <Circle className="w-2 h-2 mt-2 text-[#00FF99] fill-current" />
                     {item}
@@ -1237,10 +1199,11 @@ const ProtocolPage = () => {
               <h3 className="text-[#00FF99] font-bold text-xl mb-4">Distribution</h3>
               <div className="space-y-4">
                 {[
-                  { label: "Community & Rewards", pct: 40, cls: "bg-[#00FF99]" },
-                  { label: "Team & Advisors", pct: 25, cls: "bg-[#00FF99]/70" },
-                  { label: "Treasury & Development", pct: 20, cls: "bg-[#00FF99]/50" },
-                  { label: "Liquidity Provision", pct: 15, cls: "bg-[#00FF99]/30" },
+                  { label: "Liquidity Pool", pct: 45, cls: "bg-[#00FF99]" },
+                  { label: "veVirtual Airdrop", pct: 2, cls: "bg-[#00FF99]/90" },
+                  { label: "Virtuals Ecosystem Airdrop", pct: 3, cls: "bg-[#00FF99]/70" },
+                  { label: "Automated Capital Formation", pct: 25, cls: "bg-[#00FF99]/50" },
+                  { label: "Team", pct: 25, cls: "bg-[#00FF99]/30" },
                 ].map((row) => (
                   <div key={row.label}>
                     <div className="flex justify-between items-center">
@@ -1575,24 +1538,13 @@ const VaultPage = ({ walletConnected }) => {
 // App (pages)
 export default function App() {
   const [currentPage, setCurrentPage] = useState("market");
-  const [alphaInitialEmail, setAlphaInitialEmail] = useState(null);
-  const prevPageRef = useRef("market");
   const { isConnected } = useAccount();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [currentPage]);
 
-  useEffect(() => {
-    // Only clear email when leaving alpha page, not when entering it
-    if (prevPageRef.current === "alpha" && currentPage !== "alpha") {
-      setAlphaInitialEmail(null);
-    }
-    prevPageRef.current = currentPage;
-  }, [currentPage]);
-
   const goToAlphaFromMarket = () => {
-    setAlphaInitialEmail("lmprotcol@gmail.com");
     setCurrentPage("alpha");
   };
 
@@ -1603,7 +1555,7 @@ export default function App() {
       {currentPage === "market" && <MarketTicker />}
 
       {currentPage === "market" && <MarketPage setCurrentPage={setCurrentPage} onAccessAlphaClick={goToAlphaFromMarket} />}
-      {currentPage === "alpha" && <AlphaAccessPage setCurrentPage={setCurrentPage} initialEmail={alphaInitialEmail} />}
+      {currentPage === "alpha" && <AlphaAccessPage setCurrentPage={setCurrentPage} />}
       {currentPage === "protocol" && <ProtocolPage />}
       {currentPage === "vault" && <VaultPage walletConnected={isConnected} />}
       {currentPage === "profile" && <ProfilePage />}

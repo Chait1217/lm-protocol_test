@@ -121,28 +121,125 @@ export default function WhitepaperPage() {
                 </div>
               </Section>
 
-              {/* Business Model */}
+              {/* Business Model & Revenue */}
               <Section id="business" onVisible={setActiveSection}>
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 pb-2 border-b border-[#00FF99]/20">
-                  4. Business Model & Revenue
+                  4. Business Model &amp; Revenue
                 </h2>
-                <div className="space-y-6 text-gray-300 leading-relaxed">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Open/close fees (fees on leveraged exposure)</h3>
-                    <p>0.1%–0.3% on total leveraged position size. Example: $1,000 with 5x = $5,000 exposure → fee on $5,000.</p>
+
+                {/* 4.1 Trader Fee Structure */}
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Trader Fee Structure</h3>
+                <p className="text-gray-300 leading-relaxed mb-4">Premium leverage service on prediction markets:</p>
+                <div className="grid gap-3 mb-8">
+                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">Open / Close Fee</span>
+                      <span className="text-[#00FF99] font-bold text-lg">0.4%</span>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-1">Of total leveraged notional</p>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Borrow interest + protocol performance fee</h3>
-                    <p>Traders pay interest to use Vault capital. Protocol takes 10–20% performance fee before distributing to LPs.</p>
+                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">Borrowing Interest</span>
+                      <span className="text-[#00FF99] font-bold text-lg">Dynamic Kink Model</span>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-1">5–78% APR depending on utilization</p>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Liquidation penalties + splits (liquidators/insurance/treasury)</h3>
-                    <p>2–5% liquidation fee from remaining collateral, split between liquidators, insurance fund, and treasury.</p>
+                  <div className="p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">Liquidation Penalty</span>
+                      <span className="text-[#00FF99] font-bold text-lg">5%</span>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-1">Of remaining collateral on insufficient margin</p>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#00FF99] mb-2">Ecosystem flywheel</h3>
-                    <p>High volume → more fees → higher LP APY → more LPs → larger Vaults → higher leverage caps → market dominance.</p>
+                </div>
+
+                {/* 4.2 Dynamic Borrowing Interest (Kink Model) */}
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Dynamic Borrowing Interest (Kink Model)</h3>
+                <div className="p-5 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm mb-6">
+                  <div className="text-gray-400 mb-3">BASE: 5% &nbsp;|&nbsp; KINK: 70% &nbsp;|&nbsp; SLOPE1: 15% &nbsp;|&nbsp; SLOPE2: 60%</div>
+                  <div className="h-px bg-gray-700 mb-3" />
+                  <div className="space-y-1">
+                    <div className="flex justify-between"><span className="text-gray-400">Util 30%</span><span className="text-white">7.9% APR</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Util 50%</span><span className="text-white">11.4% APR</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Util 70%</span><span className="text-[#00FF99]">20.0% APR (kink)</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Util 85%</span><span className="text-yellow-400">35.0% APR</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Util 95%</span><span className="text-red-400">78.0% APR</span></div>
                   </div>
+                </div>
+
+                <h4 className="text-base font-semibold text-white mb-3">Interest Split</h4>
+                <p className="text-gray-400 text-sm mb-3">Distribution of interest paid by traders:</p>
+                <div className="grid gap-3 mb-8">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[#00FF99]/5 border border-[#00FF99]/20">
+                    <span className="text-[#00FF99] font-semibold">88% → LP Yield</span>
+                    <span className="text-gray-400 text-sm">Vault auto-compounds</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+                    <span className="text-yellow-400 font-semibold">7% → Insurance</span>
+                    <span className="text-gray-400 text-sm">Bad debt coverage</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                    <span className="text-red-400 font-semibold">5% → Protocol</span>
+                    <span className="text-gray-400 text-sm">Treasury</span>
+                  </div>
+                </div>
+
+                {/* 4.3 Revenue Distribution */}
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Revenue Distribution (Real Yield + $LMP Flywheel)</h3>
+                <p className="text-gray-300 leading-relaxed mb-4">Every net profit dollar:</p>
+                <div className="grid gap-3 mb-8">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-[#00FF99]/5 border border-[#00FF99]/20">
+                    <span className="text-[#00FF99] font-bold text-lg">50% → Vault (LPs)</span>
+                    <span className="text-gray-400 text-sm">USDC yield</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
+                    <span className="text-cyan-400 font-bold text-lg">30% → $LMP Buyback</span>
+                    <span className="text-gray-400 text-sm">Constant demand</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                    <span className="text-amber-400 font-bold text-lg">20% → Treasury</span>
+                    <span className="text-gray-400 text-sm">Growth capital</span>
+                  </div>
+                </div>
+
+                {/* 4.4 Fee Structure Summary Table */}
+                <h3 className="text-lg font-semibold text-white mb-4">Fee Structure Summary</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="text-left py-3 px-3 text-gray-400 font-medium">Fee Source</th>
+                        <th className="text-left py-3 px-3 text-gray-400 font-medium">Rate</th>
+                        <th className="text-right py-3 px-3 text-[#00FF99] font-medium">LP 50%</th>
+                        <th className="text-right py-3 px-3 text-cyan-400 font-medium">$LMP 30%</th>
+                        <th className="text-right py-3 px-3 text-amber-400 font-medium">Treasury 20%</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-300">
+                      <tr className="border-b border-gray-800">
+                        <td className="py-3 px-3 font-medium text-white">Open / Close</td>
+                        <td className="py-3 px-3">0.4% notional</td>
+                        <td className="py-3 px-3 text-right text-[#00FF99]">0.2%</td>
+                        <td className="py-3 px-3 text-right text-cyan-400">0.12%</td>
+                        <td className="py-3 px-3 text-right text-amber-400">0.08%</td>
+                      </tr>
+                      <tr className="border-b border-gray-800">
+                        <td className="py-3 px-3 font-medium text-white">Borrow APR</td>
+                        <td className="py-3 px-3">5–78% (kink)</td>
+                        <td className="py-3 px-3 text-right text-[#00FF99]">2.5–39%</td>
+                        <td className="py-3 px-3 text-right text-cyan-400">1.5–23.4%</td>
+                        <td className="py-3 px-3 text-right text-amber-400">1–15.6%</td>
+                      </tr>
+                      <tr>
+                        <td className="py-3 px-3 font-medium text-white">Liquidation</td>
+                        <td className="py-3 px-3">5% collateral</td>
+                        <td className="py-3 px-3 text-right text-[#00FF99]">2.5%</td>
+                        <td className="py-3 px-3 text-right text-cyan-400">1.5%</td>
+                        <td className="py-3 px-3 text-right text-amber-400">1%</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </Section>
 
@@ -151,9 +248,29 @@ export default function WhitepaperPage() {
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 pb-2 border-b border-[#00FF99]/20">
                   5. Tokenomics (LMP)
                 </h2>
-                <div className="space-y-4 text-gray-300 leading-relaxed">
+                <div className="space-y-4 text-gray-300 leading-relaxed mb-8">
                   <p><strong className="text-[#00FF99]">Value capture via buyback & distribute / burn:</strong> A portion of protocol revenue buys back $LMP from the market—burned or distributed to stakers.</p>
                   <p><strong className="text-[#00FF99]">Staking as security backstop:</strong> Staked $LMP acts as a backstop for the insurance fund, earning a share of revenue in exchange for securing the system.</p>
+                </div>
+
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-4">$LMP Staker Advantages</h3>
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <span className="text-white font-semibold">7.5x Max Leverage</span>
+                    <span className="text-gray-400 text-sm">vs 5x regular</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <span className="text-white font-semibold">Up to 50% Fee Discounts</span>
+                    <span className="text-gray-400 text-sm">Borrow + mirroring costs</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <span className="text-white font-semibold">Priority Execution Queue</span>
+                    <span className="text-gray-400 text-sm">Faster fills, less slippage</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <span className="text-white font-semibold">30% Extra Liquidation Buffer</span>
+                    <span className="text-gray-400 text-sm">45% total protection</span>
+                  </div>
                 </div>
               </Section>
 

@@ -117,60 +117,85 @@ export default defineConfig({
               return
             }
             
-            // Async function to fetch data (BTC $100k by Dec 31 2026 – same as trade-demo)
-            const BTC100K_SLUG = 'will-bitcoin-reach-100000-by-december-31-2026-571'
+            // Async function to fetch data: prefer BTC $100k by Dec 31 2026, fallback to top by volume
+            const PREFERRED_SLUGS = [
+              'will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568',
+              'will-gavin-newsom-win-the-2028-democratic-presidential-nomination',
+              'will-bitcoin-reach-100000-by-december-31-2026-571',
+              'will-bitcoin-reach-100000-by-december-31-2026',
+              'bitcoin-100k-december-2026',
+            ]
             const fetchData = async () => {
               try {
-                console.log('[Polymarket] Fetching live market data for "Will Bitcoin reach $100,000 by December 31, 2026?"...')
-                
+                console.log('[Polymarket] Fetching live market data...')
                 let marketData = null
-                
-                // Approach 1: Market slug directly
-                console.log('[Polymarket] Trying market slug...')
-                const marketSlugResult = await fetchHttps(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(BTC100K_SLUG)}`)
-                if (marketSlugResult.status === 200 && marketSlugResult.data) {
-                  const raw = marketSlugResult.data
-                  const markets = Array.isArray(raw) ? raw : raw.markets || raw.data || [raw]
-                  if (markets.length > 0) {
-                    marketData = markets[0]
-                    console.log('[Polymarket] Found via market slug:', marketData.question)
+
+                // Approach 1: Path-based slug (GET /markets/slug/{slug})
+                for (const slug of PREFERRED_SLUGS) {
+                  const pathResult = await fetchHttps(`https://gamma-api.polymarket.com/markets/slug/${encodeURIComponent(slug)}`)
+                  if (pathResult.status === 200 && pathResult.data && (pathResult.data.slug || pathResult.data.question)) {
+                    marketData = pathResult.data
+                    console.log('[Polymarket] Found via path slug:', marketData.question)
+                    break
                   }
                 }
-                
-                // Approach 2: Events API with slug
+
+                // Approach 2: Query-based slug
                 if (!marketData) {
-                  console.log('[Polymarket] Trying events slug...')
-                  const slugResult = await fetchHttps(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(BTC100K_SLUG)}`)
-                  if (slugResult.status === 200 && slugResult.data) {
-                    const events = Array.isArray(slugResult.data) ? slugResult.data : [slugResult.data]
-                    if (events.length > 0 && events[0].markets && events[0].markets.length > 0) {
-                      marketData = events[0].markets[0]
-                      console.log('[Polymarket] Found via events slug:', marketData.question)
+                  for (const slug of PREFERRED_SLUGS) {
+                    const queryResult = await fetchHttps(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`)
+                    if (queryResult.status === 200 && queryResult.data) {
+                      const raw = queryResult.data
+                      const markets = Array.isArray(raw) ? raw : raw.markets || raw.data || (raw.slug ? [raw] : [])
+                      if (markets.length > 0) {
+                        marketData = markets[0]
+                        console.log('[Polymarket] Found via query slug:', marketData.question)
+                        break
+                      }
                     }
                   }
                 }
-                
-                // Approach 3: Search all markets for BTC 100k Dec 31 2026
+
+                // Approach 3: Events API with slug
                 if (!marketData) {
-                  const gammaEndpoints = [
-                    'https://gamma-api.polymarket.com/markets?closed=false&limit=1000',
-                    'https://gamma-api.polymarket.com/markets?active=true&limit=1000',
-                  ]
-                  for (const endpoint of gammaEndpoints) {
-                    const result = await fetchHttps(endpoint)
-                    if (result.status === 200 && result.data) {
-                      const markets = Array.isArray(result.data) ? result.data : []
-                      const btcMarket = markets.find(m => {
-                        const s = (m.slug || '').toLowerCase()
-                        const q = (m.question || '').toLowerCase()
-                        return s.includes('bitcoin') && (s.includes('100000') || s.includes('100k')) ||
-                               (q.includes('bitcoin') && q.includes('100') && q.includes('2026'))
-                      })
-                      if (btcMarket) {
-                        marketData = btcMarket
-                        console.log('[Polymarket] Found via search:', marketData.question)
+                  for (const slug of PREFERRED_SLUGS) {
+                    const slugResult = await fetchHttps(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`)
+                    if (slugResult.status === 200 && slugResult.data) {
+                      const events = Array.isArray(slugResult.data) ? slugResult.data : [slugResult.data]
+                      if (events.length > 0 && events[0].markets && events[0].markets.length > 0) {
+                        marketData = events[0].markets[0]
+                        console.log('[Polymarket] Found via events slug:', marketData.question)
                         break
                       }
+                    }
+                  }
+                }
+
+                // Approach 4: Fallback — top active market by 24h volume (high volume + volatile)
+                if (!marketData) {
+                  const listResult = await fetchHttps('https://gamma-api.polymarket.com/markets?closed=false&active=true&limit=200')
+                  if (listResult.status === 200 && listResult.data) {
+                    const markets = Array.isArray(listResult.data) ? listResult.data : []
+                    const parseTokenIds = (m) => {
+                      let ids = m.clobTokenIds || (m.tokens && m.tokens.map(t => t.token_id || t.tokenId))
+                      if (typeof ids === 'string') {
+                        try { ids = JSON.parse(ids) } catch (_) { ids = [] }
+                      }
+                      return Array.isArray(ids) ? ids : []
+                    }
+                    const withVolume = markets.filter(m => {
+                      const tokenIds = parseTokenIds(m)
+                      const vol = m.volume24hrNum ?? m.volumeNum ?? Number(m.volume24hr) ?? Number(m.volume) ?? 0
+                      return vol > 0 && tokenIds.length > 0
+                    })
+                    const byVolume = [...withVolume].sort((a, b) => {
+                      const vA = a.volume24hrNum ?? a.volumeNum ?? Number(a.volume24hr) ?? Number(a.volume) ?? 0
+                      const vB = b.volume24hrNum ?? b.volumeNum ?? Number(b.volume24hr) ?? Number(b.volume) ?? 0
+                      return vB - vA
+                    })
+                    if (byVolume.length > 0) {
+                      marketData = byVolume[0]
+                      console.log('[Polymarket] Using top by volume:', marketData.question)
                     }
                   }
                 }
@@ -178,6 +203,9 @@ export default defineConfig({
                 if (marketData) {
                   // Enrich with live best bid/ask from CLOB
                   let tokenIds = marketData.clobTokenIds
+                  if (typeof tokenIds === 'string') {
+                    try { tokenIds = JSON.parse(tokenIds) } catch (_) { tokenIds = [] }
+                  }
                   if (!tokenIds && marketData.tokens) tokenIds = marketData.tokens.map(t => t.token_id || t.tokenId)
                   if (Array.isArray(tokenIds) && tokenIds.length > 0) {
                     try {
@@ -186,12 +214,15 @@ export default defineConfig({
                         const book = bookResult.data
                         const bids = book.bids || []
                         const asks = book.asks || []
-                        if (bids.length > 0 || asks.length > 0) {
-                          const bestBid = bids.length > 0 ? parseFloat(bids[0].price) : null
-                          const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : null
-                          if (bestBid != null || bestAsk != null) {
-                            marketData = { ...marketData, bestBid: bestBid ?? marketData.bestBid, bestAsk: bestAsk ?? marketData.bestAsk }
-                          }
+                        const toPrice = (level) => typeof level === 'object' && level != null
+                          ? (level.price != null ? parseFloat(level.price) : (Array.isArray(level) ? parseFloat(level[0]) : NaN))
+                          : NaN
+                        const bidPrices = bids.map(toPrice).filter(p => !isNaN(p) && p >= 0 && p <= 1)
+                        const askPrices = asks.map(toPrice).filter(p => !isNaN(p) && p >= 0 && p <= 1)
+                        const bestBid = bidPrices.length > 0 ? Math.max(...bidPrices) : null
+                        const bestAsk = askPrices.length > 0 ? Math.min(...askPrices) : null
+                        if (bestBid != null || bestAsk != null) {
+                          marketData = { ...marketData, bestBid: bestBid ?? marketData.bestBid, bestAsk: bestAsk ?? marketData.bestAsk }
                         }
                       }
                     } catch (e) {

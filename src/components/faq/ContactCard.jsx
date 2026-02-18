@@ -145,14 +145,14 @@ export default function ContactCard() {
         <p className="text-xs text-gray-500 mb-3">Or reach us directly:</p>
         <div className="space-y-2 text-sm">
           <a
-            href="mailto:support@lmprotocol.xyz"
+            href="mailto:lmprotocolcontact@gmail.com"
             className="flex items-center gap-2 text-gray-400 hover:text-[#00FF99] transition-colors"
           >
             <Mail className="w-4 h-4" />
-            support@lmprotocol.xyz
+            lmprotocolcontact@gmail.com
           </a>
           <a
-            href="https://x.com/lm_protocole?s=21"
+            href="https://x.com/lm_protocol?s=11"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-gray-400 hover:text-[#00FF99] transition-colors"

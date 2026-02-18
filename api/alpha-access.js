@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     // Send email notification using Resend (or similar service)
     // You'll need to set RESEND_API_KEY in your Vercel environment variables
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
-    const recipientEmail = 'lmprotcol@gmail.com';
+    const recipientEmail = 'lmprotocolcontact@gmail.com';
 
     if (RESEND_API_KEY) {
       try {
