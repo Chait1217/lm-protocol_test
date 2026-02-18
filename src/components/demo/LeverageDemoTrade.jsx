@@ -270,8 +270,8 @@ const LeverageDemoTrade = ({
   ];
 
   return (
-    <div className={embedded ? "bg-black pt-4 md:pt-6 pb-8 md:pb-10" : "min-h-screen bg-black pt-20 md:pt-24 pb-12 md:pb-20 px-3 md:px-4"}>
-      <div className={embedded ? "w-full" : "max-w-6xl mx-auto"}>
+    <div className={`min-w-0 max-w-full overflow-x-hidden ${embedded ? "bg-black pt-4 md:pt-6 pb-8 md:pb-10" : "min-h-screen bg-black pt-20 md:pt-24 pb-12 md:pb-20 px-3 md:px-4"}`}>
+      <div className={`min-w-0 ${embedded ? "w-full" : "max-w-6xl mx-auto"}`}>
         {/* Header – compact when embedded */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -432,7 +432,7 @@ const LeverageDemoTrade = ({
 
             {/* Visual Flow Diagram – compact */}
             <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-lg md:rounded-xl p-2 md:p-4">
-              <div className="grid grid-cols-3 gap-1.5 md:gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
                 {/* User Wallet */}
                 <div className="flex flex-col items-center">
                   <motion.div

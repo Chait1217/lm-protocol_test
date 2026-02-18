@@ -479,8 +479,8 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
 // Footer Component (from current repo – clickable links)
 const Footer = ({ setCurrentPage }) => {
   return (
-    <footer className="bg-black border-t border-[#00FF99]/10 py-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <footer className="bg-black border-t border-[#00FF99]/10 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 min-w-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           <div>
             <img
@@ -494,26 +494,26 @@ const Footer = ({ setCurrentPage }) => {
           </div>
           <div>
             <h4 className="text-white font-medium mb-3">Product</h4>
-            <div className="space-y-2 text-sm text-gray-400">
-              <button onClick={() => setCurrentPage?.("market")} className="block text-left hover:text-[#00FF99] transition-colors">Markets</button>
-              <button onClick={() => setCurrentPage?.("vault")} className="block text-left hover:text-[#00FF99] transition-colors">Vaults</button>
-              <button onClick={() => setCurrentPage?.("documentation")} className="block text-left hover:text-[#00FF99] transition-colors">Documentation</button>
+            <div className="space-y-0 text-sm text-gray-400">
+              <button onClick={() => setCurrentPage?.("market")} className="block text-left w-full py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Markets</button>
+              <button onClick={() => setCurrentPage?.("vault")} className="block text-left w-full py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Vaults</button>
+              <button onClick={() => setCurrentPage?.("documentation")} className="block text-left w-full py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Documentation</button>
             </div>
           </div>
           <div>
             <h4 className="text-white font-medium mb-3">Resources</h4>
-            <div className="space-y-2 text-sm text-gray-400">
-              <button onClick={() => setCurrentPage?.("whitepaper")} className="block text-left hover:text-[#00FF99] transition-colors">Whitepaper</button>
-              <div>Audit Reports</div>
-              <div>GitHub</div>
+            <div className="space-y-0 text-sm text-gray-400">
+              <button onClick={() => setCurrentPage?.("whitepaper")} className="block text-left w-full py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Whitepaper</button>
+              <div className="py-2.5 min-h-[44px] opacity-70">Audit Reports</div>
+              <div className="py-2.5 min-h-[44px] opacity-70">GitHub</div>
             </div>
           </div>
           <div>
             <h4 className="text-white font-medium mb-3">Community</h4>
-            <div className="space-y-2 text-sm text-gray-400">
-              <a href="https://x.com/lm_protocol?s=11" target="_blank" rel="noopener noreferrer" className="block hover:text-[#00FF99] transition-colors">X</a>
-              <a href="#" className="block hover:text-[#00FF99] transition-colors">Telegram</a>
-              <button onClick={() => setCurrentPage?.("faq")} className="block text-left hover:text-[#00FF99] transition-colors">FAQ</button>
+            <div className="space-y-0 text-sm text-gray-400">
+              <a href="https://x.com/lm_protocol?s=11" target="_blank" rel="noopener noreferrer" className="block py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">X</a>
+              <a href="#" className="block py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Telegram</a>
+              <button onClick={() => setCurrentPage?.("faq")} className="block text-left w-full py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">FAQ</button>
             </div>
           </div>
         </div>
@@ -606,7 +606,7 @@ const CategoryCard = ({ category }) => {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block h-full min-h-[180px] rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 transition-all hover:border-[#00FF99]/50 hover:shadow-[0_0_28px_rgba(0,255,153,0.15)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00FF99]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+      className="group block h-full min-h-[180px] min-w-0 rounded-xl border border-[#00FF99]/25 overflow-hidden bg-gray-900 transition-all hover:border-[#00FF99]/50 hover:shadow-[0_0_28px_rgba(0,255,153,0.15)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00FF99]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black touch-manipulation"
     >
       <div className="relative w-full h-full min-h-[180px]">
         {image && (
@@ -644,7 +644,7 @@ const CategoriesPolymarketSection = () => (
     <p className="text-gray-400 text-sm sm:text-base mb-6 max-w-2xl">
       Browse prediction markets by category. Click a card to open Polymarket.
     </p>
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-5 min-w-0">
       {POLYMARKET_CATEGORIES.map((cat) => (
         <CategoryCard key={cat.id} category={cat} />
       ))}
@@ -954,7 +954,7 @@ const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
   }, [featuredMarket?.conditionId, orderBookSide]);
 
   return (
-    <div className="min-h-screen bg-black pt-32 sm:pt-36 pb-12 sm:pb-16 overflow-x-hidden">
+    <div className="min-h-screen min-w-0 max-w-full bg-black pt-28 sm:pt-36 pb-12 sm:pb-16 overflow-x-hidden">
       {/* Hero */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 text-center relative">
         <motion.div
@@ -1122,8 +1122,8 @@ const ProtocolPage = () => {
     { quarter: "Q4 2026", title: "AI Agents", items: ["AI Trading Agents", "Cross-chain Bridge", "DAO Governance"] },
   ];
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-12 sm:pb-16 overflow-x-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 min-w-0">
+    <div className="min-h-screen min-w-0 max-w-full bg-black pt-16 sm:pt-20 pb-12 sm:pb-16 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 min-w-0 w-full">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-10 sm:py-16">
           <h1 className="text-3xl sm:text-5xl font-bold text-white mb-3 sm:mb-4">How It <span className="text-[#00FF99]">Works</span></h1>
           <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto px-2">Prediction markets, but with leverage</p>
@@ -1549,7 +1549,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-black overflow-x-hidden">
+    <div className="min-h-screen min-w-0 w-full max-w-full bg-black overflow-x-hidden">
       <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
 
       {currentPage === "market" && <MarketTicker />}

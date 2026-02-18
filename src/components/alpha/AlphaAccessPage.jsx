@@ -72,7 +72,7 @@ export default function AlphaAccessPage({ setCurrentPage }) {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-black pt-20 sm:pt-24 pb-16 overflow-x-hidden">
+      <div className="min-h-screen min-w-0 max-w-full bg-black pt-20 sm:pt-24 pb-16 overflow-x-hidden">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -105,7 +105,7 @@ export default function AlphaAccessPage({ setCurrentPage }) {
   }
 
   return (
-    <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-16 overflow-x-hidden">
+    <div className="min-h-screen min-w-0 max-w-full bg-black pt-16 sm:pt-20 pb-16 overflow-x-hidden">
       {/* Hero */}
       <section className="relative max-w-4xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-10 sm:pb-14 text-center">
         <motion.div

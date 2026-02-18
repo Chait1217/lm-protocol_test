@@ -13,6 +13,11 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+#root {
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* Safe area insets for notched devices */
 .safe-area-inset-top {
   padding-top: max(0.25rem, env(safe-area-inset-top));
