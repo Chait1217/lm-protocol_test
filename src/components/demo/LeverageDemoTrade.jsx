@@ -294,10 +294,10 @@ const LeverageDemoTrade = ({
           className={`space-y-2 md:space-y-3 ${embedded ? "w-full" : "max-w-5xl mx-auto"}`}
         >
             {/* Top row: Status Bar + Trade Details side by side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
-              {/* Status Bar + Reset Demo below */}
-              <div className="space-y-2 md:space-y-3">
-                <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-lg md:rounded-xl p-2 md:p-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3 items-stretch">
+              {/* Left: one card so no blank below Status when Trade Details is taller */}
+              <div className="flex flex-col bg-gray-900/50 border border-[#00FF99]/20 rounded-lg md:rounded-xl overflow-hidden">
+                <div className="p-2 md:p-3 flex-shrink-0">
                   <div className="flex items-center justify-between text-sm md:text-base">
                     <span className="text-gray-400">Status:</span>
                     <span className={`font-semibold ${tradeStep === 5 ? "text-[#00FF99]" : tradeStep > 0 ? "text-yellow-400" : "text-gray-400"}`}>
@@ -313,15 +313,19 @@ const LeverageDemoTrade = ({
                     />
                   </div>
                 </div>
-                {(showSuccess || tradeStep > 0) && (
-                  <button
-                    onClick={resetDemo}
-                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 md:py-3 px-5 md:px-6 rounded-xl font-semibold text-sm md:text-base text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-all cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Reset Demo
-                  </button>
-                )}
+                <div className="p-2 md:p-3 pt-0 flex-1 flex flex-col min-h-0">
+                  {(showSuccess || tradeStep > 0) ? (
+                    <button
+                      onClick={resetDemo}
+                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 md:py-3 px-5 md:px-6 rounded-xl font-semibold text-sm md:text-base text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-all cursor-pointer flex-shrink-0"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Reset Demo
+                    </button>
+                  ) : (
+                    <p className="text-gray-500 text-xs md:text-sm flex-1">Click &quot;Execute Demo Trade&quot; above to run the simulation.</p>
+                  )}
+                </div>
               </div>
               {/* Trade Details - beside Status */}
               <div className="bg-gray-900/50 border border-[#00FF99]/20 rounded-lg md:rounded-xl p-2 md:p-3">
