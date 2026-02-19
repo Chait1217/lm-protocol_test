@@ -1,10 +1,11 @@
 // Vercel Serverless: contact form → email via Resend
-// Env: RESEND_API_KEY, CONTACT_TO_EMAIL, CONTACT_FROM_EMAIL (default lmprotocolcontact@gmail.com)
+// Env: RESEND_API_KEY, CONTACT_TO_EMAIL, CONTACT_FROM_EMAIL
+// FROM must be a verified domain or Resend sandbox (onboarding@resend.dev). Gmail cannot be used as FROM.
 
 import { Resend } from "resend";
 
 const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "lmprotocolcontact@gmail.com";
-const CONTACT_FROM_EMAIL = process.env.CONTACT_FROM_EMAIL || "lmprotocolcontact@gmail.com";
+const CONTACT_FROM_EMAIL = process.env.CONTACT_FROM_EMAIL || "onboarding@resend.dev";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");

@@ -40,7 +40,7 @@ export default defineConfig({
       name: 'api-contact',
       configureServer(server) {
         const to = process.env.CONTACT_TO_EMAIL || 'lmprotocolcontact@gmail.com'
-        const from = process.env.CONTACT_FROM_EMAIL || 'lmprotocolcontact@gmail.com'
+        const from = process.env.CONTACT_FROM_EMAIL || 'onboarding@resend.dev'
         const apiKey = process.env.RESEND_API_KEY
         server.middlewares.use((req, res, next) => {
           if (req.url === '/api/contact' && req.method === 'POST') {
@@ -93,7 +93,7 @@ export default defineConfig({
       name: 'api-alpha-access',
       configureServer(server) {
         const to = process.env.CONTACT_TO_EMAIL || 'lmprotocolcontact@gmail.com'
-        const from = process.env.CONTACT_FROM_EMAIL || 'lmprotocolcontact@gmail.com'
+        const from = process.env.CONTACT_FROM_EMAIL || 'onboarding@resend.dev'
         const apiKey = process.env.RESEND_API_KEY
         server.middlewares.use((req, res, next) => {
           if (req.url === '/api/alpha-access' && req.method === 'POST') {
