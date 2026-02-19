@@ -250,8 +250,8 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black border-b-2 border-[#00FF99]/20 shadow-[0_4px_24px_rgba(0,0,0,0.5)] md:bg-black/90 md:backdrop-blur-xl md:border-b md:border-[#00FF99]/10 safe-area-inset-top">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-3 min-h-[72px] sm:min-h-[80px] relative">
-        <div className="flex-shrink-0 flex items-center gap-2">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 min-h-[72px] sm:min-h-[80px]">
+        <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={() => setMobileMenuOpen((o) => !o)}
@@ -266,7 +266,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
             className="h-10 sm:h-12 w-auto"
           />
         </div>
-        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 justify-center gap-8">
+        <div className="hidden md:flex justify-center gap-8">
           {navLinks.map((link) => (
             <button
               key={link.key}
@@ -288,46 +288,30 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 justify-end flex-shrink-0 min-w-0">
-          {/* Visible connection status pill - compact on small screens */}
-          <span
-            className={`inline-flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border
-              ${status === "connected"
-                ? "bg-[#00FF99]/10 text-[#00FF99] border-[#00FF99]/30"
-                : isConnecting
+        <div className="flex items-center gap-2 sm:gap-3 justify-end min-w-0">
+          {/* Connection status pill only when not connected (when connected we show Profile + account button only) */}
+          {status !== "connected" && (
+            <span
+              className={`inline-flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border
+                ${isConnecting
                   ? "bg-amber-500/10 text-amber-400 border-amber-500/30 animate-pulse"
                   : "bg-gray-500/10 text-gray-400 border-gray-500/30"
-              }`}
-            aria-live="polite"
-          >
-            {status === "connected" ? (
-              <>
-                <span className="relative flex h-2 w-2 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FF99] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00FF99]" />
-                </span>
-                <span className="hidden sm:inline">Connected</span>
-                {chain?.name && (
-                  <span className="hidden lg:inline text-[#00FF99]/80">• {chain.name}</span>
-                )}
-                {address && (
-                  <span className="truncate max-w-[60px] sm:max-w-[100px] font-mono text-xs opacity-90" title={address}>
-                    {address.slice(0, 6)}…{address.slice(-4)}
-                  </span>
-                )}
-              </>
-            ) : isConnecting ? (
-              <>
-                <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-ping flex-shrink-0" />
-                <span className="hidden sm:inline">Connecting…</span>
-              </>
-            ) : (
-              <>
-                <span className="inline-block h-2 w-2 rounded-full bg-gray-500 flex-shrink-0" />
-                <span className="hidden sm:inline">Disconnected</span>
-              </>
-            )}
-          </span>
+                }`}
+              aria-live="polite"
+            >
+              {isConnecting ? (
+                <>
+                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-ping flex-shrink-0" />
+                  <span className="hidden sm:inline">Connecting…</span>
+                </>
+              ) : (
+                <>
+                  <span className="inline-block h-2 w-2 rounded-full bg-gray-500 flex-shrink-0" />
+                  <span className="hidden sm:inline">Disconnected</span>
+                </>
+              )}
+            </span>
+          )}
           <ConnectButton.Custom>
             {({
               account,
@@ -1413,7 +1397,7 @@ const ProfilePage = () => {
           ))}
         </motion.div>
 
-        {/* Positions ouvertes */}
+        {/* Open Positions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1422,10 +1406,10 @@ const ProfilePage = () => {
         >
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
             <Activity className="w-5 h-5 text-[#00FF99]" />
-            Positions ouvertes
+            Open Positions
           </h2>
           {mockOpenPositions.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">Aucune position ouverte.</p>
+            <p className="text-gray-500 text-center py-8">No open positions.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">

@@ -9,6 +9,15 @@ const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "lmprotocolcontact@gmai
 const rawFrom = process.env.CONTACT_FROM_EMAIL || "onboarding@resend.dev";
 const CONTACT_FROM_EMAIL = /@gmail\.com$/i.test(rawFrom.replace(/^[^<]*<([^>]+)>$/, "$1").trim()) ? "onboarding@resend.dev" : rawFrom;
 
+function escapeHtml(s) {
+  if (s == null || s === "") return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -62,15 +71,15 @@ export default async function handler(req, res) {
       subject: `New Alpha Access Application from ${name}`,
       text: textBody,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; color: #333;">
           <h2 style="color: #00FF99;">New Alpha Access Application</h2>
-          <div style="background: #1a1a1a; padding: 20px; border-radius: 8px;">
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Role:</strong> ${role}</p>
-            ${message ? `<p><strong>Message:</strong><br>${(message || "").replace(/\n/g, "<br>")}</p>` : ""}
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; color: #222;">
+            <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+            <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+            <p><strong>Role:</strong> ${escapeHtml(role)}</p>
+            ${message ? `<p><strong>Message:</strong><br>${escapeHtml(message).replace(/\n/g, "<br>")}</p>` : ""}
           </div>
-          <p style="color: #888; font-size: 12px;">Submitted at: ${new Date().toLocaleString()}</p>
+          <p style="color: #666; font-size: 12px;">Submitted at: ${new Date().toLocaleString()}</p>
         </div>
       `,
     });
