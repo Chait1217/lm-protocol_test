@@ -39,11 +39,14 @@ export default defineConfig({
     {
       name: 'api-contact',
       configureServer(server) {
+        const to = process.env.CONTACT_TO_EMAIL || 'lmprotocolcontact@gmail.com'
+        const from = process.env.CONTACT_FROM_EMAIL || 'lmprotocolcontact@gmail.com'
+        const apiKey = process.env.RESEND_API_KEY
         server.middlewares.use((req, res, next) => {
           if (req.url === '/api/contact' && req.method === 'POST') {
             let body = ''
             req.on('data', (chunk) => { body += chunk })
-            req.on('end', () => {
+            req.on('end', async () => {
               try {
                 const data = JSON.parse(body)
                 if (!data.name || !data.email || !data.message || data.message.length < 10) {
@@ -51,12 +54,33 @@ export default defineConfig({
                   res.end(JSON.stringify({ ok: false, error: 'Validation failed' }))
                   return
                 }
-                console.log('[Contact]', data)
+                if (apiKey) {
+                  const fromAddr = from.includes('<') ? from : `LM Protocol <${from}>`
+                  const emailRes = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      from: fromAddr,
+                      to: [to],
+                      subject: `Contact form: ${data.category ? `[${data.category}] ` : ''}from ${data.name}`,
+                      text: `Name: ${data.name}\nEmail: ${data.email}\n${data.category ? `Category: ${data.category}\n` : ''}\n${data.message}`,
+                    }),
+                  })
+                  if (!emailRes.ok) {
+                    const errText = await emailRes.text()
+                    console.error('[Contact] Resend error:', emailRes.status, errText)
+                    res.writeHead(500, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ ok: false, error: 'Failed to send email' }))
+                    return
+                  }
+                } else {
+                  console.log('[Contact] (no RESEND_API_KEY) ', data.name, data.email)
+                }
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({ ok: true }))
               } catch (e) {
                 res.writeHead(400, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: false }))
+                res.end(JSON.stringify({ ok: false, error: e.message || 'Bad request' }))
               }
             })
           } else {
@@ -68,6 +92,9 @@ export default defineConfig({
     {
       name: 'api-alpha-access',
       configureServer(server) {
+        const to = process.env.CONTACT_TO_EMAIL || 'lmprotocolcontact@gmail.com'
+        const from = process.env.CONTACT_FROM_EMAIL || 'lmprotocolcontact@gmail.com'
+        const apiKey = process.env.RESEND_API_KEY
         server.middlewares.use((req, res, next) => {
           if (req.url === '/api/alpha-access' && req.method === 'POST') {
             let body = ''
@@ -80,15 +107,34 @@ export default defineConfig({
                   res.end(JSON.stringify({ ok: false, error: 'Validation failed' }))
                   return
                 }
-                console.log('[Alpha Access]', data)
-                
-                // In production, this would send an email via Resend or similar service
-                // For now, log it (in production, the Vercel serverless function will handle email sending)
+                if (apiKey) {
+                  const fromAddr = from.includes('<') ? from : `LM Protocol <${from}>`
+                  const textBody = `New Alpha Access Application\n\nName: ${data.name}\nEmail: ${data.email}\nRole: ${data.role}\n${data.message ? `Message: ${data.message}` : ''}\n\nSubmitted at: ${new Date().toISOString()}`
+                  const emailRes = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      from: fromAddr,
+                      to: [to],
+                      subject: `New Alpha Access Application from ${data.name}`,
+                      text: textBody,
+                    }),
+                  })
+                  if (!emailRes.ok) {
+                    const errText = await emailRes.text()
+                    console.error('[Alpha Access] Resend error:', emailRes.status, errText)
+                    res.writeHead(500, { 'Content-Type': 'application/json' })
+                    res.end(JSON.stringify({ ok: false, error: 'Failed to send email' }))
+                    return
+                  }
+                } else {
+                  console.log('[Alpha Access] (no RESEND_API_KEY)', data.name, data.email)
+                }
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({ ok: true }))
               } catch (e) {
                 res.writeHead(400, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: false, error: e.message }))
+                res.end(JSON.stringify({ ok: false, error: e.message || 'Bad request' }))
               }
             })
           } else {

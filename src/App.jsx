@@ -14,6 +14,7 @@ import AlphaAccessPage from "./components/alpha/AlphaAccessPage";
 import PolymarketLivePrediction from "./components/market/PolymarketLivePrediction";
 import PolymarketLivePredictionBoxLeverage from "./components/market/PolymarketLivePredictionBoxLeverage";
 import LeverageDemoTrade from "./components/demo/LeverageDemoTrade";
+import KinkModelModal from "./components/KinkModelModal";
 import {
   Area,
   AreaChart,
@@ -46,6 +47,7 @@ import {
   UserCircle,
   Menu,
   X,
+  Info,
 } from "lucide-react";
 
 // Chart data centered on the market's actual probability (so graph matches displayed odds)
@@ -963,9 +965,9 @@ const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
           transition={{ duration: 0.6 }}
         >
           <h1 className="text-2xl sm:text-4xl md:text-6xl font-bold mb-4 sm:mb-6">
-            <span className="text-white">Institutional-Grade</span>
+            <span className="text-white">Prediction Markets</span>
             <br />
-            <span className="text-[#00FF99]">Leverage Trading</span>
+            <span className="text-[#00FF99]">Amplified</span>
           </h1>
           <p className="text-base sm:text-xl text-gray-400 mb-6 sm:mb-8 max-w-2xl mx-auto px-1">
             Powered by Base L2. Trade prediction markets with up to 5x leverage.
@@ -1115,6 +1117,7 @@ const liquidationFeeSplitData = [
 
 // Protocol Page (from current repo – full version)
 const ProtocolPage = () => {
+  const [kinkModalOpen, setKinkModalOpen] = useState(false);
   const roadmapItems = [
     { quarter: "Q1 2026", title: "Alpha Launch", items: ["Platform Alpha", "$LMP Token Launch", "Virtuals Protocol Integration"] },
     { quarter: "Q2 2026", title: "Beta & Scaling", items: ["Public Beta", "10+ Markets", "Mobile App"] },
@@ -1156,13 +1159,29 @@ const ProtocolPage = () => {
                 </div>
                 <div className="space-y-2 text-gray-400 text-sm">
                   {box.rows.map(([k, v], j) => (
-                    <div key={j} className="flex justify-between gap-2"><span>{k}</span><span className="text-white text-right">{v}</span></div>
+                    <div key={j} className="flex justify-between gap-2 items-center">
+                      <span className="flex items-center gap-1.5">
+                        {k}
+                        {k === "Interest paid:" && (
+                          <button
+                            type="button"
+                            onClick={() => setKinkModalOpen(true)}
+                            className="p-0.5 rounded-full text-[#00FF99]/80 hover:text-[#00FF99] hover:bg-[#00FF99]/10 transition-colors"
+                            aria-label="Explain Dynamic Kink Model"
+                          >
+                            <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                          </button>
+                        )}
+                      </span>
+                      <span className="text-white text-right">{v}</span>
+                    </div>
                   ))}
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
+        {kinkModalOpen && <KinkModelModal onClose={() => setKinkModalOpen(false)} />}
         <div className="mb-10 sm:mb-16">
           <div className="bg-gray-900/60 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 min-w-0 overflow-hidden">
             <h3 className="text-base sm:text-lg font-bold text-white mb-4 sm:mb-6 text-center">Fee Distribution Breakdown</h3>

@@ -262,13 +262,38 @@ export default function WhitepaperPage() {
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 pb-2 border-b border-[#00FF99]/20">
                   5. Tokenomics (LMP)
                 </h2>
-                <div className="space-y-4 text-gray-300 leading-relaxed mb-8">
-                  <p><strong className="text-[#00FF99]">Value capture via buyback & distribute / burn:</strong> A portion of protocol revenue buys back $LMP from the market—burned or distributed to stakers.</p>
-                  <p><strong className="text-[#00FF99]">Staking as security backstop:</strong> Staked $LMP acts as a backstop for the insurance fund, earning a share of revenue in exchange for securing the system.</p>
+
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-4">$LMP Tokenomics Distribution</h3>
+                <div className="space-y-4 mb-8">
+                  {[
+                    { label: "Liquidity Pool", pct: 45 },
+                    { label: "veVirtual Airdrop", pct: 2 },
+                    { label: "Virtuals Ecosystem Airdrop", pct: 3 },
+                    { label: "Automated Capital Formation", pct: 25 },
+                    { label: "Team", pct: 25 },
+                  ].map((row) => (
+                    <div key={row.label}>
+                      <div className="flex justify-between items-center text-gray-300">
+                        <span>{row.label}</span>
+                        <span className="text-white font-bold">{row.pct}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden mt-2">
+                        <div className="h-full bg-[#00FF99]/70 rounded-full" style={{ width: `${row.pct}%` }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <h3 className="text-lg font-semibold text-[#00FF99] mb-4">$LMP Staker Advantages</h3>
                 <div className="grid gap-3">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <span className="text-white font-semibold">Access to exclusive and early markets</span>
+                    <span className="text-gray-400 text-sm">Early access</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
+                    <span className="text-white font-semibold">Value capture via buyback & distribute / burn</span>
+                    <span className="text-gray-400 text-sm">Revenue buys back $LMP—burned or distributed</span>
+                  </div>
                   <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
                     <span className="text-white font-semibold">7.5x Max Leverage</span>
                     <span className="text-gray-400 text-sm">vs 5x regular</span>

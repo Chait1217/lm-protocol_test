@@ -1,4 +1,4 @@
-// Vercel Serverless: alpha access form → email via Resend
+// Vercel Serverless: contact form → email via Resend
 // Env: RESEND_API_KEY, CONTACT_TO_EMAIL, CONTACT_FROM_EMAIL (default lmprotocolcontact@gmail.com)
 
 import { Resend } from "resend";
@@ -20,10 +20,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { name, email, role, message } = req.body;
+    const { name, email, message, category } = req.body;
 
-    if (!name || !email || !role) {
-      return res.status(400).json({ ok: false, error: "Name, email, and role are required" });
+    if (!name || !email || !message) {
+      return res.status(400).json({ ok: false, error: "Name, email, and message are required" });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,53 +33,49 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
-      console.warn("[Alpha Access] RESEND_API_KEY not set");
+      console.warn("[Contact] RESEND_API_KEY not set");
       return res.status(200).json({ ok: true });
     }
 
     const resend = new Resend(apiKey);
     const from = CONTACT_FROM_EMAIL.includes("<") ? CONTACT_FROM_EMAIL : `LM Protocol <${CONTACT_FROM_EMAIL}>`;
 
-    const textBody = [
-      "New Alpha Access Application",
-      "",
-      `Name: ${name}`,
-      `Email: ${email}`,
-      `Role: ${role}`,
-      message ? `Message: ${message}` : null,
-      "",
-      `Submitted at: ${new Date().toISOString()}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-
     const { error } = await resend.emails.send({
       from,
       to: [CONTACT_TO_EMAIL],
-      subject: `New Alpha Access Application from ${name}`,
-      text: textBody,
+      subject: `Contact form: ${category ? `[${category}] ` : ""}from ${name}`,
+      text: [
+        `Name: ${name}`,
+        `Email: ${email}`,
+        category ? `Category: ${category}` : null,
+        "",
+        message,
+      ]
+        .filter(Boolean)
+        .join("\n"),
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
-          <h2 style="color: #00FF99;">New Alpha Access Application</h2>
+          <h2 style="color: #00FF99;">Contact form</h2>
           <div style="background: #1a1a1a; padding: 20px; border-radius: 8px;">
             <p><strong>Name:</strong> ${name}</p>
             <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Role:</strong> ${role}</p>
-            ${message ? `<p><strong>Message:</strong><br>${(message || "").replace(/\n/g, "<br>")}</p>` : ""}
+            ${category ? `<p><strong>Category:</strong> ${category}</p>` : ""}
+            <p><strong>Message:</strong></p>
+            <p>${(message || "").replace(/\n/g, "<br>")}</p>
           </div>
-          <p style="color: #888; font-size: 12px;">Submitted at: ${new Date().toLocaleString()}</p>
+          <p style="color: #888; font-size: 12px;">${new Date().toISOString()}</p>
         </div>
       `,
     });
 
     if (error) {
-      console.error("[Alpha Access] Resend error:", error);
+      console.error("[Contact] Resend error:", error);
       return res.status(500).json({ ok: false, error: error.message || "Failed to send email" });
     }
 
     return res.status(200).json({ ok: true });
   } catch (err) {
-    console.error("[Alpha Access]", err);
+    console.error("[Contact]", err);
     return res.status(500).json({ ok: false, error: "Internal server error" });
   }
 }

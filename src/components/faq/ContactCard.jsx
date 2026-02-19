@@ -46,7 +46,7 @@ export default function ContactCard() {
         setFormData({ name: "", email: "", category: "Support", message: "" });
         setErrors({});
       } else {
-        setErrors({ submit: "Something went wrong. Please try again." });
+        setErrors({ submit: data.error || "Something went wrong. Please try again." });
       }
     } catch (err) {
       setErrors({ submit: "Failed to send. Please try again." });

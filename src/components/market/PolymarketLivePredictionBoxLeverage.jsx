@@ -63,6 +63,8 @@ export default function PolymarketLivePredictionBoxLeverage({
   const [internalLeverage, setInternalLeverage] = useState(2);
   const [internalAmount, setInternalAmount] = useState("100");
   const [internalOutcome, setInternalOutcome] = useState("YES");
+  const [takeProfit, setTakeProfit] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
   const leverage = valueLeverage !== undefined && valueLeverage !== null ? valueLeverage : internalLeverage;
   const setLeverage = onLeverageChange || setInternalLeverage;
   const amount = valueAmount !== undefined ? valueAmount : internalAmount;
@@ -206,9 +208,26 @@ export default function PolymarketLivePredictionBoxLeverage({
     ? (market?.bestAsk ?? (market?.yesProbability != null ? market.yesProbability / 100 : 0.04))
     : (market?.bestBid != null ? 1 - market.bestBid : (market?.noProbability != null ? market.noProbability / 100 : 0.96));
   const entryPriceCents = Math.round(entryPriceDecimal * 1000) / 10;
+
+  // TP/SL validation (cents): YES = TP > entry, SL < entry; NO = TP < entry, SL > entry
+  const tpNum = takeProfit === "" || takeProfit === "." ? null : parseFloat(takeProfit);
+  const slNum = stopLoss === "" || stopLoss === "." ? null : parseFloat(stopLoss);
+  const entry = entryPriceCents ?? 50;
+  const isYES = selectedOutcome === "YES";
+  const tpValid = tpNum == null || (typeof tpNum === "number" && !Number.isNaN(tpNum) && tpNum >= 0 && tpNum <= 100 && (isYES ? tpNum > entry : tpNum < entry));
+  const slValid = slNum == null || (typeof slNum === "number" && !Number.isNaN(slNum) && slNum >= 0 && slNum <= 100 && (isYES ? slNum < entry : slNum > entry));
+  const tpError = takeProfit.trim() !== "" && !tpValid
+    ? (isYES ? `TP must be > ${entry.toFixed(1)}¢ (entry)` : `TP must be < ${entry.toFixed(1)}¢ (entry)`)
+    : "";
+  const slError = stopLoss.trim() !== "" && !slValid
+    ? (isYES ? `SL must be < ${entry.toFixed(1)}¢ (entry)` : `SL must be > ${entry.toFixed(1)}¢ (entry)`)
+    : "";
+
   const positionSize = amountNum * leverage;
   const shares = entryPriceDecimal > 0 ? positionSize / entryPriceDecimal : 0;
-  const liquidationDecimal = entryPriceDecimal * (1 - 1 / leverage);
+  // Liquidation price with 30% buffer: liquidate earlier to leave protocol cushion
+  const liquidationBuffer = 0.30;
+  const liquidationDecimal = entryPriceDecimal * (1 - (1 / leverage) * (1 + liquidationBuffer));
   const liquidationCents = Math.max(0, Math.round(liquidationDecimal * 1000) / 10);
   const maxWin = entryPriceDecimal > 0 && entryPriceDecimal < 1
     ? shares * (1 - entryPriceDecimal)
@@ -438,10 +457,47 @@ export default function PolymarketLivePredictionBoxLeverage({
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-1.5 mb-1 md:mb-2">
+          <div>
+            <label className="text-gray-400 text-[8px] md:text-[9px] block mb-0">Take Profit (TP)</label>
+            <div className={`flex rounded border overflow-hidden bg-black ${tpError ? "border-red-500/60" : "border-gray-700"}`}>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={takeProfit}
+                onChange={(e) => setTakeProfit(e.target.value)}
+                placeholder="¢"
+                className="w-full bg-transparent px-1.5 md:px-2 py-1 md:py-1.5 text-white text-[9px] md:text-xs focus:outline-none focus:ring-0"
+              />
+              <span className="px-1 py-1 text-gray-500 text-[8px] flex items-center">¢</span>
+            </div>
+            {tpError && <p className="text-red-400 text-[8px] mt-0.5">{tpError}</p>}
+          </div>
+          <div>
+            <label className="text-gray-400 text-[8px] md:text-[9px] block mb-0">Stop Loss (SL)</label>
+            <div className={`flex rounded border overflow-hidden bg-black ${slError ? "border-red-500/60" : "border-gray-700"}`}>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={stopLoss}
+                onChange={(e) => setStopLoss(e.target.value)}
+                placeholder="¢"
+                className="w-full bg-transparent px-1.5 md:px-2 py-1 md:py-1.5 text-white text-[9px] md:text-xs focus:outline-none focus:ring-0"
+              />
+              <span className="px-1 py-1 text-gray-500 text-[8px] flex items-center">¢</span>
+            </div>
+            {slError && <p className="text-red-400 text-[8px] mt-0.5">{slError}</p>}
+          </div>
+        </div>
+
         <div className="bg-black/50 rounded p-1 md:p-1.5 border border-[#00FF99]/10 space-y-0.5 text-[8px] md:text-[9px]">
           <div className="flex justify-between"><span className="text-gray-400">Entry</span><AnimatedValue value={entryPriceCents} format={(v) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" /></div>
           <div className="flex justify-between"><span className="text-gray-400">Position</span><AnimatedValue value={positionSize} format={(v) => (v ?? 0).toFixed(2)} className="text-white font-medium" prefix="$" /></div>
-          <div className="flex justify-between"><span className="text-gray-400">Liq. price</span><AnimatedValue value={liquidationCents} format={(v) => (v ?? 0).toFixed(1)} className="text-red-400 font-semibold font-mono" suffix="¢" /></div>
+          <div className="flex justify-between"><span className="text-gray-400" title="30% liquidation buffer included">Liq. price <span className="text-gray-500 text-[10px]">(buffer incl.)</span></span><AnimatedValue value={liquidationCents} format={(v) => (v ?? 0).toFixed(1)} className="text-red-400 font-semibold font-mono" suffix="¢" /></div>
           <div className="flex justify-between"><span className="text-gray-400">To win</span><AnimatedValue value={maxWin} format={(v) => (v ?? 0).toFixed(2)} className="text-[#00FF99] font-semibold" prefix="$" /></div>
         </div>
       </div>

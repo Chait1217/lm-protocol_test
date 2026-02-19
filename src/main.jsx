@@ -1,5 +1,7 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "@fontsource/geist/400.css";
+import "@fontsource/geist/600.css";
+import "@fontsource/geist/700.css";
 import "./index.css";
 import App from "./App.jsx";
 
@@ -9,22 +11,23 @@ import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 
 import { config } from "./web3";
+import { base } from "wagmi/chains";
 
 const queryClient = new QueryClient();
 
-// Mobile-friendly: compact modal and allow WalletConnect to work on touch devices
+// StrictMode removed: it double-mounts in dev and causes MetaMask "Confirm connection" to loop
 createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          theme={darkTheme()}
-          modalSize="compact"
-          coolMode
-        >
-          <App />
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  </StrictMode>
+  <WagmiProvider config={config}>
+    <QueryClientProvider client={queryClient}>
+      <RainbowKitProvider
+        theme={darkTheme()}
+        modalSize="compact"
+        coolMode
+        showRecentTransactions={false}
+        initialChain={base}
+      >
+        <App />
+      </RainbowKitProvider>
+    </QueryClientProvider>
+  </WagmiProvider>
 );

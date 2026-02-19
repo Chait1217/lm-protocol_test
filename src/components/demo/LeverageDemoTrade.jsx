@@ -19,6 +19,7 @@ import {
   Info,
   Activity,
 } from "lucide-react";
+import KinkModelModal from "../KinkModelModal";
 
 // Fake prediction market questions
 const FAKE_MARKETS = [
@@ -45,7 +46,8 @@ const LeverageDemoTrade = ({
   const [vaultBalance, setVaultBalance] = useState(100000);
   const [userBalance, setUserBalance] = useState(5000);
   const [showSuccess, setShowSuccess] = useState(false);
-  
+  const [kinkModalOpen, setKinkModalOpen] = useState(false);
+
   // Market simulation state
   const [selectedMarket, setSelectedMarket] = useState(FAKE_MARKETS[0]);
   const [currentProb, setCurrentProb] = useState(FAKE_MARKETS[0].baseProb);
@@ -270,6 +272,7 @@ const LeverageDemoTrade = ({
   ];
 
   return (
+    <>
     <div className={`min-w-0 max-w-full overflow-x-hidden ${embedded ? "bg-black pt-4 md:pt-6 pb-8 md:pb-10" : "min-h-screen bg-black pt-20 md:pt-24 pb-12 md:pb-20 px-3 md:px-4"}`}>
       <div className={`min-w-0 ${embedded ? "w-full" : "max-w-6xl mx-auto"}`}>
         {/* Header – compact when embedded */}
@@ -346,8 +349,18 @@ const LeverageDemoTrade = ({
                     <span className="text-gray-400">Open fee (0.4%)</span>
                     <span className="text-yellow-400 font-mono">${openFee.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Interest (20% APR, 7d)</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 flex items-center gap-1.5">
+                      Interest (20% APR, 7d)
+                      <button
+                        type="button"
+                        onClick={() => setKinkModalOpen(true)}
+                        className="p-0.5 rounded-full text-[#00FF99]/80 hover:text-[#00FF99] hover:bg-[#00FF99]/10 transition-colors"
+                        aria-label="Explain Dynamic Kink Model"
+                      >
+                        <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                      </button>
+                    </span>
                     <span className="text-yellow-400 font-mono">${interest.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -711,6 +724,8 @@ const LeverageDemoTrade = ({
         </motion.div>
       </div>
     </div>
+    {kinkModalOpen && <KinkModelModal onClose={() => setKinkModalOpen(false)} />}
+    </>
   );
 };
 
