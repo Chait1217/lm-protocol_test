@@ -154,19 +154,33 @@ export default function WhitepaperPage() {
                   </div>
                 </div>
 
-                {/* 4.2 Dynamic Borrowing Interest (Kink Model) */}
-                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Dynamic Borrowing Interest (Kink Model)</h3>
-                <div className="p-5 rounded-xl bg-gray-900/60 border border-[#00FF99]/10 font-mono text-sm mb-6">
-                  <div className="text-gray-400 mb-3">BASE: 5% &nbsp;|&nbsp; KINK: 70% &nbsp;|&nbsp; SLOPE1: 15% &nbsp;|&nbsp; SLOPE2: 60%</div>
-                  <div className="h-px bg-gray-700 mb-3" />
-                  <div className="space-y-1">
-                    <div className="flex justify-between"><span className="text-gray-400">Util 30%</span><span className="text-white">7.9% APR</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Util 50%</span><span className="text-white">11.4% APR</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Util 70%</span><span className="text-[#00FF99]">20.0% APR (kink)</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Util 85%</span><span className="text-yellow-400">35.0% APR</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Util 95%</span><span className="text-red-400">78.0% APR</span></div>
-                  </div>
+                {/* 4.2 Dynamic Kink Model */}
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Dynamic Kink Model</h3>
+                <p className="text-gray-300 leading-relaxed mb-4">
+                  Instead of using one fixed borrow rate, our Dynamic Kink Model automatically adjusts interest based on how much of the pool is being used. When utilization is low, rates stay gentle to encourage trading; as utilization rises past a &quot;kink&quot; point, rates ramp up more quickly to protect liquidity providers and keep the market in balance.
+                </p>
+                <div className="overflow-x-auto mb-4">
+                  <table className="w-full text-sm border-collapse border border-gray-700 rounded-lg overflow-hidden">
+                    <thead>
+                      <tr className="bg-gray-900/80">
+                        <th className="text-left py-3 px-4 text-gray-400 font-medium border-b border-gray-700">Utilization</th>
+                        <th className="text-left py-3 px-4 text-gray-400 font-medium border-b border-gray-700">Borrow APR</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-300">
+                      <tr className="border-b border-gray-800"><td className="py-3 px-4">0–60% (Low)</td><td className="py-3 px-4 text-[#00FF99]">5–10%</td></tr>
+                      <tr className="border-b border-gray-800"><td className="py-3 px-4">60–85% (Kink)</td><td className="py-3 px-4 text-yellow-400">15–25%</td></tr>
+                      <tr><td className="py-3 px-4">85%+ (High)</td><td className="py-3 px-4 text-red-400">40–75%</td></tr>
+                    </tbody>
+                  </table>
                 </div>
+                <h4 className="text-base font-semibold text-white mb-2">How it works</h4>
+                <p className="text-gray-400 text-sm mb-2">
+                  Rates stay low to attract volume → gradually rise past 60% utilization → spike sharply above 85% to protect LPs and prevent exhaustion.
+                </p>
+                <p className="text-gray-300 text-sm font-medium mb-6">
+                  Result: Fair pricing + stable liquidity for everyone.
+                </p>
 
                 <h4 className="text-base font-semibold text-white mb-3">Interest Split</h4>
                 <p className="text-gray-400 text-sm mb-3">Distribution of interest paid by traders:</p>
@@ -268,8 +282,8 @@ export default function WhitepaperPage() {
                     <span className="text-gray-400 text-sm">Faster fills, less slippage</span>
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">30% Extra Liquidation Buffer</span>
-                    <span className="text-gray-400 text-sm">45% total protection</span>
+                    <span className="text-white font-semibold">Reduced Liquidation Buffer</span>
+                    <span className="text-gray-400 text-sm">25%vs30%</span>
                   </div>
                 </div>
               </Section>
