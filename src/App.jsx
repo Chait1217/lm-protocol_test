@@ -1253,11 +1253,11 @@ const ProtocolPage = () => {
             <p className="text-gray-300">Launching on <span className="text-[#00FF99] font-bold">Virtuals Protocol</span></p>
           </div>
         </div>
-        <div>
+        <div className="overflow-visible">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-8 sm:mb-12 text-center">Roadmap</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 overflow-visible">
             {roadmapItems.map((item, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="relative">
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="relative overflow-visible">
                 <div className="bg-gray-900 p-4 sm:p-6 rounded-xl border border-[#00FF99]/20 h-full">
                   <div className="text-[#00FF99] font-bold mb-2">{item.quarter}</div>
                   <h3 className="text-white font-bold text-lg mb-4">{item.title}</h3>
@@ -1272,8 +1272,8 @@ const ProtocolPage = () => {
                 </div>
                 {i < roadmapItems.length - 1 && (
                   <>
-                    <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-full w-6 h-0.5 bg-[#00FF99]/30 z-10" />
-                    <div className="md:hidden absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-6 bg-[#00FF99]/30 z-10" />
+                    <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-full w-6 h-0.5 bg-[#00FF99]/30 z-10" aria-hidden="true" />
+                    <div className="md:hidden absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-4 bg-[#00FF99]/30 z-10" aria-hidden="true" />
                   </>
                 )}
               </motion.div>
