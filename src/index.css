@@ -1,14 +1,29 @@
 @import "tailwindcss";
 
-/* Geist: body uses normal weight, headings use semibold */
+/* Geist Variable font from CDN (all weights 100–900) – fontsource uses "Geist Variable" */
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url(https://cdn.jsdelivr.net/fontsource/fonts/geist:vf@latest/latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Tailwind v4: default sans = Geist */
+@theme {
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Body: Geist normal; headings: semibold */
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
-  font-family: "Geist", sans-serif;
+  font-family: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  font-family: "Geist", sans-serif;
+  font-family: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
   font-weight: 400;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -16,14 +31,15 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: "Geist", sans-serif;
-  font-weight: 600;
-}
-
 #root {
+  font-family: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
   min-width: 0;
   max-width: 100%;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
 }
 
 /* Safe area insets for notched devices */
