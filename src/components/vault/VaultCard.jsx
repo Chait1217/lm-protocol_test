@@ -151,7 +151,14 @@ export default function VaultCard({
       {/* Your share in vault - small donut chart */}
       <div className="mt-12 pt-6 border-t border-[#00FF99]/10">
         <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Your share in vault</div>
-        <YourShareDonut yourShare={yourShare} size={72} />
+        <div className="flex flex-row items-center gap-3">
+          <div className="flex-shrink-0">
+            <YourShareDonut yourShare={yourShare} size={72} />
+          </div>
+          <p className="md:hidden text-xs text-gray-500 leading-relaxed min-w-0">
+            Numbers shown are for demonstration only (fictional).
+          </p>
+        </div>
       </div>
     </motion.div>
   );

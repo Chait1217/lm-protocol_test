@@ -250,8 +250,8 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black border-b-2 border-[#00FF99]/20 shadow-[0_4px_24px_rgba(0,0,0,0.5)] md:bg-black/90 md:backdrop-blur-xl md:border-b md:border-[#00FF99]/10 safe-area-inset-top">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 min-h-[72px] sm:min-h-[80px]">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex md:grid md:grid-cols-[1fr_auto_1fr] items-center justify-between md:justify-stretch gap-3 min-h-[72px] sm:min-h-[80px]">
+        <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
           <button
             type="button"
             onClick={() => setMobileMenuOpen((o) => !o)}
@@ -288,7 +288,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 justify-end min-w-0">
+        <div className="flex items-center gap-2 sm:gap-3 justify-end min-w-0 flex-shrink-0">
           {/* Connection status pill only when not connected (when connected we show Profile + account button only) */}
           {status !== "connected" && (
             <span
@@ -1516,9 +1516,6 @@ const VaultPage = ({ walletConnected }) => {
               walletConnected={walletConnected}
               userBalance={0}
             />
-            <p className="mt-3 px-2 sm:px-0 text-center sm:text-left text-sm sm:text-xs text-gray-500 leading-relaxed max-w-md">
-              Numbers shown are for demonstration only (fictional).
-            </p>
           </div>
           <HowVaultsWorkSteps compact />
         </div>
