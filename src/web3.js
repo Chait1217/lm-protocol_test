@@ -1,25 +1,12 @@
-import { connectorsForWallets } from "@rainbow-me/rainbowkit";
-import { metaMaskWallet, walletConnectWallet, injectedWallet } from "@rainbow-me/rainbowkit/wallets";
-import { createConfig, http } from "wagmi";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { http } from "wagmi";
 import { base } from "wagmi/chains";
 
 const projectId = "7ec54a62f398c9a05d4132334a6acd1d";
 
-const connectors = connectorsForWallets(
-  [
-    {
-      groupName: "Recommended",
-      wallets: [metaMaskWallet, walletConnectWallet, injectedWallet],
-    },
-  ],
-  {
-    appName: "LM Protocol",
-    projectId,
-  }
-);
-
-export const config = createConfig({
-  connectors,
+export const config = getDefaultConfig({
+  appName: "LM Protocol",
+  projectId,
   chains: [base],
   ssr: false,
   transports: {

@@ -1516,7 +1516,7 @@ const VaultPage = ({ walletConnected }) => {
               walletConnected={walletConnected}
               userBalance={0}
             />
-            <p className="mt-3 text-center sm:text-left text-xs text-gray-500">
+            <p className="mt-3 px-2 sm:px-0 text-center sm:text-left text-sm sm:text-xs text-gray-500 leading-relaxed max-w-md">
               Numbers shown are for demonstration only (fictional).
             </p>
           </div>
