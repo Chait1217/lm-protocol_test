@@ -1180,13 +1180,11 @@ const ProtocolPage = () => {
               <h3 className="text-[#00FF99] font-bold text-xl mb-4">Utility</h3>
               <ul className="space-y-3">
                 {[
-                  "Governance voting over key protocol decisions",
-                  "Staking to boost LP and vault yields",
                   "Access to exclusive and early markets",
                   "Increased max leverage up to 7.5x (vs 5x regular)",
                   "Reduced borrow and mirroring costs by up to 50%",
                   "Priority execution queue for faster fills and lower slippage",
-                  "Additional 30% liquidation buffer for safer high-leverage trading",
+                  "Reduced liquidation buffer (25% vs 30%)",
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-300">
                     <Circle className="w-2 h-2 mt-2 text-[#00FF99] fill-current" />
