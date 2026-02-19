@@ -1,16 +1,14 @@
 @import "tailwindcss";
 
-/* Font loaded in main.jsx via @fontsource-variable/geist (family: "Geist Variable") */
+/* Geist from Google Fonts (link in index.html) */
 
-/* Tailwind v4: make default sans = Geist Variable */
 @theme {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Force Geist on root and body so it wins over Tailwind preflight */
 html,
 body {
-  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif !important;
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif !important;
 }
 
 html {
@@ -27,14 +25,13 @@ body {
 }
 
 #root {
-  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif !important;
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif !important;
   min-width: 0;
   max-width: 100%;
 }
 
-/* Headings: Geist semibold */
 h1, h2, h3, h4, h5, h6 {
-  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif !important;
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif !important;
   font-weight: 600;
 }
 

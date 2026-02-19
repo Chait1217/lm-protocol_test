@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useConnect, useConnectors, useEnsAvatar, useEnsName } from "wagmi";
+import { useAccount, useEnsAvatar, useEnsName } from "wagmi";
 import VaultCard from "./components/vault/VaultCard";
 import HowVaultsWorkSteps from "./components/vault/HowVaultsWorkSteps";
 import UtilizationGauge from "./components/vault/UtilizationGauge";
@@ -224,9 +224,6 @@ const MarketTicker = () => {
 // Navbar Component (mobile-friendly with hamburger menu)
 const Navbar = ({ currentPage, setCurrentPage }) => {
   const { address, status, chain } = useAccount();
-  const { connectAsync, isPending: isConnectPending } = useConnect();
-  const connectors = useConnectors();
-  const metaMaskConnector = useMemo(() => connectors.find((c) => c.id === "metaMask"), [connectors]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navLinks = [
     { key: "protocol", label: "Protocol" },
@@ -342,7 +339,6 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
             }) => {
               const ready = mounted;
               const connected = ready && account && chainFromButton;
-              const connecting = isConnecting || isConnectPending;
               if (!ready) {
                 return (
                   <button
@@ -355,7 +351,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                   </button>
                 );
               }
-              if (connecting) {
+              if (isConnecting) {
                 return (
                   <button
                     type="button"
@@ -372,17 +368,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                 return (
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (metaMaskConnector) {
-                        try {
-                          await connectAsync({ connector: metaMaskConnector });
-                        } catch {
-                          openConnectModal();
-                        }
-                      } else {
-                        openConnectModal();
-                      }
-                    }}
+                    onClick={() => openConnectModal()}
                     className={`${btnBase} ${btnConnect}`}
                   >
                     Connect Wallet

@@ -5,7 +5,9 @@
 import { Resend } from "resend";
 
 const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "lmprotocolcontact@gmail.com";
-const CONTACT_FROM_EMAIL = process.env.CONTACT_FROM_EMAIL || "onboarding@resend.dev";
+// Resend cannot send FROM gmail.com (unverified). Force sandbox if FROM is Gmail.
+const rawFrom = process.env.CONTACT_FROM_EMAIL || "onboarding@resend.dev";
+const CONTACT_FROM_EMAIL = /@gmail\.com$/i.test(rawFrom.replace(/^[^<]*<([^>]+)>$/, "$1").trim()) ? "onboarding@resend.dev" : rawFrom;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
