@@ -283,7 +283,7 @@ export default function WhitepaperPage() {
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
                     <span className="text-white font-semibold">Reduced Liquidation Buffer</span>
-                    <span className="text-gray-400 text-sm">25%vs30%</span>
+                    <span className="text-gray-400 text-sm">25% vs 30%</span>
                   </div>
                 </div>
               </Section>
