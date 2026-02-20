@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useEnsAvatar, useEnsName } from "wagmi";
+import { useAccount, useConnect, useConnectors, useEnsAvatar, useEnsName } from "wagmi";
 import VaultCard from "./components/vault/VaultCard";
 import HowVaultsWorkSteps from "./components/vault/HowVaultsWorkSteps";
 import UtilizationGauge from "./components/vault/UtilizationGauge";
@@ -221,10 +221,53 @@ const MarketTicker = () => {
   );
 };
 
+// Shared hook: connect via injected provider (window.ethereum / eth_requestAccounts)
+function useConnectInjected() {
+  const { connectAsync, isPending } = useConnect();
+  const connectors = useConnectors();
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const handleConnectInjected = async () => {
+    if (typeof window === "undefined") return;
+    if (!window.ethereum) {
+      setToast("No wallet found. Install MetaMask or another Web3 wallet.");
+      return;
+    }
+    const injected = connectors.find((c) => c.type === "injected") ?? connectors[0];
+    if (!injected) {
+      setToast("No wallet found. Install MetaMask or another Web3 wallet.");
+      return;
+    }
+    try {
+      await connectAsync({ connector: injected });
+    } catch (err) {
+      const code = err?.code ?? err?.cause?.code;
+      const message = err?.message ?? err?.shortMessage ?? "";
+      if (code === 4001 || message.toLowerCase().includes("reject") || message.toLowerCase().includes("denied")) {
+        setToast("Connection rejected");
+      } else if (message.toLowerCase().includes("user rejected")) {
+        setToast("Connection rejected");
+      } else {
+        setToast(message.slice(0, 60) || "Connection failed");
+      }
+    }
+  };
+
+  return { handleConnectInjected, toast, isPending };
+}
+
 // Navbar Component (mobile-friendly with hamburger menu)
 const Navbar = ({ currentPage, setCurrentPage }) => {
   const { address, status, chain } = useAccount();
+  const { handleConnectInjected, toast, isPending } = useConnectInjected();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const navLinks = [
     { key: "protocol", label: "Protocol" },
     { key: "market", label: "Market" },
@@ -246,9 +289,10 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
   const btnProfile =
     "bg-transparent text-[#00FF99] border-[#00FF99]/50 hover:bg-[#00FF99]/10";
 
-  const isConnecting = status === "connecting" || status === "reconnecting";
+  const isConnecting = status === "connecting" || status === "reconnecting" || isPending;
 
   return (
+    <>
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black border-b-2 border-[#00FF99]/20 shadow-[0_4px_24px_rgba(0,0,0,0.5)] md:bg-black/90 md:backdrop-blur-xl md:border-b md:border-[#00FF99]/10 safe-area-inset-top">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex md:grid md:grid-cols-[1fr_auto_1fr] items-center justify-between md:justify-stretch gap-3 min-h-[72px] sm:min-h-[80px]">
         <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
@@ -352,7 +396,8 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                 return (
                   <button
                     type="button"
-                    onClick={() => openConnectModal()}
+                    onClick={handleConnectInjected}
+                    disabled={isPending}
                     className={`${btnBase} ${btnConnect}`}
                   >
                     Connect Wallet
@@ -459,6 +504,15 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
         )}
       </AnimatePresence>
     </nav>
+    {toast && (
+      <div
+        role="alert"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-lg bg-gray-900 border border-[#00FF99]/30 text-gray-200 text-sm shadow-lg max-w-[90vw]"
+      >
+        {toast}
+      </div>
+    )}
+    </>
   );
 };
 
@@ -1282,23 +1336,30 @@ const ProfilePage = () => {
     }
   };
 
+  const { handleConnectInjected, toast: profileToast, isPending: profileConnecting } = useConnectInjected();
+
   if (!isConnected || !address) {
     return (
       <div className="min-h-screen bg-black pt-20 pb-16 flex items-center justify-center overflow-x-hidden px-4">
         <div className="text-center text-gray-400">
           <p className="mb-4">Connect your wallet to view your profile.</p>
-          <ConnectButton.Custom>
-            {({ openConnectModal }) => (
-              <button
-                type="button"
-                onClick={openConnectModal}
-                className="px-6 py-2 rounded-lg bg-[#00FF99] text-black font-medium hover:bg-[#00FF99]/90"
-              >
-                Connect Wallet
-              </button>
-            )}
-          </ConnectButton.Custom>
+          <button
+            type="button"
+            onClick={handleConnectInjected}
+            disabled={profileConnecting}
+            className="px-6 py-2 rounded-lg bg-[#00FF99] text-black font-medium hover:bg-[#00FF99]/90 disabled:opacity-70"
+          >
+            {profileConnecting ? "Connecting…" : "Connect Wallet"}
+          </button>
         </div>
+        {profileToast && (
+          <div
+            role="alert"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-lg bg-gray-900 border border-[#00FF99]/30 text-gray-200 text-sm shadow-lg max-w-[90vw]"
+          >
+            {profileToast}
+          </div>
+        )}
       </div>
     );
   }
