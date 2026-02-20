@@ -156,7 +156,7 @@ const MarketTicker = () => {
   const items = [...baseItems, ...baseItems, ...baseItems];
 
   return (
-    <div className="fixed top-[72px] sm:top-[80px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
+    <div className="fixed top-[80px] sm:top-[88px] left-0 right-0 z-40 bg-black/95 border-b border-[#00FF99]/15 overflow-hidden safe-area-inset-top">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-4 text-xs md:text-sm">
         <span className="text-[#00FF99] font-semibold uppercase tracking-wider text-[0.6rem] md:text-[0.7rem]">
           Trending on Polymarket
