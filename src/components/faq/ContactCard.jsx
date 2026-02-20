@@ -160,7 +160,9 @@ export default function ContactCard() {
             X / Twitter
           </a>
           <a
-            href="#"
+            href="https://t.me/LMProtocol"
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center gap-2 text-gray-400 hover:text-[#00FF99] transition-colors"
           >
             Telegram

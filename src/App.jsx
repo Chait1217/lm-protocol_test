@@ -552,7 +552,7 @@ const Footer = ({ setCurrentPage }) => {
             <h4 className="text-white font-medium mb-3">Community</h4>
             <div className="space-y-0 text-sm text-gray-400">
               <a href="https://x.com/lm_protocol?s=11" target="_blank" rel="noopener noreferrer" className="block py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">X</a>
-              <a href="#" className="block py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Telegram</a>
+              <a href="https://t.me/LMProtocol" target="_blank" rel="noopener noreferrer" className="block py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">Telegram</a>
               <button onClick={() => setCurrentPage?.("faq")} className="block text-left w-full py-2.5 min-h-[44px] -my-1 hover:text-[#00FF99] transition-colors touch-manipulation">FAQ</button>
             </div>
           </div>
