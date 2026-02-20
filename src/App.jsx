@@ -396,7 +396,7 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
                 return (
                   <button
                     type="button"
-                    onClick={handleConnectInjected}
+                    onClick={() => openConnectModal()}
                     disabled={isPending}
                     className={`${btnBase} ${btnConnect}`}
                   >
