@@ -1160,7 +1160,7 @@ const ProtocolPage = () => {
     { quarter: "Q1 2026", title: "Alpha Launch", items: ["Platform Alpha", "$LMP Token Launch", "Virtuals Protocol Integration"] },
     { quarter: "Q2 2026", title: "Beta & Scaling", items: ["Public Beta", "10+ Markets", "Mobile App"] },
     { quarter: "Q3 2026", title: "World Cup Dominance", items: ["World Cup Markets", "100M+ Volume", "Institutional Access"] },
-    { quarter: "Q4 2026", title: "AI Agents", items: ["AI Trading Agents", "Cross-chain Bridge", "Expansion into new markets"] },
+    { quarter: "Q4 2026", title: "Expansion Into New Markets", items: ["AI Trading Agents", "Cross-chain Bridge", "Expansion into new markets"] },
   ];
   return (
     <div className="min-h-screen min-w-0 max-w-full bg-black pt-16 sm:pt-20 pb-12 sm:pb-16 overflow-x-hidden">
