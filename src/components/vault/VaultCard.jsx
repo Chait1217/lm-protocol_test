@@ -155,9 +155,6 @@ export default function VaultCard({
           <div className="flex-shrink-0">
             <YourShareDonut yourShare={yourShare} size={72} />
           </div>
-          <p className="md:hidden text-xs text-gray-500 leading-relaxed min-w-0">
-            Numbers shown are for demonstration only (fictional).
-          </p>
         </div>
       </div>
     </motion.div>

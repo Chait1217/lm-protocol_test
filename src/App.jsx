@@ -1516,11 +1516,11 @@ const usdcVault = {
   id: "usdc",
   name: "USDC Vault",
   symbol: "USDC",
-  tvl: 1234567,
-  apy: 12.34,
-  utilization: 67.5,
+  tvl: 0,
+  apy: 0,
+  utilization: 0,
   logo: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
-  apyBreakdown: { interestPct: 70, feesPct: 30 },
+  apyBreakdown: { interestPct: 0, feesPct: 0 },
 };
 
 // Vault Page (from current repo – premium with VaultCard, HowVaultsWorkSteps, Vault Health)
