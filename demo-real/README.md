@@ -156,6 +156,15 @@ Open [http://localhost:3000](http://localhost:3000)
 3. **Live PnL tracking** with live Polymarket UI data + oracle-backed settlement preview
 4. **Close position** → Sell on Polymarket → Onchain close uses oracle settlement price
 
+### 6. Run tests
+
+```bash
+cd demo-real/contracts
+forge test --offline
+```
+
+Covers vault deposit/withdraw, oracle-driven open/close, liquidation with oracle price, router staleness, and source switching.
+
 ## Contract Details
 
 ### Vault (BaseVault.sol)
@@ -186,8 +195,11 @@ Open [http://localhost:3000](http://localhost:3000)
 | Contract | Responsibility |
 |---------|----------------|
 | `OracleRouter` | Per-market source routing, staleness checks, unified `getYesPriceE6` |
-| `ChainlinkBinaryAdapter` | Converts Chainlink feed values to YES price (1e6 decimals) |
-| `UmaResolutionAdapter` | UMA-style resolved YES prices (owner-fed in demo) |
+| `ChainlinkBinaryAdapter` | Converts Chainlink feed values to YES price (1e6 decimals); configurable per market |
+| `UmaResolutionAdapter` | UMA OOV3 assertions/disputes end-to-end, or owner-fed for demo |
+
+- **UMA (production):** Set `UMA_OOV3_ADDRESS`, `UMA_BOND_CURRENCY` (e.g. USDC.e), and `UMA_ASSERTION_LIVENESS` at deploy. Anyone can call `proposeResolution(marketId, yesPriceE6)`; after the liveness window without dispute, anyone settles on the OOV3 and the adapter receives the callback and sets the resolved price. Disputes go to UMA DVM.
+- **Chainlink (production):** Set `CHAINLINK_NEWSOM_AGGREGATOR` (and optionally `CHAINLINK_NEWSOM_INVERT`, `CHAINLINK_NEWSOM_MAX_AGE_SEC`) at deploy to wire the Newsom market to a Chainlink binary feed. For other markets, use the `ConfigureOracleFeeds` script (see below).
 
 `BaseMarginEngine` fetches YES price from `OracleRouter`, converts to position-side price (YES for long, 1-YES for short), and uses that for open snapshots and close/liquidation settlement.
 
@@ -227,7 +239,7 @@ This is a **prototype** for demonstration purposes:
 - Contracts use ReentrancyGuard and Pausable
 - No formal audit has been performed
 - Not for production use with significant funds
-- Demo still relies on owner-fed UMA adapter values unless connected to production oracle infra
+- For production, use UMA OOV3 and/or Chainlink feeds per market (see Production Oracle Setup)
 
 ## Oracle + PnL Data Flow
 
@@ -243,10 +255,49 @@ flowchart LR
   pnl --> uiHistory[FrontendPositionsAndHistory]
 ```
 
+## Production Oracle Setup
+
+### UMA (end-to-end assertions/disputes)
+
+Resolution is wired to UMA Optimistic Oracle V3 when the adapter is deployed with a non-zero OOV3 address:
+
+1. **Deploy with UMA:** Set env and deploy:
+   ```bash
+   export UMA_OOV3_ADDRESS=0x...   # From https://docs.uma.xyz/resources/network-addresses (e.g. Polygon)
+   export UMA_BOND_CURRENCY=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174   # USDC.e on Polygon
+   export UMA_ASSERTION_LIVENESS=7200
+   forge script script/DeployPolygonVault.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
+   ```
+2. **Propose resolution:** Anyone calls `UmaResolutionAdapter.proposeResolution(marketId, yesPriceE6)` after approving the bond (USDC.e). The claim is encoded as `(marketId, yesPriceE6, blockNumber)` for disputer verification.
+3. **Settle:** After the liveness window, anyone calls `OptimisticOracleV3.settleAssertion(assertionId)` on the UMA contract. The adapter receives `assertionResolvedCallback` and sets the market’s resolved price.
+4. **Disputes:** Disputers call `OptimisticOracleV3.disputeAssertion(assertionId, disputer)`; resolution is arbitrated by the UMA DVM; the adapter’s callback is invoked with the final result.
+
+Owner can still use `setResolvedPrice` for demo or emergency override when OOV3 is set.
+
+### Chainlink (binary feeds per market)
+
+1. **At deploy (optional):** To point the default Newsom market at a Chainlink feed:
+   ```bash
+   export CHAINLINK_NEWSOM_AGGREGATOR=0x...   # Chainlink aggregator for binary outcome
+   export CHAINLINK_NEWSOM_INVERT=false       # Set true if feed is NO-not-YES
+   export CHAINLINK_NEWSOM_MAX_AGE_SEC=3600
+   forge script script/DeployPolygonVault.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
+   ```
+2. **After deploy (any market):** Use the config script (one market per run):
+   ```bash
+   export ORACLE_ROUTER_ADDRESS=0x...
+   export CHAINLINK_ADAPTER_ADDRESS=0x...
+   export MARKET_SLUG=will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568
+   export CHAINLINK_AGGREGATOR=0x...
+   export CHAINLINK_MAX_AGE_SEC=3600
+   forge script script/ConfigureOracleFeeds.s.sol:ConfigureOracleFeeds --rpc-url $POLYGON_RPC_URL --broadcast
+   ```
+   For raw `bytes32` market id, set `MARKET_ID` instead of `MARKET_SLUG`. Repeat with different `MARKET_SLUG`/`CHAINLINK_AGGREGATOR` for additional markets.
+
 ## Next Steps (Production)
 
-1. Wire UMA assertions/disputes end-to-end (instead of owner-fed resolved values)
-2. Configure production Chainlink binary feeds per market in router
+1. ~~Wire UMA assertions/disputes end-to-end~~ ✅ (see Production Oracle Setup)
+2. ~~Configure production Chainlink binary feeds per market in router~~ ✅ (see Production Oracle Setup)
 3. Formal security audit
 4. Timelock on admin functions
 5. Keeper bot for liquidations

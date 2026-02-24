@@ -36,7 +36,7 @@ contract VaultTest is Test {
         usdc = new MockUSDC();
         vault = new BaseVault(address(usdc));
         router = new OracleRouter();
-        uma = new UmaResolutionAdapter();
+        uma = new UmaResolutionAdapter(address(0), address(0), 0);
         chainlink = new ChainlinkBinaryAdapter();
         uma.setResolvedPrice(MARKET_ID, 600000); // 60c YES
         router.setMarketSource(MARKET_ID, address(uma), 0, true);

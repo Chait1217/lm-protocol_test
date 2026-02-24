@@ -41,10 +41,25 @@ contract DeployPolygonVault is Script {
         // 2. Deploy oracle layer
         OracleRouter router = new OracleRouter();
         ChainlinkBinaryAdapter chainlinkAdapter = new ChainlinkBinaryAdapter();
-        UmaResolutionAdapter umaAdapter = new UmaResolutionAdapter();
+        // UMA: pass (0,0,0) for owner-fed demo; set UMA_OOV3_ADDRESS etc. for production OOV3
+        address ooV3Addr = vm.envOr("UMA_OOV3_ADDRESS", address(0));
+        address bondCurrencyAddr = vm.envOr("UMA_BOND_CURRENCY", POLYGON_USDCE);
+        uint64 umaLiveness = uint64(vm.envOr("UMA_ASSERTION_LIVENESS", uint256(7200)));
+        UmaResolutionAdapter umaAdapter = new UmaResolutionAdapter(ooV3Addr, bondCurrencyAddr, umaLiveness);
         bytes32 marketId = keccak256(bytes(NEWSOM_SLUG));
-        umaAdapter.setResolvedPrice(marketId, 500000); // bootstrap value for demo
+        if (ooV3Addr == address(0)) {
+            umaAdapter.setResolvedPrice(marketId, 500000); // bootstrap for demo when OOV3 not set
+        }
         router.setMarketSource(marketId, address(umaAdapter), 0, true);
+
+        // Optional: configure Chainlink for this market if production feed address is set
+        address chainlinkAggregator = vm.envOr("CHAINLINK_NEWSOM_AGGREGATOR", address(0));
+        if (chainlinkAggregator != address(0)) {
+            bool invert = vm.envOr("CHAINLINK_NEWSOM_INVERT", false);
+            uint256 maxAgeSec = vm.envOr("CHAINLINK_NEWSOM_MAX_AGE_SEC", uint256(3600));
+            chainlinkAdapter.setFeed(marketId, chainlinkAggregator, invert, true);
+            router.setMarketSource(marketId, address(chainlinkAdapter), maxAgeSec, true);
+        }
 
         // 3. Deploy MarginEngine pointing to the vault + oracle router
         BaseMarginEngine engine = new BaseMarginEngine(POLYGON_USDCE, address(vault), address(router));

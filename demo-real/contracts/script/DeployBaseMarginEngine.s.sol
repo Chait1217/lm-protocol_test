@@ -33,7 +33,7 @@ contract DeployBaseMarginEngine is Script {
         // 2. Deploy oracle layer
         OracleRouter router = new OracleRouter();
         ChainlinkBinaryAdapter chainlinkAdapter = new ChainlinkBinaryAdapter();
-        UmaResolutionAdapter umaAdapter = new UmaResolutionAdapter();
+        UmaResolutionAdapter umaAdapter = new UmaResolutionAdapter(address(0), address(0), 0);
         bytes32 marketId = keccak256(bytes(NEWSOM_SLUG));
         umaAdapter.setResolvedPrice(marketId, 500000); // bootstrap value for demo
         router.setMarketSource(marketId, address(umaAdapter), 0, true);
