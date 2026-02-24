@@ -37,7 +37,7 @@ export default function TradingHeader({ yesProbability, noProbability, bestBid, 
         {/* Single compact row: Title + Prices + Wallet */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
           <div className="flex items-center gap-2">
-            <h1 className="text-white font-bold text-sm leading-tight">BTC $100k by Dec 31 2026</h1>
+            <h1 className="text-white font-bold text-sm leading-tight">Will Gavin Newsom win the 2028 Democratic presidential nomination?</h1>
             <Activity className="w-3 h-3 text-emerald-500 animate-pulse flex-shrink-0" />
           </div>
 

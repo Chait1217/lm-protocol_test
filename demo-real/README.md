@@ -38,6 +38,15 @@ A minimal but real onchain prototype of the LM Protocol: leveraged prediction ma
 - Onchain entry/exit/liquidation prices are **oracle-driven** via OracleRouter
 - Router supports both **Chainlink adapter** and **UMA resolution adapter**
 
+## Default market
+
+The trade demo uses a single Polymarket binary market:
+
+- **Question:** Will Gavin Newsom win the 2028 Democratic presidential nomination?
+- **Slug:** `will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568`
+
+Live prices and charts come from the Polymarket API; onchain settlement uses the oracle layer (see Oracle + PnL Data Flow below).
+
 ## User Benefits
 
 ```
