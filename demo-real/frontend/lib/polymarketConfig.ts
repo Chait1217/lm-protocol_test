@@ -35,11 +35,11 @@ export const POLYMARKET_CLOB_API =
     : "https://clob.polymarket.com";
 
 /**
- * BTC 100k market: "Will Bitcoin reach $100,000 by December 31, 2026?"
+ * Newsom market: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?"
  * Token IDs come from the Gamma/CLOB market response (clobTokenIds).
  * Condition ID / partition are used for CTF split/merge; for CLOB orders we use tokenId from the API.
  */
-export const BTC100K_MARKET_SLUG = "will-bitcoin-reach-100000-by-december-31-2026-571";
+export const BTC100K_MARKET_SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
 
 /** Placeholder: conditionId for BTC 100k (binary). Fill from Gamma API or Polymarket docs if needed for CTF.splitPosition. */
 export const BTC100K_CONDITION_ID =

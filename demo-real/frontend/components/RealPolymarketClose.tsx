@@ -4,9 +4,8 @@ import { useState, useCallback, useEffect } from "react";
 import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { polygon } from "wagmi/chains";
-import { POLYGON_CHAIN_ID, POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
-import { getContractAddresses, MARGIN_ENGINE_ABI, USDC_ABI } from "@/lib/contracts";
-import { parsePrice, formatUSDC, formatPrice } from "@/lib/utils";
+import { POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
+import { getContractAddresses, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -18,6 +17,7 @@ interface PositionData {
   entryPriceMock: bigint;
   leverage: bigint;
   isLong: boolean;
+  marketId: `0x${string}`;
   openTimestamp: bigint;
   isOpen: boolean;
 }
@@ -36,7 +36,7 @@ interface Props {
 const POLYGONSCAN_TX = "https://polygonscan.com/tx/";
 const addresses = getContractAddresses();
 
-type CloseStep = "idle" | "selling" | "transfer-repay" | "transfer-confirming" | "closing-vault" | "vault-confirming" | "done";
+type CloseStep = "idle" | "selling" | "closing-vault" | "vault-confirming" | "done";
 
 /** Turn thrown errors into a short message and suggested action. */
 function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { message: string; action: string } {
@@ -56,13 +56,6 @@ function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { m
       return { message: "Network or Polymarket API issue.", action: "Check your connection and try again." };
     if (lower.includes("api") || lower.includes("key") || lower.includes("signature"))
       return { message: "Polymarket API or signature error.", action: "Refresh the page and try again. If it persists, try another browser or clear site data." };
-  }
-
-  if (step === "transfer") {
-    if (lower.includes("user rejected") || lower.includes("user denied"))
-      return { message: "You rejected the USDC transfer.", action: "You still have the sale proceeds. Try closing again and approve the transfer." };
-    if (lower.includes("insufficient") || lower.includes("exceeds balance"))
-      return { message: "Not enough USDC to send (borrowed + interest).", action: "Ensure the Polymarket sell completed and you have enough USDC, then try closing again." };
   }
 
   if (step === "vault") {
@@ -102,14 +95,18 @@ export default function RealPolymarketClose({
     chainId: polygon.id,
   });
   const interest = (interestRaw as bigint | undefined) ?? BigInt(0);
-  const repayTotal = position.borrowed + interest;
+  const { data: oracleExitRaw } = useReadContract({
+    address: addresses.marginEngine,
+    abi: MARGIN_ENGINE_ABI,
+    functionName: "getPositionOraclePrice",
+    args: [BigInt(positionId)],
+    chainId: polygon.id,
+    query: { refetchInterval: 5000 },
+  });
 
   /* ── State ── */
   const [step, setStep] = useState<CloseStep>("idle");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [exitPriceAfterSell, setExitPriceAfterSell] = useState<number | null>(null);
-  const [transferTxHash, setTransferTxHash] = useState<`0x${string}` | undefined>();
-  const { isSuccess: isTransferSuccess } = useWaitForTransactionReceipt({ hash: transferTxHash });
   const [result, setResult] = useState<{
     polyOrderId?: string;
     polyTxHash?: string;
@@ -130,7 +127,8 @@ export default function RealPolymarketClose({
   const collateralUsdc = Number(position.collateral) / 1e6;
   const borrowedUsdc = Number(position.borrowed) / 1e6;
   const leverageNum = Number(position.leverage);
-  const exitPrice = livePrice;
+  const oracleExitPrice = oracleExitRaw != null ? Number(oracleExitRaw as bigint) / 1e6 : null;
+  const exitPrice = oracleExitPrice ?? livePrice;
 
   const pnlPreview = position.isLong
     ? notionalUsdc * ((exitPrice - entryPrice) / (entryPrice || 1))
@@ -176,42 +174,15 @@ export default function RealPolymarketClose({
     return typeof fillPrice === "number" ? fillPrice : parseFloat(String(fillPrice)) || exitPrice;
   }, [tokenId, notionalUsdc, tickSize, negRisk, exitPrice]);
 
-  /* ── Step 2a: Transfer borrowed + interest to MarginEngine (so it can repay the vault) ── */
-  const transferRepayToEngine = useCallback((): Promise<void> => {
-    if (repayTotal === BigInt(0)) return Promise.resolve();
-    setStep("transfer-repay");
-    return new Promise<void>((resolve, reject) => {
-      writeContract(
-        {
-          address: addresses.usdc,
-          abi: USDC_ABI,
-          functionName: "transfer",
-          args: [addresses.marginEngine, repayTotal],
-          chainId: polygon.id,
-        },
-        {
-          onSuccess: (hash) => {
-            setTransferTxHash(hash);
-            setStep("transfer-confirming");
-            resolve();
-          },
-          onError: (err) => reject(err),
-        }
-      );
-    });
-  }, [writeContract, repayTotal]);
-
-  /* ── Step 2b: Close position on Polygon vault ── */
-  const closeOnVault = useCallback(async (realExitPrice: number) => {
-    const exitPriceBigInt = parsePrice(realExitPrice.toString());
-
+  /* ── Step 2: Close position on Polygon vault (oracle-driven) ── */
+  const closeOnVault = useCallback(async () => {
     return new Promise<void>((resolve, reject) => {
       writeContract(
         {
           address: addresses.marginEngine,
           abi: MARGIN_ENGINE_ABI,
           functionName: "closePosition",
-          args: [BigInt(positionId), exitPriceBigInt],
+          args: [BigInt(positionId)],
           chainId: polygon.id,
         },
         {
@@ -226,14 +197,6 @@ export default function RealPolymarketClose({
     });
   }, [writeContract, positionId]);
 
-  /* ── When transfer confirms, call closePosition ── */
-  useEffect(() => {
-    if (isTransferSuccess && step === "transfer-confirming" && exitPriceAfterSell != null) {
-      setStep("closing-vault");
-      closeOnVault(exitPriceAfterSell);
-    }
-  }, [isTransferSuccess, step, exitPriceAfterSell, closeOnVault]);
-
   /* ── When vault tx confirms, we're done ── */
   useEffect(() => {
     if (isVaultTxSuccess && step === "vault-confirming") {
@@ -243,33 +206,23 @@ export default function RealPolymarketClose({
     }
   }, [isVaultTxSuccess, step, vaultTxHash, onSuccess]);
 
-  /* ── Combined close: Sell on Polymarket → transfer (borrowed+interest) to engine → closePosition ── */
+  /* ── Combined close: Sell on Polymarket → closePosition (oracle settles exit) ── */
   const handleClose = useCallback(async () => {
     setResult(null);
     setVaultTxHash(undefined);
-    setTransferTxHash(undefined);
-    setExitPriceAfterSell(null);
     setConfirmOpen(false);
 
     let sellDone = false;
-    let transferDone = false;
     try {
       const realExitPrice = await sellOnPolymarket();
-      setExitPriceAfterSell(realExitPrice);
+      setResult((prev) => ({ ...prev, actualExitPrice: realExitPrice }));
       sellDone = true;
-
-      if (repayTotal === BigInt(0)) {
-        setStep("closing-vault");
-        await closeOnVault(realExitPrice);
-      } else {
-        await transferRepayToEngine();
-        transferDone = true;
-        // closeOnVault is triggered by useEffect when transfer confirms
-      }
+      setStep("closing-vault");
+      await closeOnVault();
     } catch (err: unknown) {
-      const step: "sell" | "transfer" | "vault" = sellDone ? (transferDone ? "vault" : "transfer") : "sell";
+      const step: "sell" | "vault" = sellDone ? "vault" : "sell";
       const { message, action } = parseCloseError(err, step);
-      const prefix = step === "sell" ? "Sell failed" : step === "transfer" ? "Transfer failed" : "Vault close failed";
+      const prefix = step === "sell" ? "Sell failed" : "Vault close failed";
       setResult((prev) => ({
         ...prev,
         error: `${prefix}: ${message}`,
@@ -277,7 +230,7 @@ export default function RealPolymarketClose({
       }));
       setStep("done");
     }
-  }, [sellOnPolymarket, transferRepayToEngine, repayTotal, closeOnVault]);
+  }, [sellOnPolymarket, closeOnVault]);
 
   /* ── Render ── */
   if (!position.isOpen) return null;
@@ -307,7 +260,7 @@ export default function RealPolymarketClose({
           <span className="text-white font-mono">{(entryPrice * 100).toFixed(1)}¢</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-400">Current exit price (live)</span>
+          <span className="text-gray-400">Settlement price (oracle)</span>
           <span className="text-emerald-400 font-mono font-semibold">{(exitPrice * 100).toFixed(1)}¢</span>
         </div>
         <div className="flex justify-between">
@@ -346,20 +299,18 @@ export default function RealPolymarketClose({
       {/* Progress indicator */}
       {isAnyLoading && (() => {
         type Status = "pending" | "active" | "confirming" | "done";
-        const stepStatus = (s: CloseStep): [Status, Status, Status] => {
+        const stepStatus = (s: CloseStep): [Status, Status] => {
           const done1 = !(s === "idle" || s === "selling");
-          const done2 = s === "closing-vault" || s === "vault-confirming" || s === "done";
+          const done2 = s === "vault-confirming" || s === "done";
           const step1: Status = s === "selling" ? "active" : done1 ? "done" : "pending";
-          const step2: Status = s === "transfer-repay" ? "active" : s === "transfer-confirming" ? "confirming" : done2 ? "done" : "pending";
-          const step3: Status = s === "closing-vault" ? "active" : s === "vault-confirming" ? "confirming" : s === "done" ? "done" : "pending";
-          return [step1, step2, step3];
+          const step2: Status = s === "closing-vault" ? "active" : s === "vault-confirming" ? "confirming" : done2 ? "done" : "pending";
+          return [step1, step2];
         };
-        const [step1Status, step2Status, step3Status] = stepStatus(step);
+        const [step1Status, step2Status] = stepStatus(step);
         return (
           <div className="rounded border border-emerald-900/20 bg-black/40 p-2.5 space-y-2">
             <StepIndicator label="1. Sell outcome tokens on Polymarket" status={step1Status} />
-            <StepIndicator label="2. Transfer repay (borrowed + interest) to engine" status={step2Status} />
-            <StepIndicator label="3. Close vault position" status={step3Status} />
+            <StepIndicator label="2. Close position (oracle-settled)" status={step2Status} />
           </div>
         );
       })()}
@@ -381,16 +332,10 @@ export default function RealPolymarketClose({
                 </div>
               </div>
 
-              <div className="border-l-2 border-amber-500/30 pl-2">
-                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Transfer repay to engine</div>
-                <div className="text-gray-300">
-                  Send ${(Number(repayTotal) / 1e6).toFixed(6)} USDC.e to MarginEngine (borrowed + interest)
-                </div>
-              </div>
               <div className="border-l-2 border-emerald-500/30 pl-2">
-                <div className="text-emerald-400 font-semibold text-[10px]">Step 3: Close vault position</div>
+                <div className="text-emerald-400 font-semibold text-[10px]">Step 2: Close vault position</div>
                 <div className="text-gray-300">
-                  Close #{positionId} · vault repaid, you receive collateral back
+                  Close #{positionId} · oracle settles exit, collateral ± PnL returned
                 </div>
               </div>
 

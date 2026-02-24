@@ -167,7 +167,7 @@ export default function PolymarketLeverageBox({
       const negRisk = typeof m?.negRisk === "boolean" ? m.negRisk : undefined;
 
       return {
-        title: m?.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
+        title: m?.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
         slug: m?.slug ?? null,
         yesProbability,
         noProbability,
@@ -186,7 +186,7 @@ export default function PolymarketLeverageBox({
       };
     } catch {
       return {
-        title: "Will Bitcoin reach $100,000 by December 31, 2026?",
+        title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
         slug: null,
         yesProbability: null,
         noProbability: null,
@@ -327,7 +327,7 @@ export default function PolymarketLeverageBox({
               <RefreshCw className="w-3 h-3 text-emerald-400" />
             </motion.div>
           </button>
-          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/what-price-will-bitcoin-hit-before-2027`}
+          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568`}
             target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-emerald-400 transition-colors">
             <ExternalLink className="w-3 h-3" />
           </a>

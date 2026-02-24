@@ -38,6 +38,7 @@ interface Position {
   entryPriceMock: bigint;
   leverage: bigint;
   isLong: boolean;
+  marketId: `0x${string}`;
   openTimestamp: bigint;
   isOpen: boolean;
 }
@@ -104,16 +105,16 @@ export default function TransactionsPage() {
     let cancelled = false;
     setExitLoadError(null);
     setExitLoading(true);
-    const CHUNK_SIZE = 50n;
+    const CHUNK_SIZE = BigInt(50);
     const MAX_CHUNKS = 300;
     (async () => {
       try {
         const currentBlock = await publicClient.getBlockNumber();
         const allLogs: { args: unknown }[] = [];
         let toBlock = currentBlock;
-        let fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : 0n;
+        let fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : BigInt(0);
         let chunks = 0;
-        while (chunks < MAX_CHUNKS && toBlock > 0n) {
+        while (chunks < MAX_CHUNKS && toBlock > BigInt(0)) {
           if (cancelled) return;
           try {
             const logs = await publicClient.getLogs({
@@ -128,9 +129,9 @@ export default function TransactionsPage() {
             console.warn("Exit logs chunk failed:", chunkErr);
           }
           chunks++;
-          if (fromBlock <= 0n) break;
-          toBlock = fromBlock - 1n;
-          fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : 0n;
+          if (fromBlock <= BigInt(0)) break;
+          toBlock = fromBlock - BigInt(1);
+          fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : BigInt(0);
         }
         if (cancelled) return;
         const map: Record<number, { exitPriceMock: bigint; pnl: bigint; returnedToUser: bigint }> = {};

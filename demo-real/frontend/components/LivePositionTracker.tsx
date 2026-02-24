@@ -25,6 +25,7 @@ interface PositionData {
   entryPriceMock: bigint;
   leverage: bigint;
   isLong: boolean;
+  marketId: `0x${string}`;
   openTimestamp: bigint;
   isOpen: boolean;
 }
@@ -57,6 +58,15 @@ export default function LivePositionTracker({
   });
   const accruedInterest = interestRaw != null ? Number(interestRaw as bigint) / 1e6 : 0;
 
+  const { data: oraclePriceRaw } = useReadContract({
+    address: addresses.marginEngine,
+    abi: MARGIN_ENGINE_ABI,
+    functionName: "getPositionOraclePrice",
+    args: [BigInt(positionId)],
+    chainId: polygon.id,
+    query: { refetchInterval: 5000 },
+  });
+
   const entryPrice = Number(position.entryPriceMock) / 1e6;
   const notionalUsdc = Number(position.notional) / 1e6;
   const collateralUsdc = Number(position.collateral) / 1e6;
@@ -64,13 +74,16 @@ export default function LivePositionTracker({
   const leverageNum = Number(position.leverage);
 
   const liveExitPrice = useMemo(() => {
+    if (oraclePriceRaw != null) {
+      return Number(oraclePriceRaw as bigint) / 1e6;
+    }
     if (position.isLong) {
       return liveBestBid ?? (yesProbability != null ? yesProbability / 100 : null);
     } else {
       if (liveBestAsk != null) return 1 - liveBestAsk;
       return yesProbability != null ? 1 - yesProbability / 100 : null;
     }
-  }, [position.isLong, liveBestBid, liveBestAsk, yesProbability]);
+  }, [oraclePriceRaw, position.isLong, liveBestBid, liveBestAsk, yesProbability]);
 
   const calcs = useMemo(() => {
     if (liveExitPrice == null || entryPrice === 0) return null;

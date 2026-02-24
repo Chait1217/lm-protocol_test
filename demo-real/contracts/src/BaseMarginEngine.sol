@@ -7,10 +7,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./BaseVault.sol";
+import "./interfaces/IPriceOracle.sol";
 
 /// @title BaseMarginEngine – leveraged trading on Base mainnet using BaseVault
 /// @notice Users open leveraged positions (2-5x) with USDC collateral. Vault lends the borrowed portion.
-///         PnL uses mock prices; all USDC transfers are real onchain on Base.
+///         PnL settlement is oracle-driven (no user-supplied settlement prices).
 contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
@@ -21,9 +22,10 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
         uint256 collateral;       // USDC deposited by user (after fee)
         uint256 borrowed;         // USDC borrowed from vault
         uint256 notional;         // collateral_input * leverage
-        uint256 entryPriceMock;   // mock entry price (6 decimals)
+        uint256 entryPriceMock;   // entry price from oracle (6 decimals)
         uint256 leverage;
         bool    isLong;
+        bytes32 marketId;
         uint256 openTimestamp;
         bool    isOpen;
     }
@@ -32,6 +34,7 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
 
     IERC20    public immutable usdc;
     BaseVault public vault;
+    IPriceOracle public priceOracle;
 
     uint256 public nextPositionId;
     mapping(uint256 => Position)     public positions;
@@ -72,7 +75,7 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
     event PositionOpened(
         uint256 indexed positionId, address indexed owner,
         uint256 collateral, uint256 borrowed, uint256 notional,
-        uint256 leverage, bool isLong, uint256 entryPriceMock, uint256 openFee
+        uint256 leverage, bool isLong, bytes32 marketId, uint256 entryPriceMock, uint256 openFee
     );
     event PositionClosed(
         uint256 indexed positionId, address indexed owner,
@@ -85,10 +88,11 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
 
     // ─── Constructor ─────────────────────────────────────────────────
 
-    constructor(address _usdc, address _vault) Ownable(msg.sender) {
-        require(_usdc != address(0) && _vault != address(0), "BME: zero address");
+    constructor(address _usdc, address _vault, address _priceOracle) Ownable(msg.sender) {
+        require(_usdc != address(0) && _vault != address(0) && _priceOracle != address(0), "BME: zero address");
         usdc  = IERC20(_usdc);
         vault = BaseVault(_vault);
+        priceOracle = IPriceOracle(_priceOracle);
     }
 
     // ─── Admin ───────────────────────────────────────────────────────
@@ -112,6 +116,11 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
     function setMaintenanceMargin(uint256 _bps) external onlyOwner {
         require(_bps >= 100 && _bps <= 2000, "BME: OOB");
         maintenanceMarginBps = _bps;
+    }
+
+    function setPriceOracle(address _priceOracle) external onlyOwner {
+        require(_priceOracle != address(0), "BME: zero oracle");
+        priceOracle = IPriceOracle(_priceOracle);
     }
 
     /// @notice Withdraw excess USDC from the contract (e.g. leftover from negative PnL).
@@ -148,11 +157,27 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
         return (borrowed * aprBps * duration) / (365.25 days * 10000);
     }
 
-    /// @notice Check liquidation: equity < 10% of notional.
-    function isLiquidatable(uint256 positionId, uint256 currentPriceMock) public view returns (bool) {
+    function getMarketOraclePrice(bytes32 marketId) public view returns (uint256) {
+        (uint256 yesPriceE6,, bool valid) = priceOracle.getYesPriceE6(marketId);
+        require(valid, "BME: invalid oracle");
+        require(yesPriceE6 > 0 && yesPriceE6 <= PRICE_DECIMALS, "BME: bad oracle price");
+        return yesPriceE6;
+    }
+
+    function getPositionOraclePrice(uint256 positionId) external view returns (uint256) {
+        Position storage pos = positions[positionId];
+        require(pos.owner != address(0), "BME: bad position");
+        uint256 yesPrice = getMarketOraclePrice(pos.marketId);
+        return pos.isLong ? yesPrice : PRICE_DECIMALS - yesPrice;
+    }
+
+    /// @notice Check liquidation: equity < maintenance requirement, using current oracle price.
+    function isLiquidatable(uint256 positionId) public view returns (bool) {
         Position storage pos = positions[positionId];
         if (!pos.isOpen) return false;
 
+        uint256 yesPrice = getMarketOraclePrice(pos.marketId);
+        uint256 currentPriceMock = pos.isLong ? yesPrice : PRICE_DECIMALS - yesPrice;
         int256 pnl = _calculatePnL(pos, currentPriceMock);
         uint256 interest = calculateInterest(pos.borrowed, pos.openTimestamp);
         int256 equity = int256(pos.collateral) + pnl - int256(interest);
@@ -175,16 +200,20 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
     /// @param collateralAmount USDC collateral from user (6 decimals)
     /// @param leverage         2-5x multiplier
     /// @param isLong           true = LONG, false = SHORT
-    /// @param entryPriceMock   mock entry price (6 decimals, e.g. 100_000_000000 = $100k)
+    /// @param marketId         market identifier used by oracle router.
     function openPosition(
         uint256 collateralAmount,
         uint256 leverage,
         bool    isLong,
-        uint256 entryPriceMock
+        bytes32 marketId
     ) external nonReentrant whenNotPaused returns (uint256 positionId) {
         require(collateralAmount > 0, "BME: zero collateral");
         require(leverage >= MIN_LEVERAGE && leverage <= MAX_LEVERAGE, "BME: leverage 2-5x");
-        require(entryPriceMock > 0, "BME: zero price");
+        require(marketId != bytes32(0), "BME: zero marketId");
+
+        uint256 yesPrice = getMarketOraclePrice(marketId);
+        uint256 entryPriceMock = isLong ? yesPrice : PRICE_DECIMALS - yesPrice;
+        require(entryPriceMock > 0, "BME: zero entry");
 
         uint256 notional = collateralAmount * leverage;
         uint256 borrowed = notional - collateralAmount;
@@ -220,6 +249,7 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
             entryPriceMock: entryPriceMock,
             leverage:       leverage,
             isLong:         isLong,
+            marketId:       marketId,
             openTimestamp:  block.timestamp,
             isOpen:         true
         });
@@ -227,18 +257,21 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
 
         emit PositionOpened(
             positionId, msg.sender, effectiveCollateral, borrowed,
-            notional, leverage, isLong, entryPriceMock, openFee
+            notional, leverage, isLong, marketId, entryPriceMock, openFee
         );
     }
 
     // ─── Core: Close Position ────────────────────────────────────────
 
-    /// @notice Close your position with a mock exit price.
-    function closePosition(uint256 positionId, uint256 exitPriceMock) external nonReentrant {
+    /// @notice Close your position using oracle-backed exit price.
+    function closePosition(uint256 positionId) external nonReentrant {
         Position storage pos = positions[positionId];
         require(pos.isOpen, "BME: not open");
         require(pos.owner == msg.sender, "BME: not owner");
-        require(exitPriceMock > 0, "BME: zero price");
+
+        uint256 yesPrice = getMarketOraclePrice(pos.marketId);
+        uint256 exitPriceMock = pos.isLong ? yesPrice : PRICE_DECIMALS - yesPrice;
+        require(exitPriceMock > 0, "BME: zero exit");
 
         pos.isOpen = false;
 
@@ -259,12 +292,12 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
                 : 0;
         }
 
-        // User return: collateral + PnL - interest. Send all remaining balance to owner
-        // (so negative PnL is refunded: owner gets collateral - interest back).
+        // User return: collateral + PnL - interest (floored at 0).
+        int256 equity = int256(pos.collateral) + pnl - int256(interest);
+        uint256 returnAmount = equity > 0 ? uint256(equity) : 0;
         uint256 bal = usdc.balanceOf(address(this));
-        uint256 returnAmount = 0;
-        if (bal > 0) {
-            returnAmount = bal;
+        if (returnAmount > bal) returnAmount = bal;
+        if (returnAmount > 0) {
             usdc.safeTransfer(pos.owner, returnAmount);
         }
 
@@ -273,11 +306,14 @@ contract BaseMarginEngine is Ownable, ReentrancyGuard, Pausable {
 
     // ─── Core: Liquidate ─────────────────────────────────────────────
 
-    /// @notice Liquidate undercollateralized position (equity < 10% notional).
-    function liquidate(uint256 positionId, uint256 currentPriceMock) external nonReentrant whenNotPaused {
+    /// @notice Liquidate undercollateralized position (equity < maintenance requirement).
+    function liquidate(uint256 positionId) external nonReentrant whenNotPaused {
         Position storage pos = positions[positionId];
         require(pos.isOpen, "BME: not open");
-        require(isLiquidatable(positionId, currentPriceMock), "BME: not liquidatable");
+
+        uint256 yesPrice = getMarketOraclePrice(pos.marketId);
+        uint256 currentPriceMock = pos.isLong ? yesPrice : PRICE_DECIMALS - yesPrice;
+        require(isLiquidatable(positionId), "BME: not liquidatable");
 
         pos.isOpen = false;
 

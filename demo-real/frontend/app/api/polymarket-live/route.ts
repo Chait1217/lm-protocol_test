@@ -7,7 +7,7 @@ export const revalidate = 0;
 
 const GAMMA_HOST = "gamma-api.polymarket.com";
 const CLOB_HOST = "clob.polymarket.com";
-const SLUG = "will-bitcoin-reach-100000-by-december-31-2026-571";
+const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
 
 const noCacheHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",

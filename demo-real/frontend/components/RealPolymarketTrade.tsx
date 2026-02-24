@@ -7,7 +7,7 @@ import { polygon } from "wagmi/chains";
 import { POLYGON_CHAIN_ID, POLYMKT_USDCE_ADDRESS, POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
 import { erc20PolyAbi } from "@/lib/polymarketAbi";
 import { getContractAddresses, USDC_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
-import { parseUSDC, parsePrice, formatUSDC, bpsToPercent } from "@/lib/utils";
+import { parseUSDC, formatUSDC, bpsToPercent } from "@/lib/utils";
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -137,14 +137,14 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
         await new Promise((r) => setTimeout(r, 2000));
       }
 
-      // Open position on MarginEngine (Polygon)
-      const mockPrice = parsePrice(entryPrice.toString());
+      // Open position on MarginEngine (Polygon) with marketId; entry is snapshotted from oracle on-chain.
+      const marketId = addresses.marketId;
       writeContract(
         {
           address: addresses.marginEngine,
           abi: MARGIN_ENGINE_ABI,
           functionName: "openPosition",
-          args: [parseUSDC(collateral.toString()), BigInt(leverage), isLong, mockPrice],
+          args: [parseUSDC(collateral.toString()), BigInt(leverage), isLong, marketId],
           chainId: polygon.id,
         },
         {

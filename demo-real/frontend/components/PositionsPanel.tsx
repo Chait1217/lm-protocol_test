@@ -28,6 +28,7 @@ interface PositionData {
   entryPriceMock: bigint;
   leverage: bigint;
   isLong: boolean;
+  marketId: `0x${string}`;
   openTimestamp: bigint;
   isOpen: boolean;
 }
@@ -66,7 +67,7 @@ function parseMarketData(m: any): MarketData {
     } catch { clobTokenIds = []; }
 
     return {
-      title: m?.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
+      title: m?.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
       slug: m?.slug ?? null,
       yesProbability,
       noProbability,
@@ -78,7 +79,7 @@ function parseMarketData(m: any): MarketData {
     };
   } catch {
     return {
-      title: "Will Bitcoin reach $100,000 by December 31, 2026?",
+      title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
       slug: null,
       yesProbability: null,
       noProbability: null,

@@ -145,7 +145,7 @@ export default function PolymarketLiveChart({
 
       const noPrice = outcomePrices[1] != null ? parseFloat(String(outcomePrices[1])) : yesPrice != null ? 1 - yesPrice : null;
       return {
-        title: m?.question || "Will Bitcoin reach $100,000 by December 31, 2026?",
+        title: m?.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
         slug: m?.slug ?? null,
         probability,
         volume: parseFloat(m?.volume) || parseFloat(m?.volumeNum) || 0,
@@ -159,7 +159,7 @@ export default function PolymarketLiveChart({
       };
     } catch {
       return {
-        title: "Will Bitcoin reach $100,000 by December 31, 2026?",
+        title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
         slug: null,
         probability: null,
         volume: 0,
@@ -357,7 +357,7 @@ export default function PolymarketLiveChart({
               <RefreshCw className="w-3 h-3 text-neon" />
             </motion.div>
           </button>
-          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/what-price-will-bitcoin-hit-before-2027`}
+          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568`}
             target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-neon transition-colors">
             <ExternalLink className="w-3 h-3" />
           </a>

@@ -145,7 +145,7 @@ export const MARGIN_ENGINE_ABI = [
       { name: "collateralAmount", type: "uint256" },
       { name: "leverage", type: "uint256" },
       { name: "isLong", type: "bool" },
-      { name: "entryPriceMock", type: "uint256" },
+      { name: "marketId", type: "bytes32" },
     ],
     outputs: [{ name: "positionId", type: "uint256" }],
   },
@@ -153,20 +153,14 @@ export const MARGIN_ENGINE_ABI = [
     name: "closePosition",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [
-      { name: "positionId", type: "uint256" },
-      { name: "exitPriceMock", type: "uint256" },
-    ],
+    inputs: [{ name: "positionId", type: "uint256" }],
     outputs: [],
   },
   {
     name: "liquidate",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [
-      { name: "positionId", type: "uint256" },
-      { name: "currentPriceMock", type: "uint256" },
-    ],
+    inputs: [{ name: "positionId", type: "uint256" }],
     outputs: [],
   },
   // Views
@@ -187,6 +181,7 @@ export const MARGIN_ENGINE_ABI = [
           { name: "entryPriceMock", type: "uint256" },
           { name: "leverage", type: "uint256" },
           { name: "isLong", type: "bool" },
+          { name: "marketId", type: "bytes32" },
           { name: "openTimestamp", type: "uint256" },
           { name: "isOpen", type: "bool" },
         ],
@@ -221,11 +216,22 @@ export const MARGIN_ENGINE_ABI = [
     name: "isLiquidatable",
     type: "function",
     stateMutability: "view",
-    inputs: [
-      { name: "positionId", type: "uint256" },
-      { name: "currentPriceMock", type: "uint256" },
-    ],
+    inputs: [{ name: "positionId", type: "uint256" }],
     outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "getMarketOraclePrice",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "marketId", type: "bytes32" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "getPositionOraclePrice",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "positionId", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
   },
   {
     name: "nextPositionId",
@@ -260,6 +266,7 @@ export const MARGIN_ENGINE_ABI = [
       { name: "notional", type: "uint256", indexed: false },
       { name: "leverage", type: "uint256", indexed: false },
       { name: "isLong", type: "bool", indexed: false },
+      { name: "marketId", type: "bytes32", indexed: false },
       { name: "entryPriceMock", type: "uint256", indexed: false },
       { name: "openFee", type: "uint256", indexed: false },
     ],
@@ -291,5 +298,8 @@ export function getContractAddresses() {
     mockUsdc: ((process.env.NEXT_PUBLIC_USDC_ADDRESS || "").trim() || "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174") as `0x${string}`,
     vault: (vaultEnv || ZERO_ADDRESS) as `0x${string}`,
     marginEngine: (marginEnv || ZERO_ADDRESS) as `0x${string}`,
+    oracleRouter: ((process.env.NEXT_PUBLIC_ORACLE_ROUTER_ADDRESS || "").trim() || ZERO_ADDRESS) as `0x${string}`,
+    marketId: ((process.env.NEXT_PUBLIC_MARKET_ID || "").trim() ||
+      "0x0f4f0800c154f98b8fdbd46c02f7f157293736f2d5e07c1306edbf46a64db22f") as `0x${string}`,
   };
 }

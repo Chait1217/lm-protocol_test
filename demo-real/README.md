@@ -1,6 +1,6 @@
 # LM Protocol - Real Onchain Demo
 
-A minimal but real onchain prototype of the LM Protocol: leveraged prediction markets with real USDC.e money flows on **Polygon PoS** — same chain as Polymarket.
+A minimal but real onchain prototype of the LM Protocol: leveraged prediction markets with real USDC.e money flows on **Polygon PoS** — same chain as Polymarket, with oracle-driven onchain settlement.
 
 ## Architecture
 
@@ -20,16 +20,23 @@ A minimal but real onchain prototype of the LM Protocol: leveraged prediction ma
 │- deposit │  │- openPosition │     │ Same chain!  │
 │- withdraw│  │- closePosition│     │ No bridging  │
 │- lend    │  │- liquidate    │     └──────────────┘
-│- repay   │  │               │
-└────────┘  └───────────────┘
+│- repay   │  │- oracle settle│
+└────────┘  └───────┬───────┘
+                    │
+                    ▼
+              ┌──────────────┐
+              │ OracleRouter │
+              │ Chainlink/UMA│
+              └──────────────┘
 ```
 
 **Key points:**
 - **Single chain**: Vault + MarginEngine + Polymarket = all on Polygon PoS
 - All USDC.e transfers are **real onchain** on Polygon
 - No bridging needed — deposit, borrow, trade on the same network
-- PnL is calculated with **mock prices** (user-provided entry/exit)
-- In production, mock prices would be replaced by Polymarket oracle feeds
+- Polymarket remains the **live UI** source (charts, best bid/ask)
+- Onchain entry/exit/liquidation prices are **oracle-driven** via OracleRouter
+- Router supports both **Chainlink adapter** and **UMA resolution adapter**
 
 ## User Benefits
 
@@ -50,6 +57,7 @@ A minimal but real onchain prototype of the LM Protocol: leveraged prediction ma
 | Contracts  | Solidity ^0.8.20, Foundry, OpenZeppelin |
 | Frontend   | Next.js 14, TypeScript, Tailwind    |
 | Wallet     | RainbowKit + wagmi + viem           |
+| Oracle     | OracleRouter + ChainlinkBinaryAdapter + UmaResolutionAdapter |
 
 ## Quick Start
 
@@ -87,14 +95,19 @@ cp polygon.env .env
 # 2. Source environment
 source .env
 
-# 3. Deploy vault + margin engine to Polygon
+# 3. Deploy oracle + vault + margin engine to Polygon
 forge script script/DeployPolygonVault.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
 
 # 4. Copy logged addresses → frontend/.env.local
 # The script will output:
 #   NEXT_PUBLIC_USDC_ADDRESS=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174
+#   NEXT_PUBLIC_ORACLE_ROUTER_ADDRESS=0x...
+#   NEXT_PUBLIC_ORACLE_CHAINLINK_ADAPTER_ADDRESS=0x...
+#   NEXT_PUBLIC_ORACLE_UMA_ADAPTER_ADDRESS=0x...
 #   NEXT_PUBLIC_VAULT_ADDRESS=0x...
 #   NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS=0x...
+#   NEXT_PUBLIC_MARKET_SLUG=will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568
+#   NEXT_PUBLIC_MARKET_ID=0x...
 ```
 
 ### 3. Configure Frontend
@@ -111,6 +124,11 @@ NEXT_PUBLIC_USDC_ADDRESS=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174
 NEXT_PUBLIC_VAULT_ADDRESS=0x...   # from deploy output
 NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS=0x...   # from deploy output
 NEXT_PUBLIC_CHAIN_ID=137
+NEXT_PUBLIC_ORACLE_ROUTER_ADDRESS=0x...   # from deploy output
+NEXT_PUBLIC_ORACLE_CHAINLINK_ADAPTER_ADDRESS=0x...   # from deploy output
+NEXT_PUBLIC_ORACLE_UMA_ADAPTER_ADDRESS=0x...   # from deploy output
+NEXT_PUBLIC_MARKET_SLUG=will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568
+NEXT_PUBLIC_MARKET_ID=0x...   # from deploy output
 ```
 
 ### 4. Run Frontend
@@ -126,8 +144,8 @@ Open [http://localhost:3000](http://localhost:3000)
 
 1. **Deposit USDC.e** into Polygon vault (`/base-vault`)
 2. **Open position** → Borrow from vault → Real Polymarket trade (`/trade-demo`) — same chain!
-3. **Live PnL tracking** with real Polymarket prices
-4. **Close position** → Sell on Polymarket → Repay vault — all on Polygon
+3. **Live PnL tracking** with live Polymarket UI data + oracle-backed settlement preview
+4. **Close position** → Sell on Polymarket → Onchain close uses oracle settlement price
 
 ## Contract Details
 
@@ -152,7 +170,17 @@ Open [http://localhost:3000](http://localhost:3000)
 | Borrow APR | Kink model: base=5%, slope1=15%, slope2=60%, kink=70% |
 | Maintenance Margin | 10% of notional |
 | Liquidation Penalty | 1% of remaining (50% keeper / 40% insurance / 10% protocol) |
-| PnL | Mock prices (user-provided), real USDC.e settlement |
+| PnL | Oracle-driven settlement (entry/exit/liquidation), real USDC.e settlement |
+
+### Oracle Layer
+
+| Contract | Responsibility |
+|---------|----------------|
+| `OracleRouter` | Per-market source routing, staleness checks, unified `getYesPriceE6` |
+| `ChainlinkBinaryAdapter` | Converts Chainlink feed values to YES price (1e6 decimals) |
+| `UmaResolutionAdapter` | UMA-style resolved YES prices (owner-fed in demo) |
+
+`BaseMarginEngine` fetches YES price from `OracleRouter`, converts to position-side price (YES for long, 1-YES for short), and uses that for open snapshots and close/liquidation settlement.
 
 ### Interest Rate Model
 
@@ -172,7 +200,7 @@ Overview with links to Trade Demo, Polygon Vault, and Margin Trade.
 - Live Polymarket data + real USDC.e vault borrowing on Polygon
 - Open leveraged positions (2-5x) and trade on Polymarket — single chain
 - Live position tracking with PnL, liquidation distance
-- Close positions: sell on Polymarket → close vault position — no chain switching
+- Close positions: sell on Polymarket + oracle-settled vault close — no chain switching
 
 ### /base-vault (Polygon Vault)
 - Deposit/withdraw USDC.e on Polygon
@@ -190,12 +218,26 @@ This is a **prototype** for demonstration purposes:
 - Contracts use ReentrancyGuard and Pausable
 - No formal audit has been performed
 - Not for production use with significant funds
-- Mock prices are user-provided (no oracle)
+- Demo still relies on owner-fed UMA adapter values unless connected to production oracle infra
+
+## Oracle + PnL Data Flow
+
+```mermaid
+flowchart LR
+  polyUi[PolymarketAPIForUI] --> ui[FrontendLiveDisplay]
+  ui --> tradeTx[OpenOrCloseTx]
+  tradeTx --> engine[BaseMarginEngine]
+  engine --> router[OracleRouter]
+  router --> chainlink[ChainlinkAdapter]
+  router --> uma[UmaAdapter]
+  engine --> pnl[OnChainPnLSettlement]
+  pnl --> uiHistory[FrontendPositionsAndHistory]
+```
 
 ## Next Steps (Production)
 
-1. Integrate Polymarket oracle for real-time prices
-2. Add Chainlink/UMA oracle for price feeds
+1. Wire UMA assertions/disputes end-to-end (instead of owner-fed resolved values)
+2. Configure production Chainlink binary feeds per market in router
 3. Formal security audit
 4. Timelock on admin functions
 5. Keeper bot for liquidations
