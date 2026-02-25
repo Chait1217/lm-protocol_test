@@ -4,7 +4,12 @@ import { useState, useCallback, useEffect } from "react";
 import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { polygon } from "wagmi/chains";
-import { POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
+import {
+  POLYMARKET_CLOB_API,
+  POLYMKT_CTF_ADDRESS,
+  POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS,
+  POLYMKT_NEG_RISK_ADAPTER_ADDRESS,
+} from "@/lib/polymarketConfig";
 import { getContractAddresses, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -37,6 +42,11 @@ const POLYGONSCAN_TX = "https://polygonscan.com/tx/";
 const addresses = getContractAddresses();
 
 type CloseStep = "idle" | "selling" | "closing-vault" | "vault-confirming" | "done";
+
+type PositionApiRow = {
+  asset?: string;
+  size?: number;
+};
 
 /** Turn thrown errors into a short message and suggested action. */
 function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { message: string; action: string } {
@@ -146,23 +156,61 @@ export default function RealPolymarketClose({
     setStep("selling");
 
     const { ethers } = await import("ethers");
-    const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
+    const { ClobClient, Side, OrderType, AssetType } = await import("@polymarket/clob-client");
 
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const signer = provider.getSigner();
     const walletAddress = await signer.getAddress();
+    if (address && walletAddress.toLowerCase() !== address.toLowerCase()) {
+      throw new Error("Connected wallet does not match active wallet.");
+    }
 
     const host = POLYMARKET_CLOB_API;
     const baseClient = new ClobClient(host, 137, signer);
     const creds = await baseClient.createOrDeriveApiKey();
     const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
 
+    // Ensure CTF approvals so sells can transfer outcome tokens.
+    const ctfAbi = [
+      "function setApprovalForAll(address operator, bool approved) external",
+      "function isApprovedForAll(address account, address operator) view returns (bool)",
+    ];
+    const ctf = new ethers.Contract(POLYMKT_CTF_ADDRESS, ctfAbi, signer);
+    const operators = [POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS, POLYMKT_NEG_RISK_ADAPTER_ADDRESS];
+    for (const op of operators) {
+      const approved = await ctf.isApprovedForAll(walletAddress, op);
+      if (!approved) {
+        const tx = await ctf.setApprovalForAll(op, true);
+        await tx.wait(1);
+      }
+    }
+    await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+
     const ts = (tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
     const nr = negRisk ?? false;
 
+    // Use actual Polymarket position size for this token so close is accurate.
+    let sellAmount = notionalUsdc;
+    try {
+      const res = await fetch(`/api/polymarket-positions?user=${walletAddress}&size=50&t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const j = await res.json();
+        const rows: PositionApiRow[] = Array.isArray(j?.positions) ? j.positions : [];
+        const exact = rows.find((r) => String(r.asset ?? "") === String(tokenId));
+        const amt = Number(exact?.size ?? 0);
+        if (Number.isFinite(amt) && amt > 0) {
+          sellAmount = amt;
+        }
+      }
+    } catch {
+      // keep notional fallback when API is unavailable
+    }
+
     const postSell = (orderType: typeof OrderType.FOK | typeof OrderType.FAK) =>
       client.createAndPostMarketOrder(
-        { tokenID: tokenId, amount: notionalUsdc, side: Side.SELL },
+        { tokenID: tokenId, amount: sellAmount, side: Side.SELL },
         { tickSize: ts, negRisk: nr },
         orderType
       );
@@ -179,13 +227,22 @@ export default function RealPolymarketClose({
       }
     }
 
-    const orderId = resp?.orderID ?? resp?.id ?? resp?.order_id;
+    const statusTag = (resp?.status ?? resp?.errorMsg ?? resp?.error ?? "").toString().toLowerCase();
+    const orderId = resp?.orderID ?? resp?.orderId ?? resp?.id ?? resp?.order_id;
     const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;
     const fillPrice = resp?.averagePrice ?? resp?.avg_price ?? exitPrice;
+    const ok = Boolean(
+      orderId ||
+      polyTxHash ||
+      ["matched", "filled", "live", "posted", "open", "accepted"].some((s) => statusTag.includes(s))
+    );
+    if (!ok) {
+      throw new Error((resp?.errorMsg ?? resp?.error ?? resp?.message ?? "Sell was not accepted").toString());
+    }
 
-    setResult((prev) => ({ ...prev, polyOrderId: orderId, polyTxHash, actualExitPrice: fillPrice }));
+    setResult((prev) => ({ ...prev, polyOrderId: orderId ?? `status:${statusTag || "matched"}`, polyTxHash, actualExitPrice: fillPrice }));
     return typeof fillPrice === "number" ? fillPrice : parseFloat(String(fillPrice)) || exitPrice;
-  }, [tokenId, notionalUsdc, tickSize, negRisk, exitPrice]);
+  }, [tokenId, notionalUsdc, tickSize, negRisk, exitPrice, address]);
 
   /* ── Step 2: Close position on Polygon vault (oracle-driven) ── */
   const closeOnVault = useCallback(async () => {

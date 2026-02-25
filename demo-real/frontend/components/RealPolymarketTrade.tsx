@@ -48,14 +48,15 @@ type FlowStep = "idle" | "polymarket" | "borrow" | "borrow-confirming" | "done";
 type NoLiquidityMode = "abort" | "rest";
 type ExecutionMode = "market_first" | "rest_first";
 const NO_LIQUIDITY_MODE: NoLiquidityMode =
-  ((process.env.NEXT_PUBLIC_POLYMARKET_NO_LIQUIDITY_MODE || "rest").toLowerCase() === "abort"
+  ((process.env.NEXT_PUBLIC_POLYMARKET_NO_LIQUIDITY_MODE || "abort").toLowerCase() === "abort"
     ? "abort"
     : "rest");
 const POLYMARKET_EXECUTION_MODE: ExecutionMode =
-  ((process.env.NEXT_PUBLIC_POLYMARKET_EXECUTION_MODE || "rest_first").toLowerCase() === "market_first"
+  ((process.env.NEXT_PUBLIC_POLYMARKET_EXECUTION_MODE || "market_first").toLowerCase() === "market_first"
     ? "market_first"
     : "rest_first");
 const FAK_SLIPPAGE_BPS = 300; // 3.00%
+const MIN_RESTING_ORDER_SIZE = 5;
 
 function toErrorMessage(resp: any): string {
   const parts = [
@@ -76,12 +77,32 @@ function toErrorMessage(resp: any): string {
 }
 
 function parseOrderOutcome(resp: any): { ok: boolean; orderId?: string; txHash?: string; error?: string } {
+  if (typeof resp === "string") {
+    const tag = resp.trim().toLowerCase();
+    const successLikeTag = new Set(["matched", "filled", "live", "accepted", "posted", "open"]);
+    if (successLikeTag.has(tag)) {
+      return { ok: true, orderId: `status:${tag}` };
+    }
+  }
+
   const normalizedError =
-    typeof resp?.error === "string" ? resp.error.trim().toLowerCase() : "";
+    typeof resp?.error === "string"
+      ? resp.error.trim().toLowerCase()
+      : typeof resp?.data?.error === "string"
+        ? resp.data.error.trim().toLowerCase()
+        : "";
   const normalizedErrorMsg =
-    typeof resp?.errorMsg === "string" ? resp.errorMsg.trim().toLowerCase() : "";
+    typeof resp?.errorMsg === "string"
+      ? resp.errorMsg.trim().toLowerCase()
+      : typeof resp?.data?.errorMsg === "string"
+        ? resp.data.errorMsg.trim().toLowerCase()
+        : "";
   const normalizedStatus =
-    typeof resp?.status === "string" ? resp.status.trim().toLowerCase() : "";
+    typeof resp?.status === "string"
+      ? resp.status.trim().toLowerCase()
+      : typeof resp?.data?.status === "string"
+        ? resp.data.status.trim().toLowerCase()
+        : "";
   const successLikeTag = new Set(["matched", "filled", "live", "accepted", "posted", "open"]);
 
   const orderId =
@@ -103,12 +124,16 @@ function parseOrderOutcome(resp: any): { ok: boolean; orderId?: string; txHash?:
 
   const explicitFailure =
     resp?.success === false ||
+    resp?.data?.success === false ||
     (typeof resp?.errorMsg === "string" && !successLikeTag.has(String(resp.errorMsg).trim().toLowerCase())) ||
-    (typeof resp?.error === "string" && !successLikeTag.has(normalizedError));
+    (typeof resp?.error === "string" && !successLikeTag.has(normalizedError)) ||
+    (typeof resp?.data?.errorMsg === "string" && !successLikeTag.has(String(resp.data.errorMsg).trim().toLowerCase())) ||
+    (typeof resp?.data?.error === "string" && !successLikeTag.has(normalizedError));
 
   // Some market order responses can be successful without an explicit order id.
   const explicitSuccess =
     resp?.success === true ||
+    resp?.data?.success === true ||
     successLikeTag.has(normalizedStatus) ||
     successLikeTag.has(normalizedError) ||
     successLikeTag.has(normalizedErrorMsg) ||
@@ -130,6 +155,7 @@ function parseOrderOutcome(resp: any): { ok: boolean; orderId?: string; txHash?:
 }
 
 function getOutcomeTag(resp: any): string {
+  if (typeof resp === "string") return resp.trim().toLowerCase();
   const candidates = [resp?.status, resp?.errorMsg, resp?.error];
   for (const c of candidates) {
     if (typeof c === "string" && c.trim().length > 0) return c.trim().toLowerCase();
@@ -155,6 +181,29 @@ function isNoLiquidityError(message: string): boolean {
     m.includes("fully filled or killed") ||
     m.includes("couldn't be fully filled")
   );
+}
+
+function isMinRestingSizeError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("size") && m.includes("minimum");
+}
+
+function isTransientRestingOrderError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("service not ready") ||
+    m.includes("temporarily unavailable") ||
+    m.includes("timeout") ||
+    m.includes("timed out") ||
+    m.includes("try again later") ||
+    m.includes("503") ||
+    m.includes("502") ||
+    m.includes("gateway")
+  );
+}
+
+function isRestingFallbackUnavailableError(message: string): boolean {
+  return isMinRestingSizeError(message) || isTransientRestingOrderError(message);
 }
 
 function toLevels(levels: Array<{ price: string; size: string }> | undefined): Array<{ price: number; size: number }> {
@@ -287,13 +336,79 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   useEffect(() => {
     if (isVaultTxError && step === "borrow-confirming") {
       const message = vaultTxError instanceof Error ? vaultTxError.message : "Vault tx failed";
+      const stale = message.toLowerCase().includes("stale price");
       setResult((prev) => ({
         ...(prev ?? {}),
-        error: `Vault confirmation failed after Polymarket order succeeded: ${message}`,
+        error: stale
+          ? `Vault confirmation failed because oracle price is stale. Polymarket order already executed. Close from "Verify on Polymarket API" and retry after oracle refresh.`
+          : `Vault confirmation failed after Polymarket order succeeded: ${message}`,
       }));
       setStep("done");
     }
   }, [isVaultTxError, step, vaultTxError]);
+
+  const ensureVaultOracleFresh = useCallback(async (): Promise<boolean> => {
+    if (!hasVault) return true;
+    if (typeof window === "undefined" || !window.ethereum) {
+      setResult({ error: "No wallet found to verify oracle freshness." });
+      setStep("done");
+      return false;
+    }
+    try {
+      const { ethers } = await import("ethers");
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const reader = new ethers.Contract(
+        addresses.marginEngine,
+        ["function getMarketOraclePrice(bytes32 marketId) view returns (uint256)"],
+        provider
+      );
+      const px = await reader.getMarketOraclePrice(addresses.marketId);
+      const ok = Number(px) > 0;
+      if (!ok) throw new Error("oracle returned zero");
+      return true;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const stale = msg.toLowerCase().includes("stale price");
+      if (stale) {
+        try {
+          const refreshRes = await fetch("/api/oracle-refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ marketId: addresses.marketId }),
+          });
+          const refreshJson = await refreshRes.json().catch(() => ({}));
+          if (!refreshRes.ok || !refreshJson?.success) {
+            throw new Error((refreshJson?.error || "oracle refresh endpoint failed").toString());
+          }
+          await sleep(1200);
+          const { ethers } = await import("ethers");
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+
+          const reader = new ethers.Contract(
+            addresses.marginEngine,
+            ["function getMarketOraclePrice(bytes32 marketId) view returns (uint256)"],
+            provider
+          );
+          const px = await reader.getMarketOraclePrice(addresses.marketId);
+          if (Number(px) > 0) return true;
+        } catch (refreshErr: unknown) {
+          const refreshMsg = refreshErr instanceof Error ? refreshErr.message : String(refreshErr);
+          setResult({
+            error: `Oracle is stale and server auto-refresh failed (${refreshMsg}). Configure POLYMARKET_FEED_PRIVATE_KEY for the backend updater bot and retry.`,
+          });
+          setStep("done");
+          return false;
+        }
+      }
+      setResult({
+        error: stale
+          ? "Oracle is stale right now, so vault open would revert. Wait for feed refresh (about 30-60s) and retry."
+          : `Vault oracle check failed: ${msg}`,
+      });
+      setStep("done");
+      return false;
+    }
+  }, []);
 
   /* ── Step 1: Open position on Polygon vault (borrow) ── */
   const startBorrow = useCallback(async () => {
@@ -471,6 +586,12 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       const postRestingLimitOrder = async (typedClient: any) => {
         const limitPrice = Math.max(0.01, Math.min(0.99, Number(price.toFixed(4))));
         const size = Number((notional / limitPrice).toFixed(6));
+        if (size < MIN_RESTING_ORDER_SIZE) {
+          const minNotional = MIN_RESTING_ORDER_SIZE * limitPrice;
+          throw new Error(
+            `Resting GTC minimum size is ${MIN_RESTING_ORDER_SIZE}. Current size is ${size.toFixed(2)} at ${(limitPrice * 100).toFixed(1)}¢. Increase notional to at least $${minNotional.toFixed(2)}.`
+          );
+        }
         return typedClient.createAndPostOrder(
           {
             tokenID: tokenId,
@@ -484,27 +605,47 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       };
 
       if (POLYMARKET_EXECUTION_MODE === "rest_first") {
-        const limitResp = await postRestingLimitOrder(client);
-        const limitParsed = parseOrderOutcome(limitResp);
-        if (limitParsed.ok) {
-          const tag = getOutcomeTag(limitResp);
-          const matchedNow = tag.includes("matched") || tag.includes("filled");
-          if (matchedNow) {
-            setResult({
-              orderId: limitParsed.orderId,
-              polyTxHash: limitParsed.txHash,
-            });
-            return true;
+        try {
+          let limitResp: any;
+          try {
+            limitResp = await postRestingLimitOrder(client);
+          } catch (firstRestErr: unknown) {
+            const firstMsg = firstRestErr instanceof Error ? firstRestErr.message : String(firstRestErr);
+            if (!isTransientRestingOrderError(firstMsg)) throw firstRestErr;
+            await sleep(1200);
+            limitResp = await postRestingLimitOrder(client);
           }
-          setResult({
-            orderId: limitParsed.orderId,
-            polyTxHash: limitParsed.txHash,
-            info: "Posted resting GTC order on Polymarket (rest-first mode). Vault leg was not opened because the order is resting.",
-          });
-          setStep("done");
-          return false;
+          const limitParsed = parseOrderOutcome(limitResp);
+          const tag = getOutcomeTag(limitResp);
+          const msg = toErrorMessage(limitResp).toLowerCase();
+          const successLike = ["matched", "filled", "live", "open", "posted", "accepted"];
+          const looksSuccessful = successLike.some((s) => tag.includes(s) || msg === s || msg.includes(`"${s}"`));
+          if (limitParsed.ok || looksSuccessful) {
+            const matchedNow = tag.includes("matched") || tag.includes("filled") || msg.includes("matched") || msg.includes("filled");
+            const orderId = limitParsed.orderId ?? (tag ? `status:${tag}` : "status:matched");
+            if (matchedNow) {
+              setResult({
+                orderId,
+                polyTxHash: limitParsed.txHash,
+              });
+              return true;
+            }
+            setResult({
+              orderId,
+              polyTxHash: limitParsed.txHash,
+              info: "Posted resting GTC order on Polymarket (rest-first mode). Vault leg was not opened because the order is resting.",
+            });
+            setStep("done");
+            return false;
+          }
+          throw new Error(`Could not post resting GTC order in rest-first mode: ${toErrorMessage(limitResp)}`);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Small orders and temporary rest service errors should continue with market execution path.
+          if (!isMinRestingSizeError(msg) && !isTransientRestingOrderError(msg)) {
+            throw err;
+          }
         }
-        throw new Error(`Could not post resting GTC order in rest-first mode: ${toErrorMessage(limitResp)}`);
       }
 
       // Global preflight: avoid sending FAK/FOK when immediate opposite liquidity is absent.
@@ -527,25 +668,37 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
         liq: preflightLiq,
       });
       if (!preflightLiq.canSend) {
+        let continueWithMarketAttempt = false;
         if (NO_LIQUIDITY_MODE === "rest") {
-          const limitResp = await postRestingLimitOrder(client);
-          const limitParsed = parseOrderOutcome(limitResp);
-          if (limitParsed.ok) {
-            setResult({
-              orderId: limitParsed.orderId,
-              polyTxHash: limitParsed.txHash,
-              info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
-            });
-            setStep("done");
-            return false;
+          try {
+            const limitResp = await postRestingLimitOrder(client);
+            const limitParsed = parseOrderOutcome(limitResp);
+            if (limitParsed.ok) {
+              setResult({
+                orderId: limitParsed.orderId,
+                polyTxHash: limitParsed.txHash,
+                info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
+              });
+              setStep("done");
+              return false;
+            }
+            throw new Error(`Could not post resting GTC order: ${toErrorMessage(limitResp)}`);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            // If resting fallback is unavailable (min size / transient service), continue to market execution.
+            if (!isRestingFallbackUnavailableError(msg)) {
+              throw err;
+            }
+            continueWithMarketAttempt = true;
           }
-          throw new Error(`Could not post resting GTC order: ${toErrorMessage(limitResp)}`);
         }
-        setResult({
-          error: "No opposite liquidity at a fillable price/size for FAK/FOK. Vault leg not opened.",
-        });
-        setStep("done");
-        return false;
+        if (!continueWithMarketAttempt) {
+          setResult({
+            error: "No opposite liquidity at a fillable price/size for FAK/FOK. Vault leg not opened.",
+          });
+          setStep("done");
+          return false;
+        }
       }
 
       let resp: any;
@@ -586,7 +739,16 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               console.log("[Polymarket][orderbook-snapshot]", debugPayload);
               if (!liq.canSend) {
                 if (NO_LIQUIDITY_MODE === "rest") {
-                  resp = await postRestingLimitOrder(typedClient);
+                  try {
+                    resp = await postRestingLimitOrder(typedClient);
+                  } catch (restErr: unknown) {
+                    const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
+                    if (isRestingFallbackUnavailableError(restMsg)) {
+                      noLiquidityDetected = true;
+                      break;
+                    }
+                    throw restErr;
+                  }
                 } else {
                   noLiquidityDetected = true;
                   break;
@@ -614,7 +776,16 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
                 liq,
               });
               if (NO_LIQUIDITY_MODE === "rest") {
-                resp = await postRestingLimitOrder(typedClient);
+                try {
+                  resp = await postRestingLimitOrder(typedClient);
+                } catch (restErr: unknown) {
+                  const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
+                  if (isRestingFallbackUnavailableError(restMsg)) {
+                    noLiquidityDetected = true;
+                    break;
+                  }
+                  throw restErr;
+                }
               } else {
                 noLiquidityDetected = true;
                 break;
@@ -646,7 +817,16 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             });
             if (!liq.canSend) {
               if (NO_LIQUIDITY_MODE === "rest") {
-                resp = await postRestingLimitOrder(typedClient);
+                try {
+                  resp = await postRestingLimitOrder(typedClient);
+                } catch (restErr: unknown) {
+                  const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
+                  if (isRestingFallbackUnavailableError(restMsg)) {
+                    noLiquidityDetected = true;
+                    break;
+                  }
+                  throw restErr;
+                }
               } else {
                 noLiquidityDetected = true;
                 break;
@@ -674,7 +854,16 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               liq,
             });
             if (NO_LIQUIDITY_MODE === "rest") {
-              resp = await postRestingLimitOrder(typedClient);
+              try {
+                resp = await postRestingLimitOrder(typedClient);
+              } catch (restErr: unknown) {
+                const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
+                if (isRestingFallbackUnavailableError(restMsg)) {
+                  noLiquidityDetected = true;
+                  break;
+                }
+                throw restErr;
+              }
             } else {
               noLiquidityDetected = true;
               break;
@@ -697,16 +886,23 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       }
       if (noLiquidityDetected && !resp) {
         if (NO_LIQUIDITY_MODE === "rest") {
-          const limitResp = await postRestingLimitOrder(activeClient);
-          const limitParsed = parseOrderOutcome(limitResp);
-          if (limitParsed.ok) {
-            setResult({
-              orderId: limitParsed.orderId,
-              polyTxHash: limitParsed.txHash,
-              info: "No immediate liquidity for FAK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
-            });
-            setStep("done");
-            return false;
+          try {
+            const limitResp = await postRestingLimitOrder(activeClient);
+            const limitParsed = parseOrderOutcome(limitResp);
+            if (limitParsed.ok) {
+              setResult({
+                orderId: limitParsed.orderId,
+                polyTxHash: limitParsed.txHash,
+                info: "No immediate liquidity for FAK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
+              });
+              setStep("done");
+              return false;
+            }
+          } catch (restErr: unknown) {
+            const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
+            if (!isRestingFallbackUnavailableError(restMsg)) {
+              throw restErr;
+            }
           }
         }
         setResult({
@@ -720,18 +916,45 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
 
       const parsed = parseOrderOutcome(resp);
       if (!parsed.ok) {
+        const rawMsg = (parsed.error || "").toLowerCase();
+        const successLike = ["matched", "filled", "live", "open", "posted", "accepted"];
+        if (
+          successLike.some(
+            (s) =>
+              rawMsg === s ||
+              rawMsg.includes(`"${s}"`) ||
+              rawMsg.includes(` ${s} `) ||
+              rawMsg.startsWith(`${s} `) ||
+              rawMsg.startsWith(`${s}|`) ||
+              rawMsg.includes(`${s} |`) ||
+              rawMsg.endsWith(` ${s}`)
+          )
+        ) {
+          setResult({
+            orderId: `status:${rawMsg.split("|")[0].trim() || "matched"}`,
+            polyTxHash: undefined,
+          });
+          return true;
+        }
         if (isNoLiquidityError(parsed.error || "")) {
           if (NO_LIQUIDITY_MODE === "rest") {
-            const limitResp = await postRestingLimitOrder(activeClient);
-            const limitParsed = parseOrderOutcome(limitResp);
-            if (limitParsed.ok) {
-              setResult({
-                orderId: limitParsed.orderId,
-                polyTxHash: limitParsed.txHash,
-                info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
-              });
-              setStep("done");
-              return false;
+            try {
+              const limitResp = await postRestingLimitOrder(activeClient);
+              const limitParsed = parseOrderOutcome(limitResp);
+              if (limitParsed.ok) {
+                setResult({
+                  orderId: limitParsed.orderId,
+                  polyTxHash: limitParsed.txHash,
+                  info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
+                });
+                setStep("done");
+                return false;
+              }
+            } catch (restErr: unknown) {
+              const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
+              if (!isRestingFallbackUnavailableError(restMsg)) {
+                throw restErr;
+              }
             }
           }
           setResult({
@@ -768,6 +991,8 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   const handleExecute = useCallback(async () => {
     setResult(null);
     setVaultTxHash(undefined);
+    const oracleOk = await ensureVaultOracleFresh();
+    if (!oracleOk) return;
     const polyOk = await placePolymarketOrder();
     if (!polyOk) return;
 
@@ -778,7 +1003,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       return;
     }
     startBorrow();
-  }, [placePolymarketOrder, startBorrow, onSuccess]);
+  }, [ensureVaultOracleFresh, placePolymarketOrder, startBorrow, onSuccess]);
 
   /* ── Render ── */
   if (!market) return null;

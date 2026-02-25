@@ -10,7 +10,10 @@ const INTERVAL_SEC = Number(process.env.POLYMARKET_UPDATE_INTERVAL_SEC || "30");
 const MIN_TIP_GWEI = Number(process.env.POLYMARKET_MIN_PRIORITY_FEE_GWEI || "30");
 const DRY_RUN = (process.env.DRY_RUN || "false").toLowerCase() === "true";
 
-const FEED_ABI = ["function updatePriceE6(uint256 yesPriceE6) external"];
+const FEED_ABI = [
+  "function updatePriceE6(uint256 yesPriceE6) external",
+  "function updater() view returns (address)",
+];
 
 function requireEnv() {
   if (!FEED_ADDRESS || !ethers.utils.isAddress(FEED_ADDRESS)) {
@@ -66,6 +69,16 @@ async function main() {
   const feed = new ethers.Contract(FEED_ADDRESS, FEED_ABI, wallet);
   let lastSubmitted = null;
 
+  console.log("[polymarket-feed-updater] POLYMARKET_FEED: derived updater address from POLYMARKET_FEED_PRIVATE_KEY:", wallet.address);
+  const feedUpdater = await feed.updater();
+  const feedUpdaterNorm = (feedUpdater || "").toLowerCase();
+  const configuredNorm = wallet.address.toLowerCase();
+  console.log("[polymarket-feed-updater] Feed", FEED_ADDRESS, "authorized updater:", feedUpdater, "| configured:", wallet.address);
+  if (feedUpdaterNorm !== configuredNorm) {
+    console.error("[polymarket-feed-updater] FATAL: Configured key address is not the feed's authorized updater. Run scripts/set-polymarket-feed-updater.js with the feed owner key.");
+    process.exit(1);
+  }
+
   console.log(`Updater running for slug: ${MARKET_SLUG}`);
   console.log(`Feed: ${FEED_ADDRESS}`);
   console.log(`Updater wallet: ${wallet.address}`);
@@ -93,18 +106,43 @@ async function main() {
           maxFee = priority.add(ethers.utils.parseUnits("5", "gwei"));
         }
 
-        const tx = await feed.updatePriceE6(yesE6, {
-          maxPriorityFeePerGas: priority,
-          maxFeePerGas: maxFee,
-        });
-        console.log(`[tx] submitted YES price e6: ${yesE6} hash=${tx.hash}`);
-        const rcpt = await tx.wait();
+        let tx;
+        let rcpt;
+        const maxAttempts = 2;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            tx = await feed.updatePriceE6(yesE6, {
+              maxPriorityFeePerGas: priority,
+              maxFeePerGas: maxFee,
+            });
+            console.log(`[tx] submitted YES price e6: ${yesE6} hash=${tx.hash}`);
+            rcpt = await tx.wait();
+            break;
+          } catch (txErr) {
+            const txMsg = txErr instanceof Error ? txErr.message : String(txErr);
+            if (txMsg.toLowerCase().includes("not updater") || txMsg.includes("PF:")) throw txErr;
+            if (attempt < maxAttempts) {
+              console.warn(`[retry] attempt ${attempt} failed: ${txMsg}; retrying in 5s...`);
+              await sleep(5000);
+            } else {
+              throw txErr;
+            }
+          }
+        }
         console.log(`[ok] confirmed block=${rcpt.blockNumber}`);
         lastSubmitted = yesE6;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[error] ${message}`);
+      if (message.toLowerCase().includes("not updater")) {
+        console.error("[polymarket-feed-updater] FATAL: Feed rejected (not updater). Exiting so process manager can restart after you fix updater.");
+        process.exit(1);
+      }
+      if (message.toLowerCase().includes("revert") || message.includes("PF:")) {
+        console.error("[polymarket-feed-updater] FATAL: Contract reverted. Exiting for restart.");
+        process.exit(1);
+      }
     }
 
     await sleep(INTERVAL_SEC * 1000);
