@@ -7,8 +7,9 @@ const nextConfig = {
       ...config.resolve.alias,
       "@react-native-async-storage/async-storage": false,
     };
-    // Use polling in dev to avoid EMFILE (too many open files) on macOS
-    if (dev) {
+    // Polling is expensive; enable only when explicitly requested:
+    //   NEXT_USE_POLLING=true npm run dev
+    if (dev && process.env.NEXT_USE_POLLING === "true") {
       config.watchOptions = {
         ...config.watchOptions,
         poll: 2000,

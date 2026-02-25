@@ -94,11 +94,24 @@ cd ..
 
 ### 2. Deploy to Polygon
 
+**Option A – Deploy and update frontend env in one step (recommended)**
+
+From `demo-real/` (or repo root), with `PRIVATE_KEY` and `POLYGON_RPC_URL` set in `contracts/.env`:
+
+```bash
+cd demo-real
+./deploy-and-update-env.sh
+```
+
+This deploys the vault, oracle layer, and margin engine to Polygon, then updates `frontend/.env.local` with the new contract addresses. Restart the frontend (`npm run dev`) after running.
+
+**Option B – Deploy manually, then copy addresses**
+
 ```bash
 cd demo-real/contracts
 
 # 1. Set up environment
-cp polygon.env .env
+cp polygon.env .env   # or cp .env.example .env
 # Edit .env: set PRIVATE_KEY and POLYGON_RPC_URL
 
 # 2. Source environment
@@ -107,16 +120,7 @@ source .env
 # 3. Deploy oracle + vault + margin engine to Polygon
 forge script script/DeployPolygonVault.s.sol --rpc-url $POLYGON_RPC_URL --broadcast
 
-# 4. Copy logged addresses → frontend/.env.local
-# The script will output:
-#   NEXT_PUBLIC_USDC_ADDRESS=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174
-#   NEXT_PUBLIC_ORACLE_ROUTER_ADDRESS=0x...
-#   NEXT_PUBLIC_ORACLE_CHAINLINK_ADAPTER_ADDRESS=0x...
-#   NEXT_PUBLIC_ORACLE_UMA_ADAPTER_ADDRESS=0x...
-#   NEXT_PUBLIC_VAULT_ADDRESS=0x...
-#   NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS=0x...
-#   NEXT_PUBLIC_MARKET_SLUG=will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568
-#   NEXT_PUBLIC_MARKET_ID=0x...
+# 4. Copy the logged NEXT_PUBLIC_* lines into frontend/.env.local (or run Option A once to auto-update)
 ```
 
 ### 3. Configure Frontend
@@ -293,6 +297,46 @@ Owner can still use `setResolvedPrice` for demo or emergency override when OOV3 
    forge script script/ConfigureOracleFeeds.s.sol:ConfigureOracleFeeds --rpc-url $POLYGON_RPC_URL --broadcast
    ```
    For raw `bytes32` market id, set `MARKET_ID` instead of `MARKET_SLUG`. Repeat with different `MARKET_SLUG`/`CHAINLINK_AGGREGATOR` for additional markets.
+
+### No public feed for a market (practical live path)
+
+If a public Chainlink binary feed does not exist for your market, deploy a local updater feed and route the market to it:
+
+1. **Deploy updater feed:**
+   ```bash
+   export POLYMARKET_FEED_UPDATER=0x...   # updater bot EOA (or your deployer)
+   forge script script/DeployPolymarketBinaryFeed.s.sol:DeployPolymarketBinaryFeed --rpc-url $POLYGON_RPC_URL --broadcast
+   ```
+2. **Wire router + adapter to this feed:**
+   ```bash
+   export ORACLE_ROUTER_ADDRESS=0x...
+   export CHAINLINK_ADAPTER_ADDRESS=0x...
+   export MARKET_SLUG=will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568
+   export CHAINLINK_AGGREGATOR=0x...      # deployed PolymarketBinaryPriceFeed
+   export CHAINLINK_MAX_AGE_SEC=120
+   forge script script/ConfigureOracleFeeds.s.sol:ConfigureOracleFeeds --rpc-url $POLYGON_RPC_URL --broadcast
+   ```
+3. **Push live YES price updates (1e6 precision):**
+   ```bash
+   export POLYMARKET_BINARY_FEED_ADDRESS=0x...
+   export POLYMARKET_YES_PRICE_E6=640000   # 64.0%
+   export UPDATER_PRIVATE_KEY=0x...
+   forge script script/UpdatePolymarketBinaryFeed.s.sol:UpdatePolymarketBinaryFeed --rpc-url $POLYGON_RPC_URL --broadcast
+   ```
+
+You can run step 3 from a keeper/bot that reads Polymarket CLOB prices and periodically writes onchain.
+
+4. **Run continuous updater bot (optional, recommended):**
+   ```bash
+   cd frontend
+   export POLYGON_RPC_URL=https://polygon-bor-rpc.publicnode.com
+   export POLYMARKET_BINARY_FEED_ADDRESS=0x...   # deployed feed
+   export POLYMARKET_FEED_PRIVATE_KEY=0x...      # updater wallet key
+   export POLYMARKET_MARKET_SLUG=will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568
+   export POLYMARKET_UPDATE_INTERVAL_SEC=30
+   export POLYMARKET_MIN_PRIORITY_FEE_GWEI=30
+   npm run feed:updater
+   ```
 
 ## Next Steps (Production)
 

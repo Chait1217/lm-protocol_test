@@ -13,6 +13,7 @@ import { BASE_USDC_ADDRESS, BASE_VAULT_ADDRESS } from "@/lib/baseAddresses";
 import { baseVaultAbi, erc20Abi } from "@/lib/abi";
 import {
   useAccount,
+  useBlockNumber,
   useReadContract,
   useReadContracts,
   useWriteContract,
@@ -33,6 +34,17 @@ import {
 
 const POLYGON_CHAIN_ID = 137;
 const USDC_DECIMALS = 6;
+const LEGACY_BASE_VAULT_ADDRESS = "0xea6d70e05bf1b36eeb5b9c8d46048b2220fc976a";
+const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+const VAULT_ASSET_ABI = [
+  {
+    name: "asset",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+] as const;
 
 function fmtUSDC(value: bigint | undefined): string {
   if (value === undefined) return "0.000000";
@@ -63,17 +75,23 @@ export default function BaseVaultPage() {
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [actionLabel, setActionLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [pendingApprovalFor, setPendingApprovalFor] = useState<bigint>(BigInt(0));
+  const [approvedAmountLocal, setApprovedAmountLocal] = useState<bigint>(BigInt(0));
 
   const isWrongNetwork = isConnected && chain?.id !== POLYGON_CHAIN_ID;
+  const { data: latestBlock } = useBlockNumber({ chainId: POLYGON_CHAIN_ID, watch: true });
+  const isLegacyBaseVaultConfigured =
+    BASE_VAULT_ADDRESS.toLowerCase() === LEGACY_BASE_VAULT_ADDRESS;
+  const isVaultAddressInvalid = !ADDRESS_REGEX.test(BASE_VAULT_ADDRESS);
 
   // ─── Vault reads (TVL, borrowed, util, insurance, protocol) ──────
   const { data: vaultData, refetch: refetchVault } = useReadContracts({
     contracts: [
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "totalAssets" },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "totalBorrowed" },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "utilization" },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "insuranceBalance" },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "protocolBalance" },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "totalAssets", chainId: POLYGON_CHAIN_ID },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "totalBorrowed", chainId: POLYGON_CHAIN_ID },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "utilization", chainId: POLYGON_CHAIN_ID },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "insuranceBalance", chainId: POLYGON_CHAIN_ID },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "protocolBalance", chainId: POLYGON_CHAIN_ID },
     ],
     query: { refetchInterval: 5000 },
   });
@@ -84,12 +102,25 @@ export default function BaseVaultPage() {
   const insuranceBal   = vaultData?.[3]?.result as bigint | undefined;
   const protocolBal    = vaultData?.[4]?.result as bigint | undefined;
 
+  // Read the actual token accepted by the vault to avoid env mismatches.
+  const { data: vaultAssetAddress } = useReadContract({
+    address: BASE_VAULT_ADDRESS,
+    abi: VAULT_ASSET_ABI,
+    functionName: "asset",
+    chainId: POLYGON_CHAIN_ID,
+  });
+  const depositTokenAddress = (vaultAssetAddress as `0x${string}` | undefined) ?? BASE_USDC_ADDRESS;
+  const isDepositTokenMismatch =
+    (vaultAssetAddress as string | undefined)?.toLowerCase() !== undefined &&
+    (vaultAssetAddress as string).toLowerCase() !== BASE_USDC_ADDRESS.toLowerCase();
+
   // ─── User reads ──────────────────────────────────────────────────
   const { data: userUsdcBalance, refetch: refetchUsdc } = useReadContract({
-    address: BASE_USDC_ADDRESS,
+    address: depositTokenAddress,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    chainId: POLYGON_CHAIN_ID,
     query: { refetchInterval: 5000 },
   });
 
@@ -98,6 +129,7 @@ export default function BaseVaultPage() {
     abi: baseVaultAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    chainId: POLYGON_CHAIN_ID,
     query: { refetchInterval: 5000 },
   });
 
@@ -106,19 +138,21 @@ export default function BaseVaultPage() {
     abi: baseVaultAbi,
     functionName: "convertToAssets",
     args: userShares !== undefined ? [userShares as bigint] : undefined,
+    chainId: POLYGON_CHAIN_ID,
   });
 
   const { data: usdcAllowance, refetch: refetchAllowance } = useReadContract({
-    address: BASE_USDC_ADDRESS,
+    address: depositTokenAddress,
     abi: erc20Abi,
     functionName: "allowance",
     args: address ? [address, BASE_VAULT_ADDRESS] : undefined,
+    chainId: POLYGON_CHAIN_ID,
   });
 
   // ─── Write ───────────────────────────────────────────────────────
   const { writeContract, isPending: isWritePending } = useWriteContract();
-  const { isLoading: isTxConfirming, isSuccess: isTxSuccess } =
-    useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: isTxConfirming, isSuccess: isTxSuccess, isError: isTxError, error: txError } =
+    useWaitForTransactionReceipt({ hash: txHash, chainId: POLYGON_CHAIN_ID });
 
   const refetchAll = useCallback(() => {
     refetchVault();
@@ -129,11 +163,49 @@ export default function BaseVaultPage() {
 
   useEffect(() => {
     if (isTxSuccess) {
+      // If approve tx confirmed, allow deposit flow immediately even if allowance read lags.
+      if (actionLabel.includes("Approving") && pendingApprovalFor > BigInt(0)) {
+        setApprovedAmountLocal((prev) => (prev > pendingApprovalFor ? prev : pendingApprovalFor));
+        setPendingApprovalFor(BigInt(0));
+      }
       refetchAll();
       setTxHash(undefined);
+      setActionLabel("");
       setErrorMessage("");
     }
-  }, [isTxSuccess, refetchAll]);
+  }, [isTxSuccess, refetchAll, actionLabel, pendingApprovalFor]);
+
+  // Keep wallet-sensitive reads fresh on each new block.
+  useEffect(() => {
+    if (!isConnected || !address || isWrongNetwork) return;
+    refetchVault();
+    refetchUsdc();
+    refetchAllowance();
+    refetchShares();
+  }, [latestBlock, isConnected, address, isWrongNetwork, refetchVault, refetchUsdc, refetchAllowance, refetchShares]);
+
+  // Refresh when user returns to the tab/window (common after funding from wallet app).
+  useEffect(() => {
+    const onFocus = () => refetchAll();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refetchAll();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refetchAll]);
+
+  useEffect(() => {
+    if (isTxError && txHash) {
+      setErrorMessage(txError?.message ?? "Transaction failed or reverted");
+      setActionLabel("");
+      setPendingApprovalFor(BigInt(0));
+      setTxHash(undefined);
+    }
+  }, [isTxError, txError, txHash]);
 
   const isLoading = isWritePending || isTxConfirming;
 
@@ -142,23 +214,39 @@ export default function BaseVaultPage() {
     setErrorMessage("");
     const amount = parseUSDC(depositAmount);
     if (amount === BigInt(0)) return;
+    if (userUsdcBalance !== undefined && amount > (userUsdcBalance as bigint)) {
+      setErrorMessage("Insufficient USDC balance for this amount.");
+      return;
+    }
     setActionLabel("Approving USDC...");
+    setPendingApprovalFor(amount);
     writeContract(
-      { address: BASE_USDC_ADDRESS, abi: erc20Abi, functionName: "approve", args: [BASE_VAULT_ADDRESS, amount] },
-      { onSuccess: (hash) => setTxHash(hash), onError: (e) => { setActionLabel(""); setErrorMessage(e?.message ?? "Approval failed"); } }
+      { address: depositTokenAddress, abi: erc20Abi, functionName: "approve", args: [BASE_VAULT_ADDRESS, amount], chainId: POLYGON_CHAIN_ID },
+      {
+        onSuccess: (hash) => setTxHash(hash),
+        onError: (e) => {
+          setPendingApprovalFor(BigInt(0));
+          setActionLabel("");
+          setErrorMessage(e?.message ?? "Approval failed");
+        },
+      }
     );
-  }, [depositAmount, writeContract]);
+  }, [depositAmount, writeContract, userUsdcBalance, depositTokenAddress]);
 
   const handleDeposit = useCallback(() => {
     setErrorMessage("");
     const amount = parseUSDC(depositAmount);
     if (amount === BigInt(0)) return;
+    if (userUsdcBalance !== undefined && amount > (userUsdcBalance as bigint)) {
+      setErrorMessage("Insufficient USDC balance for this amount.");
+      return;
+    }
     setActionLabel("Depositing USDC...");
     writeContract(
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "deposit", args: [amount] },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "deposit", args: [amount], chainId: POLYGON_CHAIN_ID },
       { onSuccess: (hash) => { setTxHash(hash); setDepositAmount(""); }, onError: (e) => { setActionLabel(""); setErrorMessage(e?.message ?? "Deposit failed"); } }
     );
-  }, [depositAmount, writeContract]);
+  }, [depositAmount, writeContract, userUsdcBalance]);
 
   const handleWithdraw = useCallback(() => {
     setErrorMessage("");
@@ -166,13 +254,33 @@ export default function BaseVaultPage() {
     if (amount === BigInt(0)) return;
     setActionLabel("Withdrawing USDC...");
     writeContract(
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "withdraw", args: [amount] },
+      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "withdraw", args: [amount], chainId: POLYGON_CHAIN_ID },
       { onSuccess: (hash) => { setTxHash(hash); setWithdrawAmount(""); }, onError: (e) => { setActionLabel(""); setErrorMessage(e?.message ?? "Withdraw failed"); } }
     );
   }, [withdrawAmount, writeContract]);
 
-  const needsApproval =
-    usdcAllowance !== undefined && depositAmount !== "" && (usdcAllowance as bigint) < parseUSDC(depositAmount);
+  const depositParsed = depositAmount !== "" ? parseUSDC(depositAmount) : BigInt(0);
+  const allowanceOnchain = (usdcAllowance as bigint | undefined) ?? BigInt(0);
+  const effectiveAllowance = allowanceOnchain > approvedAmountLocal ? allowanceOnchain : approvedAmountLocal;
+  const needsApproval = depositAmount !== "" && effectiveAllowance < depositParsed;
+  const hasInsufficientUsdc =
+    depositAmount !== "" && userUsdcBalance !== undefined && depositParsed > (userUsdcBalance as bigint);
+  const maxDepositExact =
+    userUsdcBalance != null ? formatUnits(userUsdcBalance as bigint, USDC_DECIMALS) : "";
+
+  const clampDepositInput = useCallback(
+    (raw: string) => {
+      if (raw === "") return "";
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) return "";
+      const parsed = parseUSDC(String(n));
+      if (userUsdcBalance != null && parsed > (userUsdcBalance as bigint)) {
+        return maxDepositExact;
+      }
+      return raw;
+    },
+    [userUsdcBalance, maxDepositExact]
+  );
 
   const availableLiquidity =
     totalAssets !== undefined && totalBorrowed !== undefined ? totalAssets - totalBorrowed : undefined;
@@ -188,6 +296,34 @@ export default function BaseVaultPage() {
             This vault is on <strong>Polygon PoS</strong> and uses <strong>real USDC.e</strong>. Use only small amounts for testing.
           </p>
         </div>
+
+        {isLegacyBaseVaultConfigured && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-200">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+            <p className="text-sm">
+              Misconfiguration detected: <code>NEXT_PUBLIC_VAULT_ADDRESS</code> is set to the legacy Base vault.
+              Update it to your Polygon vault address in <code>frontend/.env.local</code> and restart the app.
+            </p>
+          </div>
+        )}
+        {isVaultAddressInvalid && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-200">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+            <p className="text-sm">
+              Invalid <code>NEXT_PUBLIC_VAULT_ADDRESS</code> in <code>frontend/.env.local</code>. Make sure it is a
+              valid Polygon vault address (0x + 40 hex chars), then restart the app.
+            </p>
+          </div>
+        )}
+        {isDepositTokenMismatch && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 text-orange-200">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-400" />
+            <p className="text-sm">
+              Token config mismatch: vault accepts <code>{String(vaultAssetAddress)}</code>, while env USDC is{" "}
+              <code>{BASE_USDC_ADDRESS}</code>. Using vault token automatically for balance/approve/deposit.
+            </p>
+          </div>
+        )}
 
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
@@ -260,7 +396,7 @@ export default function BaseVaultPage() {
               </h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">USDC Balance</span>
+                  <span className="text-sm text-gray-400">USDC.e Balance</span>
                   <span className="font-medium text-white">${fmtUSDC(userUsdcBalance as bigint | undefined)}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -281,18 +417,22 @@ export default function BaseVaultPage() {
               </h3>
               <div className="mb-4">
                 <div className="flex items-center gap-2 rounded-xl border border-gray-700 bg-black/40 px-4 py-3">
-                  <input type="number" placeholder="0.00" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)}
+                  <input type="number" placeholder="0.00" value={depositAmount} onChange={(e) => setDepositAmount(clampDepositInput(e.target.value))}
                     className="flex-1 bg-transparent text-lg font-medium text-white outline-none placeholder:text-gray-600" />
                   <span className="text-sm font-medium text-gray-400">USDC</span>
                 </div>
-                <button type="button" onClick={() => setDepositAmount(userUsdcBalance != null ? formatUnits(userUsdcBalance as bigint, USDC_DECIMALS) : "")}
-                  className="mt-1 text-xs text-neon/70 transition hover:text-neon">MAX</button>
+                <button type="button" onClick={() => setDepositAmount(maxDepositExact)}
+                  className="mt-1 text-xs text-neon/70 transition hover:text-neon">Use Max Available</button>
+                <p className="mt-1 text-xs text-gray-500">Available in wallet: ${fmtUSDC(userUsdcBalance as bigint | undefined)}</p>
               </div>
               {needsApproval ? (
-                <TxButton onClick={handleApprove} loading={isLoading && actionLabel.includes("Approving")} className="w-full">Approve USDC</TxButton>
+                <TxButton onClick={handleApprove} loading={isLoading && actionLabel.includes("Approving")} disabled={isLegacyBaseVaultConfigured || isVaultAddressInvalid || hasInsufficientUsdc} className="w-full">Approve USDC</TxButton>
               ) : (
                 <TxButton onClick={handleDeposit} loading={isLoading && actionLabel.includes("Depositing")}
-                  disabled={!depositAmount || parseFloat(depositAmount) <= 0} className="w-full">Deposit</TxButton>
+                  disabled={isLegacyBaseVaultConfigured || isVaultAddressInvalid || hasInsufficientUsdc || !depositAmount || parseFloat(depositAmount) <= 0} className="w-full">Deposit</TxButton>
+              )}
+              {hasInsufficientUsdc && (
+                <p className="mt-2 text-xs text-red-300">Insufficient USDC balance for this deposit amount.</p>
               )}
             </div>
 
@@ -311,7 +451,7 @@ export default function BaseVaultPage() {
                   className="mt-1 text-xs text-orange-400/70 transition hover:text-orange-400">MAX</button>
               </div>
               <TxButton onClick={handleWithdraw} loading={isLoading && actionLabel.includes("Withdrawing")}
-                disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0} variant="secondary" className="w-full">Withdraw</TxButton>
+                disabled={isLegacyBaseVaultConfigured || isVaultAddressInvalid || !withdrawAmount || parseFloat(withdrawAmount) <= 0} variant="secondary" className="w-full">Withdraw</TxButton>
             </div>
           </div>
         ) : null}

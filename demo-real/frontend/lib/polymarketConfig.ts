@@ -24,6 +24,18 @@ export const POLYMKT_CTF_EXCHANGE_ADDRESS = (
   "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E"
 ) as `0x${string}`;
 
+/** Neg-risk CTF exchange on Polygon (multi-outcome/negative-risk routing). */
+export const POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS = (
+  (process.env.NEXT_PUBLIC_POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS || "").trim() ||
+  "0xC5d563A36AE78145C45a50134d48A1215220f80a"
+) as `0x${string}`;
+
+/** Neg-risk adapter on Polygon. */
+export const POLYMKT_NEG_RISK_ADAPTER_ADDRESS = (
+  (process.env.NEXT_PUBLIC_POLYMKT_NEG_RISK_ADAPTER_ADDRESS || "").trim() ||
+  "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296"
+) as `0x${string}`;
+
 /**
  * CLOB API base URL for placing orders.
  * Routes through our Next.js proxy to bypass local DNS issues with polymarket.com.

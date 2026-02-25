@@ -20,13 +20,14 @@ import { polygon } from "wagmi/chains";
 const PolymarketLiveChart = dynamic(() => import("@/components/PolymarketLiveChart"), { ssr: false });
 const PolymarketLeverageBox = dynamic(() => import("@/components/PolymarketLeverageBox"), { ssr: false });
 const PositionsPanel = dynamic(() => import("@/components/PositionsPanel"), { ssr: false });
+const PolymarketPositionVerify = dynamic(() => import("@/components/PolymarketPositionVerify"), { ssr: false });
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const addresses = getContractAddresses();
 const hasVault = addresses.vault !== ZERO && addresses.vault.length === 42;
 
-/* ─── Lightweight market data fetcher for the header ─── */
-function useHeaderMarket(interval = 3000) {
+/* ─── Lightweight market data fetcher for the header (live prices) ─── */
+function useHeaderMarket(interval = 2500) {
   const [data, setData] = useState<{
     yesProbability: number | null;
     noProbability: number | null;
@@ -38,7 +39,7 @@ function useHeaderMarket(interval = 3000) {
 
   const fetch_ = useCallback(async () => {
     try {
-      const res = await fetch(`/api/polymarket-live?t=${Date.now()}`, { cache: "no-store" });
+      const res = await fetch("/api/polymarket-live", { cache: "no-store" });
       if (!res.ok) return;
       const j = await res.json();
       if (!j.success || !j.market) return;
@@ -151,6 +152,7 @@ export default function TradeDemoPage() {
               refreshTrigger={positionRefreshTrigger}
               onVaultRefetch={handleVaultRefetch}
             />
+            <PolymarketPositionVerify />
           </div>
         </div>
       </main>

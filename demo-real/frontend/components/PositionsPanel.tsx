@@ -120,11 +120,6 @@ export default function PositionsPanel({
 
   const fetchRef = useRef(fetchMarket);
   fetchRef.current = fetchMarket;
-  useEffect(() => {
-    fetchRef.current();
-    const id = setInterval(() => fetchRef.current(), 5000);
-    return () => clearInterval(id);
-  }, []);
 
   // ─── Position contract reads (Polygon chain) ────────
 
@@ -156,16 +151,32 @@ export default function PositionsPanel({
     .filter((entry): entry is { id: bigint; pos: PositionData } => entry.pos != null && entry.pos.isOpen);
 
   const openIds = useMemo(() => new Set(openPositionEntries.map((e) => Number(e.id))), [openPositionEntries]);
+  const firstOpenId = openPositionEntries.length > 0 ? Number(openPositionEntries[0].id) : null;
 
   // ─── Active position ──────────────────────────────────────────
   const [activePositionId, setActivePositionId] = useState<number | null>(null);
   const prevPositionCountRef = useRef(userPositionIds.length);
+
+  // When user has open positions, auto-select the most recent so live tracking is visible
+  useEffect(() => {
+    if (firstOpenId !== null && (activePositionId === null || !openIds.has(activePositionId))) {
+      setActivePositionId(firstOpenId);
+    }
+  }, [firstOpenId, activePositionId, openIds]);
 
   useEffect(() => {
     if (activePositionId !== null && !openIds.has(activePositionId)) {
       setActivePositionId(null);
     }
   }, [activePositionId, openIds]);
+
+  // Live price polling: faster when tracking a position
+  const pollIntervalMs = activePositionId !== null ? 2000 : 5000;
+  useEffect(() => {
+    fetchRef.current();
+    const id = setInterval(() => fetchRef.current(), pollIntervalMs);
+    return () => clearInterval(id);
+  }, [pollIntervalMs]);
 
   const { data: positionData, refetch: refetchPosition } = useReadContract({
     address: addresses.marginEngine,
@@ -210,7 +221,7 @@ export default function PositionsPanel({
 
   // ─── Render ───────────────────────────────────────────────────
 
-  if (!isConnected || recentPositionIds.length === 0) return null;
+  if (!isConnected) return null;
 
   return (
     <div className="glass-card rounded-xl border border-emerald-500/20 shadow-glow p-2.5 mt-2">
@@ -221,7 +232,31 @@ export default function PositionsPanel({
       </h4>
       <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
         {openPositionEntries.length === 0 ? (
-          <p className="text-gray-500 text-[10px] py-2">No open positions</p>
+          <div className="text-[10px] py-2 space-y-2">
+            <p className="text-gray-500">No open positions</p>
+            <p className="text-gray-500 border-t border-gray-800/50 pt-2">
+              To close a position: it will appear here once the vault leg has opened. Click &quot;Track &amp; close&quot; then &quot;Sell on Polymarket → Close vault position&quot;.
+            </p>
+            <p className="text-amber-400/90">
+              <strong>Don’t see your trade on Polymarket?</strong> Connect the <strong>same wallet</strong> on <strong>Polygon</strong> at{" "}
+              <a href="https://polymarket.com/portfolio" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">polymarket.com/portfolio</a>
+              {" "}or the market page. Orders placed here use that wallet; outcome tokens live in it.
+            </p>
+            <p className="text-gray-500 border-t border-gray-800/50 pt-2">
+              <strong>No position here or on Polymarket?</strong> This app only lists positions where the <strong>vault leg</strong> opened. If only the Polymarket order filled, you won’t see anything here. To see every token move (USDC.e, outcome tokens), check{" "}
+              {address && (
+                <a
+                  href={`https://polygonscan.com/address/${address}#tokentxns`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:underline"
+                >
+                  Polygonscan → Token transfers
+                </a>
+              )}
+              {!address && "Polygonscan → Token transfers for your wallet."}
+            </p>
+          </div>
         ) : (
           openPositionEntries.map(({ id, pos }) => {
             const isSelected = activePositionId === Number(id);

@@ -1595,13 +1595,25 @@ const VaultPage = ({ walletConnected }) => {
 };
 
 // App (pages)
+const DEMO_HASH = "#demo";
+
 export default function App() {
-  const [currentPage, setCurrentPage] = useState("market");
+  const [currentPage, setCurrentPage] = useState(() =>
+    typeof window !== "undefined" && window.location.hash === DEMO_HASH ? "demo" : "market"
+  );
   const { isConnected } = useAccount();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [currentPage]);
+
+  useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash === DEMO_HASH) setCurrentPage("demo");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const goToAlphaFromMarket = () => {
     setCurrentPage("alpha");

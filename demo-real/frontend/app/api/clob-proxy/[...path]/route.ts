@@ -135,6 +135,20 @@ async function handleRequest(req: NextRequest, { params }: { params: { path: str
 
   try {
     const resp = await proxyRequest(req.method, fullPath, headers, body);
+    if (resp.status >= 400 && fullPath.includes("/order")) {
+      let raw = "";
+      try {
+        raw = resp.body.toString("utf8");
+      } catch {
+        raw = "<unreadable>";
+      }
+      console.error("[clob-proxy][order-error]", {
+        method: req.method,
+        path: fullPath,
+        status: resp.status,
+        body: raw,
+      });
+    }
 
     // Build response, forwarding CORS headers
     const resHeaders = new Headers();

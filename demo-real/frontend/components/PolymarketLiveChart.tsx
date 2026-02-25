@@ -101,7 +101,7 @@ const POLYMARKET_BASE = "https://polymarket.com";
 
 export default function PolymarketLiveChart({
   settlementDate = "Dec 31, 2026",
-  refreshInterval = 2000,
+  refreshInterval = 4000,
 }: {
   settlementDate?: string;
   refreshInterval?: number;

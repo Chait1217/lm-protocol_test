@@ -4,7 +4,15 @@ import { useState, useCallback, useEffect } from "react";
 import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { polygon } from "wagmi/chains";
-import { POLYGON_CHAIN_ID, POLYMKT_USDCE_ADDRESS, POLYMARKET_CLOB_API } from "@/lib/polymarketConfig";
+import {
+  POLYGON_CHAIN_ID,
+  POLYMKT_USDCE_ADDRESS,
+  POLYMKT_CTF_ADDRESS,
+  POLYMKT_CTF_EXCHANGE_ADDRESS,
+  POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS,
+  POLYMKT_NEG_RISK_ADAPTER_ADDRESS,
+  POLYMARKET_CLOB_API,
+} from "@/lib/polymarketConfig";
 import { erc20PolyAbi } from "@/lib/polymarketAbi";
 import { getContractAddresses, USDC_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 import { parseUSDC, formatUSDC, bpsToPercent } from "@/lib/utils";
@@ -36,7 +44,166 @@ const addresses = getContractAddresses();
 const ZERO = "0x0000000000000000000000000000000000000000";
 const hasVault = addresses.vault !== ZERO && addresses.vault.length === 42;
 
-type FlowStep = "idle" | "borrow" | "borrow-confirming" | "polymarket" | "done";
+type FlowStep = "idle" | "polymarket" | "borrow" | "borrow-confirming" | "done";
+type NoLiquidityMode = "abort" | "rest";
+type ExecutionMode = "market_first" | "rest_first";
+const NO_LIQUIDITY_MODE: NoLiquidityMode =
+  ((process.env.NEXT_PUBLIC_POLYMARKET_NO_LIQUIDITY_MODE || "rest").toLowerCase() === "abort"
+    ? "abort"
+    : "rest");
+const POLYMARKET_EXECUTION_MODE: ExecutionMode =
+  ((process.env.NEXT_PUBLIC_POLYMARKET_EXECUTION_MODE || "rest_first").toLowerCase() === "market_first"
+    ? "market_first"
+    : "rest_first");
+const FAK_SLIPPAGE_BPS = 300; // 3.00%
+
+function toErrorMessage(resp: any): string {
+  const parts = [
+    resp?.errorMsg,
+    resp?.error,
+    resp?.message,
+    resp?.status,
+    resp?.detail,
+    resp?.reason,
+  ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+
+  if (parts.length > 0) return parts.join(" | ");
+  try {
+    return JSON.stringify(resp);
+  } catch {
+    return "Unknown CLOB response";
+  }
+}
+
+function parseOrderOutcome(resp: any): { ok: boolean; orderId?: string; txHash?: string; error?: string } {
+  const normalizedError =
+    typeof resp?.error === "string" ? resp.error.trim().toLowerCase() : "";
+  const normalizedErrorMsg =
+    typeof resp?.errorMsg === "string" ? resp.errorMsg.trim().toLowerCase() : "";
+  const normalizedStatus =
+    typeof resp?.status === "string" ? resp.status.trim().toLowerCase() : "";
+  const successLikeTag = new Set(["matched", "filled", "live", "accepted", "posted", "open"]);
+
+  const orderId =
+    resp?.orderID ??
+    resp?.orderId ??
+    resp?.id ??
+    resp?.order_id ??
+    resp?.data?.orderID ??
+    resp?.data?.orderId ??
+    resp?.data?.id ??
+    resp?.data?.order_id;
+
+  const txHash =
+    resp?.transactionHash ??
+    resp?.txHash ??
+    resp?.transaction_hash ??
+    (Array.isArray(resp?.transactionsHashes) ? resp.transactionsHashes[0] : undefined) ??
+    (Array.isArray(resp?.transactionHashes) ? resp.transactionHashes[0] : undefined);
+
+  const explicitFailure =
+    resp?.success === false ||
+    (typeof resp?.errorMsg === "string" && !successLikeTag.has(String(resp.errorMsg).trim().toLowerCase())) ||
+    (typeof resp?.error === "string" && !successLikeTag.has(normalizedError));
+
+  // Some market order responses can be successful without an explicit order id.
+  const explicitSuccess =
+    resp?.success === true ||
+    successLikeTag.has(normalizedStatus) ||
+    successLikeTag.has(normalizedError) ||
+    successLikeTag.has(normalizedErrorMsg) ||
+    (typeof resp?.status === "string" && !["error", "failed", "rejected"].includes(resp.status.toLowerCase()));
+
+  if (explicitFailure) {
+    return { ok: false, error: toErrorMessage(resp) };
+  }
+
+  if (orderId || txHash || explicitSuccess) {
+    return {
+      ok: true,
+      orderId: orderId ?? (txHash ? `tx:${String(txHash).slice(0, 16)}` : undefined),
+      txHash,
+    };
+  }
+
+  return { ok: false, error: toErrorMessage(resp) };
+}
+
+function getOutcomeTag(resp: any): string {
+  const candidates = [resp?.status, resp?.errorMsg, resp?.error];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) return c.trim().toLowerCase();
+  }
+  return "";
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isFokNoFillError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("fully filled or killed") || m.includes("couldn't be fully filled");
+}
+
+function isNoLiquidityError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("no orders found to match") ||
+    m.includes("no match") ||
+    m.includes("partially filled or killed") ||
+    m.includes("fully filled or killed") ||
+    m.includes("couldn't be fully filled")
+  );
+}
+
+function toLevels(levels: Array<{ price: string; size: string }> | undefined): Array<{ price: number; size: number }> {
+  return (levels || [])
+    .map((l) => ({ price: Number(l.price), size: Number(l.size) }))
+    .filter((l) => Number.isFinite(l.price) && Number.isFinite(l.size) && l.price > 0 && l.size > 0);
+}
+
+function checkFakLiquidity(params: {
+  side: "BUY" | "SELL";
+  notional: number;
+  targetPrice: number;
+  orderbook: any;
+}) {
+  const bids = toLevels(params.orderbook?.bids);
+  const asks = toLevels(params.orderbook?.asks);
+  const bestBid = bids.length > 0 ? bids[0].price : null;
+  const bestAsk = asks.length > 0 ? asks[0].price : null;
+  const maxBuyPrice = params.targetPrice * (1 + FAK_SLIPPAGE_BPS / 10_000);
+  const minSellPrice = Math.max(0, params.targetPrice * (1 - FAK_SLIPPAGE_BPS / 10_000));
+
+  let availableNotional = 0;
+  if (params.side === "BUY") {
+    for (const lvl of asks) {
+      if (lvl.price <= maxBuyPrice) {
+        availableNotional += lvl.price * lvl.size;
+      }
+    }
+  } else {
+    for (const lvl of bids) {
+      if (lvl.price >= minSellPrice) {
+        availableNotional += lvl.price * lvl.size;
+      }
+    }
+  }
+
+  const canSend = availableNotional >= params.notional;
+  return {
+    canSend,
+    availableNotional,
+    bestBid,
+    bestAsk,
+    depthBids: bids.slice(0, 5),
+    depthAsks: asks.slice(0, 5),
+    targetPrice: params.targetPrice,
+    maxBuyPrice,
+    minSellPrice,
+  };
+}
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -47,6 +214,8 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   const notional = collateral * leverage;
   const borrowed = notional - collateral;
   const isLong = selectedOutcome === "YES";
+  const spendBufferPercent = 3;
+  const expectedPolymarketSpend = Number((notional * (1 + spendBufferPercent / 100)).toFixed(6));
 
   /* ── Polygon USDC.e balance ── */
   const polygonBalance = useReadContract({
@@ -73,8 +242,12 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   /* ── Write contract (all on Polygon) ── */
   const { writeContract, isPending: isWritePending } = useWriteContract();
   const [vaultTxHash, setVaultTxHash] = useState<`0x${string}` | undefined>();
-  const { isLoading: isVaultConfirming, isSuccess: isVaultTxSuccess } =
-    useWaitForTransactionReceipt({ hash: vaultTxHash });
+  const {
+    isLoading: isVaultConfirming,
+    isSuccess: isVaultTxSuccess,
+    isError: isVaultTxError,
+    error: vaultTxError,
+  } = useWaitForTransactionReceipt({ hash: vaultTxHash, chainId: polygon.id });
 
   /* ── Flow state ── */
   const [step, setStep] = useState<FlowStep>("idle");
@@ -86,6 +259,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
     orderId?: string;
     polyTxHash?: string;
     error?: string;
+    info?: string;
   } | null>(null);
 
   /* ── CLOB token ── */
@@ -96,17 +270,30 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
     : market?.bestBid != null ? 1 - market.bestBid : 0.5;
 
   const meetsPolymarketMin = notional >= 1;
+  const hasEnoughForPolymarket = polygonUsdc >= notional;
   const canTrade = Boolean(
     address && tokenId && collateral >= 0.5 && leverage >= 2 && market && meetsPolymarketMin
   );
 
-  /* ── After vault tx confirms, place Polymarket order ── */
   useEffect(() => {
     if (isVaultTxSuccess && step === "borrow-confirming") {
-      placePolymarketOrder();
+      setResult((prev) => ({ ...(prev ?? {}), positionId: "confirmed", vaultTx: vaultTxHash }));
+      setStep("done");
+      setConfirmOpen(false);
+      onSuccess?.();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVaultTxSuccess, step]);
+  }, [isVaultTxSuccess, step, vaultTxHash, onSuccess]);
+
+  useEffect(() => {
+    if (isVaultTxError && step === "borrow-confirming") {
+      const message = vaultTxError instanceof Error ? vaultTxError.message : "Vault tx failed";
+      setResult((prev) => ({
+        ...(prev ?? {}),
+        error: `Vault confirmation failed after Polymarket order succeeded: ${message}`,
+      }));
+      setStep("done");
+    }
+  }, [isVaultTxError, step, vaultTxError]);
 
   /* ── Step 1: Open position on Polygon vault (borrow) ── */
   const startBorrow = useCallback(async () => {
@@ -165,17 +352,17 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
     }
   }, [needsApproval, writeContract, refetchAllowance, collateral, leverage, isLong, entryPrice]);
 
-  /* ── Step 2: Place real Polymarket order (same chain!) ── */
-  const placePolymarketOrder = useCallback(async () => {
+  /* ── Step 1: Place real Polymarket order (same chain!) ── */
+  const placePolymarketOrder = useCallback(async (): Promise<boolean> => {
     if (!market?.clobTokenIds?.length || !tokenId) {
       setResult({ error: "Missing market token IDs for Polymarket order" });
       setStep("idle");
-      return;
+      return false;
     }
     if (typeof window === "undefined" || !window.ethereum) {
       setResult({ error: "No wallet (e.g. MetaMask) found" });
       setStep("idle");
-      return;
+      return false;
     }
 
     setStep("polymarket");
@@ -183,7 +370,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
 
     try {
       const { ethers } = await import("ethers");
-      const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
+      const { ClobClient, Side, OrderType, AssetType } = await import("@polymarket/clob-client");
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
@@ -192,61 +379,406 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
         setResult({ error: "Could not get wallet address" });
         setStep("idle");
         setPolymarketLoading(false);
-        return;
+        return false;
       }
 
       const host = POLYMARKET_CLOB_API;
-      const baseClient = new ClobClient(host, 137, signer);
-      const creds = await baseClient.createOrDeriveApiKey();
-      const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
+      const getClientForSig = async (signatureType: number) => {
+        const base = new ClobClient(host, 137, signer, undefined, signatureType, walletAddress);
+        const creds = await base.createOrDeriveApiKey();
+        return new ClobClient(host, 137, signer, creds, signatureType, walletAddress);
+      };
+      const client = await getClientForSig(0);
+
+      const usdc = new ethers.Contract(
+        POLYMKT_USDCE_ADDRESS,
+        [
+          "function allowance(address owner, address spender) view returns (uint256)",
+          "function approve(address spender, uint256 amount) returns (bool)",
+        ],
+        signer
+      );
+
+      const requiredWithBuffer = Number((notional * 1.03).toFixed(6));
+      const requiredRaw = ethers.utils.parseUnits(requiredWithBuffer.toFixed(6), 6);
+      const spenderSet = [
+        POLYMKT_CTF_EXCHANGE_ADDRESS,
+        POLYMKT_CTF_ADDRESS,
+        POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS,
+        POLYMKT_NEG_RISK_ADAPTER_ADDRESS,
+      ];
+      for (const spender of spenderSet) {
+        const current = await usdc.allowance(walletAddress, spender);
+        if (current.lt(requiredRaw)) {
+          const approveTx = await usdc.approve(spender, ethers.constants.MaxUint256);
+          await approveTx.wait(1);
+        }
+      }
+      const exchangeAllowanceRaw = await usdc.allowance(walletAddress, POLYMKT_CTF_EXCHANGE_ADDRESS);
+      const ctfAllowanceRaw = await usdc.allowance(walletAddress, POLYMKT_CTF_ADDRESS);
+      const negRiskExchangeAllowanceRaw = await usdc.allowance(walletAddress, POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS);
+      const negRiskAdapterAllowanceRaw = await usdc.allowance(walletAddress, POLYMKT_NEG_RISK_ADAPTER_ADDRESS);
+
+      // Ensure CLOB collateral allowance is synced before submitting market order.
+      await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+      let clobBalance = 0;
+      let clobAllowance = 0;
+      for (let i = 0; i < 5; i++) {
+        const bal = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+        clobBalance = Number(bal?.balance ?? "0") / 1e6;
+        clobAllowance = Number(bal?.allowance ?? "0") / 1e6;
+        if (Number.isFinite(clobBalance) && Number.isFinite(clobAllowance) && clobAllowance >= notional) break;
+        await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+        await sleep(1200);
+      }
+      if (!Number.isFinite(clobBalance) || !Number.isFinite(clobAllowance)) {
+        throw new Error("Could not read Polymarket balance/allowance");
+      }
+      const exchangeAllowance = Number(ethers.utils.formatUnits(exchangeAllowanceRaw, 6));
+      const ctfAllowance = Number(ethers.utils.formatUnits(ctfAllowanceRaw, 6));
+      const onchainAllowance = Math.max(exchangeAllowance, ctfAllowance);
+      const hasBalance = clobBalance >= requiredWithBuffer;
+      const hasAllowance = clobAllowance >= requiredWithBuffer || onchainAllowance >= requiredWithBuffer;
+      if (!hasBalance) {
+        throw new Error(
+          `not enough balance / allowance (need ${requiredWithBuffer.toFixed(6)} USDC.e, have balance ${clobBalance.toFixed(6)}, clob allowance ${clobAllowance.toFixed(6)}, onchain allowance ${onchainAllowance.toFixed(6)})`
+        );
+      }
+      if (!hasAllowance) {
+        // CLOB allowance endpoint can lag despite onchain approvals; proceed and let post-order check be source of truth.
+        console.warn("[Polymarket] allowance mismatch", {
+          requiredWithBuffer,
+          clobAllowance,
+          onchainAllowance,
+        });
+      }
 
       const tickSize = (market.tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
       const negRisk = market.negRisk ?? false;
 
-      const resp = await client.createAndPostMarketOrder(
-        {
-          tokenID: tokenId,
-          amount: notional,
-          side: Side.BUY,
-        },
-        { tickSize, negRisk },
-        OrderType.FOK
-      );
+      const submitOrder = async (typedClient: any, orderType: any) => {
+        return typedClient.createAndPostMarketOrder(
+          {
+            tokenID: tokenId,
+            amount: notional,
+            side: Side.BUY,
+          },
+          { tickSize, negRisk },
+          orderType
+        );
+      };
 
-      const orderId = resp?.orderID ?? resp?.id ?? resp?.order_id;
-      const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;
+      const postRestingLimitOrder = async (typedClient: any) => {
+        const limitPrice = Math.max(0.01, Math.min(0.99, Number(price.toFixed(4))));
+        const size = Number((notional / limitPrice).toFixed(6));
+        return typedClient.createAndPostOrder(
+          {
+            tokenID: tokenId,
+            price: limitPrice,
+            size,
+            side: Side.BUY,
+          },
+          { tickSize, negRisk },
+          OrderType.GTC
+        );
+      };
+
+      if (POLYMARKET_EXECUTION_MODE === "rest_first") {
+        const limitResp = await postRestingLimitOrder(client);
+        const limitParsed = parseOrderOutcome(limitResp);
+        if (limitParsed.ok) {
+          const tag = getOutcomeTag(limitResp);
+          const matchedNow = tag.includes("matched") || tag.includes("filled");
+          if (matchedNow) {
+            setResult({
+              orderId: limitParsed.orderId,
+              polyTxHash: limitParsed.txHash,
+            });
+            return true;
+          }
+          setResult({
+            orderId: limitParsed.orderId,
+            polyTxHash: limitParsed.txHash,
+            info: "Posted resting GTC order on Polymarket (rest-first mode). Vault leg was not opened because the order is resting.",
+          });
+          setStep("done");
+          return false;
+        }
+        throw new Error(`Could not post resting GTC order in rest-first mode: ${toErrorMessage(limitResp)}`);
+      }
+
+      // Global preflight: avoid sending FAK/FOK when immediate opposite liquidity is absent.
+      const preflightBook = await client.getOrderBook(tokenId);
+      const preflightLiq = checkFakLiquidity({
+        side: "BUY",
+        notional,
+        targetPrice: price,
+        orderbook: preflightBook,
+      });
+      console.log("[Polymarket][orderbook-snapshot]", {
+        reason: "preflight_before_any_market_order",
+        marketSlug: market?.slug,
+        tokenId,
+        orderType: "FAK",
+        side: "BUY",
+        notional,
+        tickSize,
+        negRisk,
+        liq: preflightLiq,
+      });
+      if (!preflightLiq.canSend) {
+        if (NO_LIQUIDITY_MODE === "rest") {
+          const limitResp = await postRestingLimitOrder(client);
+          const limitParsed = parseOrderOutcome(limitResp);
+          if (limitParsed.ok) {
+            setResult({
+              orderId: limitParsed.orderId,
+              polyTxHash: limitParsed.txHash,
+              info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
+            });
+            setStep("done");
+            return false;
+          }
+          throw new Error(`Could not post resting GTC order: ${toErrorMessage(limitResp)}`);
+        }
+        setResult({
+          error: "No opposite liquidity at a fillable price/size for FAK/FOK. Vault leg not opened.",
+        });
+        setStep("done");
+        return false;
+      }
+
+      let resp: any;
+      let noLiquidityDetected = false;
+      let activeClient: any = client;
+      let lastErr: unknown;
+      const signatureTypeCandidates = [0, 1, 2];
+      for (const sigType of signatureTypeCandidates) {
+        try {
+          const typedClient = sigType === 0 ? client : await getClientForSig(sigType);
+          activeClient = typedClient;
+          await typedClient.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+          await sleep(900);
+          try {
+            resp = await submitOrder(typedClient, OrderType.FOK);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            // FOK can fail on thin books; retry with FAK for partial fill.
+            if (isFokNoFillError(msg)) {
+              const orderbook = await typedClient.getOrderBook(tokenId);
+              const liq = checkFakLiquidity({
+                side: "BUY",
+                notional,
+                targetPrice: price,
+                orderbook,
+              });
+              const debugPayload = {
+                reason: "precheck_before_fak_after_fok_fail",
+                marketSlug: market?.slug,
+                tokenId,
+                orderType: "FAK",
+                side: "BUY",
+                notional,
+                tickSize,
+                negRisk,
+                liq,
+              };
+              console.log("[Polymarket][orderbook-snapshot]", debugPayload);
+              if (!liq.canSend) {
+                if (NO_LIQUIDITY_MODE === "rest") {
+                  resp = await postRestingLimitOrder(typedClient);
+                } else {
+                  noLiquidityDetected = true;
+                  break;
+                }
+              } else {
+                resp = await submitOrder(typedClient, OrderType.FAK);
+              }
+            } else if (isNoLiquidityError(msg)) {
+              const orderbook = await typedClient.getOrderBook(tokenId);
+              const liq = checkFakLiquidity({
+                side: "BUY",
+                notional,
+                targetPrice: price,
+                orderbook,
+              });
+              console.log("[Polymarket][orderbook-snapshot]", {
+                reason: "fak_no_match_throw",
+                marketSlug: market?.slug,
+                tokenId,
+                orderType: "FAK",
+                side: "BUY",
+                notional,
+                tickSize,
+                negRisk,
+                liq,
+              });
+              if (NO_LIQUIDITY_MODE === "rest") {
+                resp = await postRestingLimitOrder(typedClient);
+              } else {
+                noLiquidityDetected = true;
+                break;
+              }
+            } else {
+              throw err;
+            }
+          }
+          // Some client responses return soft errors instead of throwing.
+          const firstParse = parseOrderOutcome(resp);
+          if (!firstParse.ok && isFokNoFillError(firstParse.error || "")) {
+            const orderbook = await typedClient.getOrderBook(tokenId);
+            const liq = checkFakLiquidity({
+              side: "BUY",
+              notional,
+              targetPrice: price,
+              orderbook,
+            });
+            console.log("[Polymarket][orderbook-snapshot]", {
+              reason: "fak_soft_error_after_fok",
+              marketSlug: market?.slug,
+              tokenId,
+              orderType: "FAK",
+              side: "BUY",
+              notional,
+              tickSize,
+              negRisk,
+              liq,
+            });
+            if (!liq.canSend) {
+              if (NO_LIQUIDITY_MODE === "rest") {
+                resp = await postRestingLimitOrder(typedClient);
+              } else {
+                noLiquidityDetected = true;
+                break;
+              }
+            } else {
+              resp = await submitOrder(typedClient, OrderType.FAK);
+            }
+          } else if (!firstParse.ok && isNoLiquidityError(firstParse.error || "")) {
+            const orderbook = await typedClient.getOrderBook(tokenId);
+            const liq = checkFakLiquidity({
+              side: "BUY",
+              notional,
+              targetPrice: price,
+              orderbook,
+            });
+            console.log("[Polymarket][orderbook-snapshot]", {
+              reason: "fak_soft_no_match",
+              marketSlug: market?.slug,
+              tokenId,
+              orderType: "FAK",
+              side: "BUY",
+              notional,
+              tickSize,
+              negRisk,
+              liq,
+            });
+            if (NO_LIQUIDITY_MODE === "rest") {
+              resp = await postRestingLimitOrder(typedClient);
+            } else {
+              noLiquidityDetected = true;
+              break;
+            }
+          }
+          lastErr = undefined;
+          break;
+        } catch (err: unknown) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          if (isNoLiquidityError(msg)) {
+            noLiquidityDetected = true;
+            break;
+          }
+          if (!msg.toLowerCase().includes("not enough balance / allowance")) {
+            throw err;
+          }
+          // Try next signature type.
+        }
+      }
+      if (noLiquidityDetected && !resp) {
+        if (NO_LIQUIDITY_MODE === "rest") {
+          const limitResp = await postRestingLimitOrder(activeClient);
+          const limitParsed = parseOrderOutcome(limitResp);
+          if (limitParsed.ok) {
+            setResult({
+              orderId: limitParsed.orderId,
+              polyTxHash: limitParsed.txHash,
+              info: "No immediate liquidity for FAK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
+            });
+            setStep("done");
+            return false;
+          }
+        }
+        setResult({
+          error: "No opposite liquidity at a fillable price/size for FAK. Vault leg not opened.",
+        });
+        setStep("done");
+        return false;
+      }
+      if (lastErr && !resp) throw lastErr;
+      console.log("[Polymarket] market order response", resp);
+
+      const parsed = parseOrderOutcome(resp);
+      if (!parsed.ok) {
+        if (isNoLiquidityError(parsed.error || "")) {
+          if (NO_LIQUIDITY_MODE === "rest") {
+            const limitResp = await postRestingLimitOrder(activeClient);
+            const limitParsed = parseOrderOutcome(limitResp);
+            if (limitParsed.ok) {
+              setResult({
+                orderId: limitParsed.orderId,
+                polyTxHash: limitParsed.txHash,
+                info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
+              });
+              setStep("done");
+              return false;
+            }
+          }
+          setResult({
+            error: "No opposite liquidity at a fillable price/size for FAK/FOK. Vault leg not opened.",
+          });
+          setStep("done");
+          return false;
+        }
+        const exchangeAllowance = Number(ethers.utils.formatUnits(exchangeAllowanceRaw, 6));
+        const ctfAllowance = Number(ethers.utils.formatUnits(ctfAllowanceRaw, 6));
+        const negRiskExchangeAllowance = Number(ethers.utils.formatUnits(negRiskExchangeAllowanceRaw, 6));
+        const negRiskAdapterAllowance = Number(ethers.utils.formatUnits(negRiskAdapterAllowanceRaw, 6));
+        throw new Error(
+          `${parsed.error || "Polymarket order failed"} | need=${requiredWithBuffer.toFixed(6)} balance=${clobBalance.toFixed(6)} clobAllowance=${clobAllowance.toFixed(6)} exchangeAllowance=${exchangeAllowance.toFixed(6)} ctfAllowance=${ctfAllowance.toFixed(6)} negRiskExchangeAllowance=${negRiskExchangeAllowance.toFixed(6)} negRiskAdapterAllowance=${negRiskAdapterAllowance.toFixed(6)}`
+        );
+      }
 
       setResult({
-        positionId: vaultTxHash ? "confirmed" : undefined,
-        vaultTx: vaultTxHash,
-        orderId,
-        polyTxHash,
+        orderId: parsed.orderId,
+        polyTxHash: parsed.txHash,
       });
-      setStep("done");
-      setConfirmOpen(false);
-      onSuccess?.();
+      return true;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      setResult((prev) => ({
-        ...prev,
-        error: `Polymarket order failed: ${message}. Vault position was still opened.`,
-      }));
+      setResult({ error: `Polymarket order failed: ${message}` });
       setStep("done");
+      return false;
     } finally {
       setPolymarketLoading(false);
     }
-  }, [market, tokenId, notional, vaultTxHash, onSuccess]);
+  }, [market, tokenId, notional]);
 
   /* ── Combined execute ── */
-  const handleExecute = useCallback(() => {
+  const handleExecute = useCallback(async () => {
     setResult(null);
     setVaultTxHash(undefined);
+    const polyOk = await placePolymarketOrder();
+    if (!polyOk) return;
+
     if (!hasVault) {
-      placePolymarketOrder();
-    } else {
-      startBorrow();
+      setStep("done");
+      setConfirmOpen(false);
+      onSuccess?.();
+      return;
     }
-  }, [startBorrow, placePolymarketOrder]);
+    startBorrow();
+  }, [placePolymarketOrder, startBorrow, onSuccess]);
 
   /* ── Render ── */
   if (!market) return null;
@@ -260,8 +792,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
         Leveraged Real Polymarket Trade
       </div>
       <p className="text-slate-300 text-[11px] leading-relaxed">
-        This will <strong>borrow from the vault</strong> (leverage) and then place a{" "}
-        <strong>real BUY order on Polymarket</strong> with that notional — all on <strong>Polygon</strong>. You receive the outcome tokens; when you close a position we sell those same tokens. Polymarket requires a minimum of <strong>$1</strong> per order (notional = collateral × leverage).
+        This places a <strong>real BUY order on Polymarket first</strong>, then opens the vault leverage leg on <strong>Polygon</strong>. This guarantees a successful flow always has an on-Polymarket order ID. Polymarket requires a minimum of <strong>$1</strong> per order (notional = collateral × leverage).
       </p>
 
       {!address ? (
@@ -292,6 +823,14 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               <span className="text-white font-mono font-semibold">${notional.toFixed(6)} USDC.e</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-gray-400">Expected wallet spend</span>
+              <span className="text-amber-300 font-mono">${expectedPolymarketSpend.toFixed(6)} USDC.e</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Price/fee buffer</span>
+              <span className="text-gray-300 font-mono">+{spendBufferPercent.toFixed(2)}%</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-400">Borrowed from vault</span>
               <span className="text-yellow-400 font-mono">${borrowed.toFixed(6)} USDC.e</span>
             </div>
@@ -308,9 +847,9 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           </div>
 
           {/* Balance warning */}
-          {polygonUsdc < collateral && hasVault && (
+          {(!hasEnoughForPolymarket || (polygonUsdc < collateral && hasVault)) && (
             <p className="text-amber-400 text-[10px]">
-              Your USDC.e balance (${polygonUsdc.toFixed(6)}) is below collateral (${collateral.toFixed(6)}). The vault borrow will fail.
+              Your USDC.e balance (${polygonUsdc.toFixed(6)}) is below Polymarket notional (${notional.toFixed(6)}). Polymarket submit can fail with balance/allowance errors.
             </p>
           )}
 
@@ -323,7 +862,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           >
             {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             {hasVault
-              ? `Borrow ${leverage}x → Trade on Polymarket`
+              ? `Trade on Polymarket → Borrow ${leverage}x`
               : `Execute $${notional.toFixed(6)} Polymarket trade`
             }
           </button>
@@ -339,15 +878,15 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           {isAnyLoading && (() => {
             type Status = "pending" | "active" | "confirming" | "done";
             const stepStatus = (s: FlowStep): [Status, Status] => {
-              const step1: Status = s === "borrow" ? "active" : s === "borrow-confirming" ? "confirming" : (s === "polymarket" || s === "done") ? "done" : "pending";
-              const step2: Status = s === "polymarket" ? "active" : s === "done" ? "done" : "pending";
+              const step1: Status = s === "polymarket" ? "active" : (s === "borrow" || s === "borrow-confirming" || s === "done") ? "done" : "pending";
+              const step2: Status = s === "borrow" ? "active" : s === "borrow-confirming" ? "confirming" : s === "done" ? "done" : "pending";
               return [step1, step2];
             };
             const [step1Status, step2Status] = stepStatus(step);
             return (
               <div className="rounded border border-emerald-900/20 bg-black/40 p-2.5 space-y-2">
-                <StepIndicator label="1. Borrow from Polygon vault" status={step1Status} />
-                <StepIndicator label="2. Place Polymarket order" status={step2Status} />
+                <StepIndicator label="1. Place Polymarket order" status={step1Status} />
+                <StepIndicator label="2. Open Polygon vault position" status={step2Status} />
               </div>
             );
           })()}
@@ -367,25 +906,29 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               <div className="text-emerald-400 text-[10px] font-bold uppercase mb-1">Single-chain execution (Polygon)</div>
 
               <div className="border-l-2 border-emerald-500/30 pl-2">
-                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Polygon Vault</div>
+                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Polymarket</div>
+                <div className="text-gray-300">
+                  Buy {selectedOutcome} @ ~{(price * 100).toFixed(1)}¢ with ${notional.toFixed(6)} USDC.e
+                </div>
+                <div className="text-gray-400 text-[10px] mt-0.5">
+                  Expected spend with buffer: ${expectedPolymarketSpend.toFixed(6)} USDC.e
+                </div>
+                <div className="text-gray-400 text-[10px]">You will receive position tokens on Polymarket after fill.</div>
+              </div>
+
+              <div className="border-l-2 border-amber-500/30 pl-2">
+                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Polygon Vault</div>
                 <div className="text-gray-300">
                   Open position: ${collateral.toFixed(6)} collateral × {leverage}x = ${notional.toFixed(6)} notional
                 </div>
                 <div className="text-yellow-400">Borrows ${borrowed.toFixed(6)} from vault</div>
               </div>
 
-              <div className="border-l-2 border-amber-500/30 pl-2">
-                <div className="text-amber-400 font-semibold text-[10px]">Step 2: Polymarket (same chain!)</div>
-                <div className="text-gray-300">
-                  Buy {selectedOutcome} @ ~{(price * 100).toFixed(1)}¢ with ${notional.toFixed(6)} USDC.e
-                </div>
-              </div>
-
               <div className="border-t border-gray-800 pt-2 mt-2 space-y-1 text-[10px]">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Your Polygon USDC.e</span>
-                  <span className={`font-mono ${polygonUsdc >= collateral ? "text-green-400" : "text-amber-400"}`}>
-                    ${polygonUsdc.toFixed(6)} {polygonUsdc < collateral && "(insufficient)"}
+                  <span className={`font-mono ${polygonUsdc >= notional ? "text-green-400" : "text-amber-400"}`}>
+                    ${polygonUsdc.toFixed(6)} {polygonUsdc < notional && "(below notional)"}
                   </span>
                 </div>
               </div>
@@ -408,7 +951,10 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
 
       {/* ── Result ── */}
       {result && (
-        <div className={`rounded border p-2.5 text-[11px] space-y-1.5 ${result.error ? "border-red-500/50 bg-red-500/10 text-red-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"}`}>
+        <div className={`rounded border p-2.5 text-[11px] space-y-1.5 ${result.error ? "border-red-500/50 bg-red-500/10 text-red-300" : result.info ? "border-amber-500/40 bg-amber-500/10 text-amber-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"}`}>
+          {!result.error && (result.vaultTx || result.orderId) && (
+            <div className="text-emerald-300 font-semibold">Trade executed successfully.</div>
+          )}
           {result.vaultTx && (
             <div className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
@@ -438,6 +984,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               </a>
             </div>
           )}
+          {result.info && <div className="text-amber-300">{result.info}</div>}
           {result.error && <div className="text-red-300">{result.error}</div>}
         </div>
       )}

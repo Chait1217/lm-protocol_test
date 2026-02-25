@@ -160,11 +160,24 @@ export default function RealPolymarketClose({
     const ts = (tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
     const nr = negRisk ?? false;
 
-    const resp = await client.createAndPostMarketOrder(
-      { tokenID: tokenId, amount: notionalUsdc, side: Side.SELL },
-      { tickSize: ts, negRisk: nr },
-      OrderType.FOK
-    );
+    const postSell = (orderType: typeof OrderType.FOK | typeof OrderType.FAK) =>
+      client.createAndPostMarketOrder(
+        { tokenID: tokenId, amount: notionalUsdc, side: Side.SELL },
+        { tickSize: ts, negRisk: nr },
+        orderType
+      );
+
+    let resp: any;
+    try {
+      resp = await postSell(OrderType.FOK);
+    } catch (fokErr: unknown) {
+      const msg = fokErr instanceof Error ? fokErr.message : String(fokErr);
+      if (msg.toLowerCase().includes("fully filled") || msg.toLowerCase().includes("couldn't be fully filled") || msg.toLowerCase().includes("no orders found to match")) {
+        resp = await postSell(OrderType.FAK);
+      } else {
+        throw fokErr;
+      }
+    }
 
     const orderId = resp?.orderID ?? resp?.id ?? resp?.order_id;
     const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;

@@ -97,7 +97,7 @@ interface MarketData {
 // ─── Main Component ──────────────────────────────────────────────────
 
 export default function PolymarketLeverageBox({
-  refreshInterval = 2000,
+  refreshInterval = 4000,
   onVaultRefetch,
 }: {
   refreshInterval?: number;

@@ -13,6 +13,7 @@ import "../src/oracles/ChainlinkBinaryAdapter.sol";
 ///   CHAINLINK_ADAPTER_ADDRESS – ChainlinkBinaryAdapter contract
 ///   MARKET_ID                 – bytes32 market id (e.g. cast keccak "will-gavin-newsom-win-...")
 ///   CHAINLINK_AGGREGATOR      – Chainlink aggregator contract for this market
+///                               (or PolymarketBinaryPriceFeed address)
 ///
 /// Optional env:
 ///   CHAINLINK_INVERT         – "true" to invert feed (default false)
