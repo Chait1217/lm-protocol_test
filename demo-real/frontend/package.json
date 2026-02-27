@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "feed:updater": "node scripts/polymarket-feed-updater.js"
+    "feed:updater": "node scripts/polymarket-feed-updater.js",
+    "preflight:trade": "node scripts/preflight-real-trade.js"
   },
   "dependencies": {
     "@polymarket/clob-client": "^5.2.3",

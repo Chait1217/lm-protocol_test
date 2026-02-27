@@ -63,9 +63,16 @@ async function main() {
   console.log("New updater:", newUpdaterAddress);
   console.log("Sending setUpdater tx...");
 
+  const feeData = await provider.getFeeData();
+  const minPriority = ethers.utils.parseUnits("25", "gwei");
+  const observedPriority = feeData.maxPriorityFeePerGas || ethers.utils.parseUnits("35", "gwei");
+  const maxPriorityFeePerGas = observedPriority.lt(minPriority) ? minPriority : observedPriority.mul(130).div(100);
+  const baseFee = feeData.lastBaseFeePerGas || ethers.utils.parseUnits("120", "gwei");
+  const maxFeePerGas = baseFee.mul(2).add(maxPriorityFeePerGas);
+
   const tx = await feed.setUpdater(newUpdaterAddress, {
-    maxPriorityFeePerGas: ethers.utils.parseUnits("30", "gwei"),
-    maxFeePerGas: ethers.utils.parseUnits("100", "gwei"),
+    maxPriorityFeePerGas,
+    maxFeePerGas,
   });
   console.log("Tx hash:", tx.hash);
   const rcpt = await tx.wait();

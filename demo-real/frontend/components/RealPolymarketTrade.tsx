@@ -43,6 +43,8 @@ const POLYGONSCAN_TX = "https://polygonscan.com/tx/";
 const addresses = getContractAddresses();
 const ZERO = "0x0000000000000000000000000000000000000000";
 const hasVault = addresses.vault !== ZERO && addresses.vault.length === 42;
+const hasMarginEngine = addresses.marginEngine !== ZERO && addresses.marginEngine.length === 42;
+const hasFullVaultConfig = hasVault && hasMarginEngine;
 
 type FlowStep = "idle" | "polymarket" | "borrow" | "borrow-confirming" | "done";
 type NoLiquidityMode = "abort" | "rest";
@@ -348,7 +350,11 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   }, [isVaultTxError, step, vaultTxError]);
 
   const ensureVaultOracleFresh = useCallback(async (): Promise<boolean> => {
-    if (!hasVault) return true;
+    if (!hasFullVaultConfig) {
+      setResult({ error: "Vault not configured. Set valid NEXT_PUBLIC_VAULT_ADDRESS and NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS." });
+      setStep("done");
+      return false;
+    }
     if (typeof window === "undefined" || !window.ethereum) {
       setResult({ error: "No wallet found to verify oracle freshness." });
       setStep("done");
@@ -412,8 +418,8 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
 
   /* ── Step 1: Open position on Polygon vault (borrow) ── */
   const startBorrow = useCallback(async () => {
-    if (!hasVault) {
-      setResult({ error: "Vault not configured. Set NEXT_PUBLIC_VAULT_ADDRESS and NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS." });
+    if (!hasFullVaultConfig) {
+      setResult({ error: "Vault not configured. Set valid NEXT_PUBLIC_VAULT_ADDRESS and NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS." });
       return;
     }
     try {
@@ -996,12 +1002,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
     const polyOk = await placePolymarketOrder();
     if (!polyOk) return;
 
-    if (!hasVault) {
-      setStep("done");
-      setConfirmOpen(false);
-      onSuccess?.();
-      return;
-    }
     startBorrow();
   }, [ensureVaultOracleFresh, placePolymarketOrder, startBorrow, onSuccess]);
 
@@ -1086,9 +1086,9 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             className="w-full rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-500/40 text-emerald-400 py-2.5 text-sm font-semibold hover:from-emerald-500/30 hover:to-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
           >
             {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {hasVault
+            {hasFullVaultConfig
               ? `Trade on Polymarket → Borrow ${leverage}x`
-              : `Execute $${notional.toFixed(6)} Polymarket trade`
+              : `Vault config required to execute trade`
             }
           </button>
 
@@ -1096,6 +1096,11 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             <p className="text-[10px] text-gray-500">
               {clobTokenIds.length === 0 ? "Waiting for market token IDs…" : ""}
               {collateral < 0.5 ? "Set collateral ≥ $0.50." : !meetsPolymarketMin ? "Notional must be ≥ $1 (Polymarket min)." : ""}
+            </p>
+          )}
+          {!hasFullVaultConfig && (
+            <p className="text-[10px] text-red-300">
+              Invalid vault config. Set valid <code>NEXT_PUBLIC_VAULT_ADDRESS</code> and <code>NEXT_PUBLIC_MARGIN_ENGINE_ADDRESS</code> in <code>frontend/.env.local</code>, then restart.
             </p>
           )}
 
@@ -1177,8 +1182,11 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       {/* ── Result ── */}
       {result && (
         <div className={`rounded border p-2.5 text-[11px] space-y-1.5 ${result.error ? "border-red-500/50 bg-red-500/10 text-red-300" : result.info ? "border-amber-500/40 bg-amber-500/10 text-amber-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"}`}>
-          {!result.error && (result.vaultTx || result.orderId) && (
+          {!result.error && result.vaultTx && (
             <div className="text-emerald-300 font-semibold">Trade executed successfully.</div>
+          )}
+          {!result.error && !result.vaultTx && result.orderId && (
+            <div className="text-amber-300 font-semibold">Polymarket order placed, but vault leg not confirmed.</div>
           )}
           {result.vaultTx && (
             <div className="flex items-center gap-1">
