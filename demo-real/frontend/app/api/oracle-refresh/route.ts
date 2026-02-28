@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
           success: true,
           rpcUrl,
           txHash,
-          blockNumber: rcpt?.blockNumber,
+          blockNumber: rcpt?.blockNumber != null ? Number(rcpt.blockNumber) : undefined,
           yesE6,
           feed: feedAddr,
           updater: account.address,

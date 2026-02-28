@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
-import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useAccount, useChainId, useReadContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { polygon } from "wagmi/chains";
 import {
   POLYMARKET_CLOB_API,
@@ -58,8 +58,17 @@ function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { m
       return { message: "You rejected the transaction in your wallet.", action: "Try again and approve the signature and transaction." };
     if (lower.includes("invalid amounts") || lower.includes("maker amount") || lower.includes("2 decimals") || lower.includes("accuracy"))
       return { message: "Polymarket rejected the order (decimal precision).", action: "Try again; we rounded the order. If it still fails, try closing when the market is less volatile." };
+    if (lower.includes("not enough balance") || lower.includes("not enough allowance"))
+      return {
+        message: "Polymarket reports not enough position size or allowance for this outcome.",
+        action:
+          "Open the 'Verify on Polymarket API' section to see your exact on-Polymarket position and close from there, or ensure you haven’t already closed or partially sold this position.",
+      };
     if (lower.includes("insufficient") && (lower.includes("liquidity") || lower.includes("balance")))
-      return { message: "Not enough liquidity or balance to fill the sell order.", action: "Try again in a few minutes or when there’s more market activity." };
+      return {
+        message: "Not enough liquidity or balance to fill the sell order.",
+        action: "Try again in a few minutes or when there’s more market activity.",
+      };
     if (lower.includes("liquidity") || lower.includes("fill") || lower.includes("fok"))
       return { message: "The instant sell couldn’t be filled at current prices.", action: "Try again shortly or refresh; liquidity may have been low." };
     if (lower.includes("network") || lower.includes("fetch") || lower.includes("timeout"))
@@ -69,8 +78,23 @@ function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { m
   }
 
   if (step === "vault") {
+    if (lower.includes("chain") || lower.includes("network") || lower.includes("wrong network"))
+      return {
+        message: "Wallet is on the wrong network for vault close.",
+        action: "Switch wallet to Polygon and retry vault-only close.",
+      };
+    if (lower.includes("nonetwork") || lower.includes("could not detect network"))
+      return {
+        message: "Could not detect wallet network.",
+        action: "Ensure your wallet is unlocked and switched to Polygon, then retry.",
+      };
     if (lower.includes("user rejected") || lower.includes("user denied"))
       return { message: "You rejected the close transaction.", action: "Try again and approve. Your repay was already sent." };
+    if (lower.includes("stale") || lower.includes("invalid oracle") || lower.includes("oracle"))
+      return {
+        message: "Vault close failed because oracle price is stale/invalid.",
+        action: "Refresh oracle and try again. The app will attempt server auto-refresh before closing.",
+      };
     if (lower.includes("position") || lower.includes("closed") || lower.includes("invalid"))
       return { message: "Vault close was rejected.", action: "Repay was sent. Contact support or try refreshing and closing again." };
   }
@@ -79,6 +103,16 @@ function parseCloseError(err: unknown, step: "sell" | "transfer" | "vault"): { m
     message: raw.length > 120 ? raw.slice(0, 120) + "…" : raw,
     action: step === "sell" ? "Try again. If it keeps failing, liquidity may be low." : "Try again or refresh the page.",
   };
+}
+
+function isNoSellablePolymarketBalanceError(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes("not enough balance") ||
+    lower.includes("not enough allowance") ||
+    lower.includes("no open polymarket position found")
+  );
 }
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -94,6 +128,8 @@ export default function RealPolymarketClose({
   onSuccess,
 }: Props) {
   const { address } = useAccount();
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const { writeContract, isPending: isWritePending } = useWriteContract();
 
   /* ── Interest (needed to repay vault: user must send borrowed + interest to MarginEngine) ── */
@@ -117,12 +153,14 @@ export default function RealPolymarketClose({
   /* ── State ── */
   const [step, setStep] = useState<CloseStep>("idle");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [vaultOnly, setVaultOnly] = useState(false);
   const [result, setResult] = useState<{
     polyOrderId?: string;
     polyTxHash?: string;
     vaultTxHash?: string;
     actualExitPrice?: number;
     pnl?: number;
+    info?: string;
     error?: string;
     errorAction?: string;
   } | null>(null);
@@ -138,15 +176,62 @@ export default function RealPolymarketClose({
   const borrowedUsdc = Number(position.borrowed) / 1e6;
   const leverageNum = Number(position.leverage);
   const oracleExitPrice = oracleExitRaw != null ? Number(oracleExitRaw as bigint) / 1e6 : null;
-  const exitPrice = oracleExitPrice ?? livePrice;
+  const liveExitPrice = livePrice;
+  const previewExitPrice = liveExitPrice ?? oracleExitPrice ?? entryPrice;
 
   const pnlPreview = position.isLong
-    ? notionalUsdc * ((exitPrice - entryPrice) / (entryPrice || 1))
-    : notionalUsdc * ((entryPrice - exitPrice) / (entryPrice || 1));
+    ? notionalUsdc * ((previewExitPrice - entryPrice) / (entryPrice || 1))
+    : notionalUsdc * ((entryPrice - previewExitPrice) / (entryPrice || 1));
 
   const tokenId = position.isLong ? clobTokenIds[0] : clobTokenIds[1];
-  const canClose = Boolean(address && tokenId && position.isOpen);
+  const canCloseWithSell = Boolean(address && tokenId && position.isOpen);
+  const canCloseVaultOnly = Boolean(address && position.isOpen);
+  const canClose = canCloseWithSell || canCloseVaultOnly;
   const isAnyLoading = step !== "idle" && step !== "done";
+
+  const ensureVaultOracleFreshForClose = useCallback(async (): Promise<boolean> => {
+    const { ethers } = await import("ethers");
+    const rpcUrl =
+      (process.env.NEXT_PUBLIC_POLYGON_RPC_URL || "").trim() ||
+      "https://polygon-bor-rpc.publicnode.com";
+    const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    const reader = new ethers.Contract(
+      addresses.marginEngine,
+      ["function getPositionOraclePrice(uint256 positionId) view returns (uint256)"],
+      provider
+    );
+    try {
+      const px = await reader.getPositionOraclePrice(BigInt(positionId));
+      if (Number(px) > 0) return true;
+    } catch {
+      // Attempt backend oracle refresh below.
+    }
+
+    const refreshRes = await fetch("/api/oracle-refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ marketId: position.marketId }),
+    });
+    const refreshJson = await refreshRes.json().catch(() => ({}));
+    if (!refreshRes.ok || !refreshJson?.success) return true;
+
+    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      const px2 = await reader.getPositionOraclePrice(BigInt(positionId));
+      return Number(px2) > 0;
+    } catch {
+      // Do not block vault close if post-refresh read fails.
+      return true;
+    }
+  }, [positionId, position.marketId]);
+
+  const ensureWalletOnPolygon = useCallback(async () => {
+    if (chainId === polygon.id) return;
+    if (!switchChainAsync) {
+      throw new Error("Wallet is not on Polygon and automatic network switch is unavailable.");
+    }
+    await switchChainAsync({ chainId: polygon.id });
+  }, [chainId, switchChainAsync]);
 
   /* ── Step 1: Sell outcome tokens on Polymarket (Polygon) ── */
   const sellOnPolymarket = useCallback(async (): Promise<number> => {
@@ -191,6 +276,7 @@ export default function RealPolymarketClose({
 
     // Use actual Polymarket position size for this token so close is accurate.
     let sellAmount = notionalUsdc;
+    let sizeFromPositionsApi: number | null = null;
     try {
       const res = await fetch(`/api/polymarket-positions?user=${walletAddress}&size=50&t=${Date.now()}`, {
         cache: "no-store",
@@ -202,10 +288,32 @@ export default function RealPolymarketClose({
         const amt = Number(exact?.size ?? 0);
         if (Number.isFinite(amt) && amt > 0) {
           sellAmount = amt;
+          sizeFromPositionsApi = amt;
+        } else if (Number.isFinite(amt) && amt === 0) {
+          sizeFromPositionsApi = 0;
         }
       }
     } catch {
       // keep notional fallback when API is unavailable
+    }
+    if (sizeFromPositionsApi === 0) {
+      throw new Error("No open Polymarket position found for this outcome (size=0).");
+    }
+
+    // Clamp sell size to what Polymarket reports as available for this wallet to avoid
+    // "not enough balance / allowance" errors when size has changed since open.
+    try {
+      const bal = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+      const clobBalanceUsdc = Number(bal?.balance ?? "0") / 1e6;
+      if (Number.isFinite(clobBalanceUsdc) && clobBalanceUsdc > 0) {
+        if (sellAmount > clobBalanceUsdc) {
+          sellAmount = clobBalanceUsdc;
+        }
+      } else {
+        throw new Error("No Polymarket wallet balance available for this outcome.");
+      }
+    } catch {
+      // If balance endpoint fails, continue with API-derived size; CLOB will return a clear error.
     }
 
     const postSell = (orderType: typeof OrderType.FOK | typeof OrderType.FAK) =>
@@ -230,7 +338,7 @@ export default function RealPolymarketClose({
     const statusTag = (resp?.status ?? resp?.errorMsg ?? resp?.error ?? "").toString().toLowerCase();
     const orderId = resp?.orderID ?? resp?.orderId ?? resp?.id ?? resp?.order_id;
     const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;
-    const fillPrice = resp?.averagePrice ?? resp?.avg_price ?? exitPrice;
+    const fillPrice = resp?.averagePrice ?? resp?.avg_price ?? previewExitPrice;
     const ok = Boolean(
       orderId ||
       polyTxHash ||
@@ -241,11 +349,14 @@ export default function RealPolymarketClose({
     }
 
     setResult((prev) => ({ ...prev, polyOrderId: orderId ?? `status:${statusTag || "matched"}`, polyTxHash, actualExitPrice: fillPrice }));
-    return typeof fillPrice === "number" ? fillPrice : parseFloat(String(fillPrice)) || exitPrice;
-  }, [tokenId, notionalUsdc, tickSize, negRisk, exitPrice, address]);
+    return typeof fillPrice === "number" ? fillPrice : parseFloat(String(fillPrice)) || previewExitPrice;
+  }, [tokenId, notionalUsdc, tickSize, negRisk, previewExitPrice, address]);
 
   /* ── Step 2: Close position on Polygon vault (oracle-driven) ── */
   const closeOnVault = useCallback(async () => {
+    await ensureWalletOnPolygon();
+    const oracleOk = await ensureVaultOracleFreshForClose();
+    if (!oracleOk) throw new Error("oracle not fresh after refresh");
     return new Promise<void>((resolve, reject) => {
       writeContract(
         {
@@ -265,7 +376,7 @@ export default function RealPolymarketClose({
         }
       );
     });
-  }, [writeContract, positionId]);
+  }, [writeContract, positionId, ensureVaultOracleFreshForClose, ensureWalletOnPolygon]);
 
   /* ── When vault tx confirms, we're done ── */
   useEffect(() => {
@@ -276,11 +387,28 @@ export default function RealPolymarketClose({
     }
   }, [isVaultTxSuccess, step, vaultTxHash, onSuccess]);
 
-  /* ── Combined close: Sell on Polymarket → closePosition (oracle settles exit) ── */
+  /* ── Combined close: (optional) sell on Polymarket → closePosition (oracle settles exit) ── */
   const handleClose = useCallback(async () => {
     setResult(null);
     setVaultTxHash(undefined);
     setConfirmOpen(false);
+
+    // Vault-only path: skip Polymarket sell and just close the vault leg.
+    if (vaultOnly) {
+      try {
+        setStep("closing-vault");
+        await closeOnVault();
+      } catch (err: unknown) {
+        const { message, action } = parseCloseError(err, "vault");
+        setResult((prev) => ({
+          ...prev,
+          error: `Vault close failed: ${message}`,
+          errorAction: action,
+        }));
+        setStep("done");
+      }
+      return;
+    }
 
     let sellDone = false;
     try {
@@ -290,9 +418,30 @@ export default function RealPolymarketClose({
       setStep("closing-vault");
       await closeOnVault();
     } catch (err: unknown) {
-      const step: "sell" | "vault" = sellDone ? "vault" : "sell";
-      const { message, action } = parseCloseError(err, step);
-      const prefix = step === "sell" ? "Sell failed" : "Vault close failed";
+      if (!sellDone && isNoSellablePolymarketBalanceError(err)) {
+        try {
+          setStep("closing-vault");
+          await closeOnVault();
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            info: "Polymarket sell skipped (no sellable position size). Vault close submitted.",
+          }));
+          return;
+        } catch (vaultErr: unknown) {
+          const { message, action } = parseCloseError(vaultErr, "vault");
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            error: `Vault close failed: ${message}`,
+            errorAction: action,
+          }));
+          setStep("done");
+          return;
+        }
+      }
+
+      const stepLabel: "sell" | "vault" = sellDone ? "vault" : "sell";
+      const { message, action } = parseCloseError(err, stepLabel);
+      const prefix = stepLabel === "sell" ? "Sell failed" : "Vault close failed";
       setResult((prev) => ({
         ...prev,
         error: `${prefix}: ${message}`,
@@ -300,7 +449,7 @@ export default function RealPolymarketClose({
       }));
       setStep("done");
     }
-  }, [sellOnPolymarket, closeOnVault]);
+  }, [sellOnPolymarket, closeOnVault, vaultOnly]);
 
   /* ── Render ── */
   if (!position.isOpen) return null;
@@ -330,8 +479,16 @@ export default function RealPolymarketClose({
           <span className="text-white font-mono">{(entryPrice * 100).toFixed(1)}¢</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-400">Settlement price (oracle)</span>
-          <span className="text-emerald-400 font-mono font-semibold">{(exitPrice * 100).toFixed(1)}¢</span>
+          <span className="text-gray-400">Live exit (bid/ask)</span>
+          <span className="text-emerald-400 font-mono font-semibold">
+            {liveExitPrice != null ? `${(liveExitPrice * 100).toFixed(1)}¢` : "--"}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-400">Oracle price (vault)</span>
+          <span className="text-gray-300 font-mono">
+            {oracleExitPrice != null ? `${(oracleExitPrice * 100).toFixed(1)}¢` : "pending"}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Notional</span>
@@ -349,21 +506,41 @@ export default function RealPolymarketClose({
             </span>
           </div>
         </div>
+        <p className="text-[9px] text-gray-500 mt-1.5 border-t border-emerald-900/20 pt-1.5">
+          Vault close gas is higher because it reads the oracle (router → feed), repays the vault, and sends you USDC. Try during lower network activity if gas feels high.
+        </p>
       </div>
 
       {!address && (
         <p className="text-amber-400/90 text-[11px]">Connect your wallet to close this position.</p>
       )}
-      {address && !tokenId && (
+      {address && !tokenId && !vaultOnly && (
         <p className="text-amber-400/90 text-[11px]">Market token IDs not loaded. Refresh the page or try again in a moment.</p>
       )}
       {address && tokenId && notionalUsdc > 0 && notionalUsdc < 1 && (
         <p className="text-amber-400/90 text-[11px]">This position’s notional (${notionalUsdc.toFixed(2)}) is below Polymarket’s $1 minimum; the sell step may be rejected.</p>
       )}
+      {address && (
+        <p className="text-[10px] text-gray-500">
+          If Polymarket shows no open position for this outcome, you can skip the sell step and close the vault only.
+        </p>
+      )}
+      {address && (
+        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="w-3 h-3 rounded border border-gray-600 bg-black"
+            checked={vaultOnly}
+            onChange={(e) => setVaultOnly(e.target.checked)}
+            disabled={isAnyLoading}
+          />
+          <span>Vault-only close (skip Polymarket sell leg)</span>
+        </label>
+      )}
       <button type="button" onClick={() => setConfirmOpen(true)} disabled={!canClose || isAnyLoading}
         className="w-full rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-500/40 text-emerald-400 py-2.5 text-sm font-semibold hover:from-emerald-500/30 hover:to-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
         {isAnyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-        Sell on Polymarket → Close vault position
+        {vaultOnly ? "Close vault position only" : "Sell on Polymarket"}
       </button>
 
       {/* Progress indicator */}
@@ -389,25 +566,39 @@ export default function RealPolymarketClose({
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
           <div className="rounded-xl border border-gray-700 bg-gray-900 p-4 max-w-sm w-full shadow-xl">
-            <h4 className="text-white font-semibold mb-2">Confirm Live Close</h4>
+            <h4 className="text-white font-semibold mb-2">
+              {vaultOnly ? "Confirm vault-only close" : "Confirm Live Close"}
+            </h4>
             <p className="text-gray-400 text-sm mb-3 truncate" title={marketTitle}>{marketTitle}</p>
 
             <div className="bg-black/50 rounded p-3 border border-gray-800 space-y-2 text-[11px] mb-4">
-              <div className="text-emerald-400 text-[10px] font-bold uppercase mb-1">Single-chain close (Polygon)</div>
-
-              <div className="border-l-2 border-emerald-500/30 pl-2">
-                <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Sell on Polymarket</div>
-                <div className="text-gray-300">
-                  Sell {position.isLong ? "YES" : "NO"} tokens · ~${notionalUsdc.toFixed(6)} notional
-                </div>
+              <div className="text-emerald-400 text-[10px] font-bold uppercase mb-1">
+                {vaultOnly ? "Vault-only close (Polygon)" : "Single-chain close (Polygon)"}
               </div>
 
-              <div className="border-l-2 border-emerald-500/30 pl-2">
-                <div className="text-emerald-400 font-semibold text-[10px]">Step 2: Close vault position</div>
-                <div className="text-gray-300">
-                  Close #{positionId} · oracle settles exit, collateral ± PnL returned
+              {vaultOnly ? (
+                <div className="border-l-2 border-amber-500/30 pl-2">
+                  <div className="text-amber-400 font-semibold text-[10px]">Close vault only</div>
+                  <div className="text-gray-300">
+                    Close position #{positionId} · no Polymarket sell. Oracle settles exit; collateral ± PnL returned to your wallet.
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="border-l-2 border-emerald-500/30 pl-2">
+                    <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Sell on Polymarket</div>
+                    <div className="text-gray-300">
+                      Sell {position.isLong ? "YES" : "NO"} tokens · ~${notionalUsdc.toFixed(6)} notional
+                    </div>
+                  </div>
+                  <div className="border-l-2 border-emerald-500/30 pl-2">
+                    <div className="text-emerald-400 font-semibold text-[10px]">Step 2: Close vault position</div>
+                    <div className="text-gray-300">
+                      Close #{positionId} · oracle settles exit, collateral ± PnL returned
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="border-t border-emerald-900/20 pt-2 mt-2">
                 <div className="flex justify-between">
@@ -468,6 +659,9 @@ export default function RealPolymarketClose({
             <div className="border-t border-emerald-900/20 pt-1.5 mt-1 text-gray-300">
               Your collateral ± PnL has been returned to your wallet on <strong className="text-emerald-400">Polygon</strong>.
             </div>
+          )}
+          {result.info && (
+            <div className="text-amber-300">{result.info}</div>
           )}
           {result.error && (
             <div className="space-y-1">

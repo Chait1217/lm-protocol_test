@@ -99,6 +99,12 @@ interface ChartPoint {
 
 const POLYMARKET_BASE = "https://polymarket.com";
 
+/** Use our proxy so CLOB works in browser (avoids CORS / DNS). */
+function getClobApiBase(): string {
+  if (typeof window !== "undefined") return `${window.location.origin}/api/clob-proxy`;
+  return "https://clob.polymarket.com";
+}
+
 export default function PolymarketLiveChart({
   settlementDate = "Dec 31, 2026",
   refreshInterval = 4000,
@@ -177,8 +183,9 @@ export default function PolymarketLiveChart({
   const fetchPriceHistory = useCallback(async (tokenId: string) => {
     if (!tokenId) return null;
     try {
+      const base = getClobApiBase();
       const response = await fetch(
-        `https://clob.polymarket.com/prices-history?market=${tokenId}&tokenId=${tokenId}&interval=1d&fidelity=60`
+        `${base}/prices-history?market=${encodeURIComponent(tokenId)}&tokenId=${encodeURIComponent(tokenId)}&interval=1d&fidelity=60`
       );
       if (!response.ok) return null;
       const data = await response.json();

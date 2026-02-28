@@ -272,6 +272,7 @@ export default function PositionsPanel({
                       #{id.toString()} {pos.isLong ? <span className="text-green-400">L</span> : <span className="text-red-400">S</span>} {Number(pos.leverage)}x
                     </span>
                     <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
+                      <span className="text-emerald-400/90" title="Entry price">{(Number(pos.entryPriceMock) / 1e6 * 100).toFixed(1)}¢</span>
                       <span>${formatUSDC(pos.collateral, 6)} / ${formatUSDC(pos.notional, 6)}</span>
                       <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-emerald-500/20 text-emerald-400">OPEN</span>
                     </div>

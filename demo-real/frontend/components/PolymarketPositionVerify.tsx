@@ -316,8 +316,8 @@ export default function PolymarketPositionVerify() {
               <span className="text-emerald-300">{top?.outcome ?? "--"}</span>
               <span className="text-gray-400">Size</span>
               <span className="text-gray-200">{top?.size != null ? top.size.toFixed(4) : "--"}</span>
-              <span className="text-gray-400">Avg price</span>
-              <span className="text-gray-200">{top?.avgPrice != null ? `${(top.avgPrice * 100).toFixed(2)}¢` : "--"}</span>
+              <span className="text-gray-400">Entry (avg price)</span>
+              <span className="text-emerald-300 font-mono">{top?.avgPrice != null ? `${(top.avgPrice * 100).toFixed(2)}¢` : "--"}</span>
               <span className="text-gray-400">Current value</span>
               <span className="text-gray-200">${top?.currentValue != null ? top.currentValue.toFixed(4) : "--"}</span>
               <span className="text-gray-400">PnL</span>

@@ -39,11 +39,13 @@ export async function GET(request: NextRequest) {
       const text = await upstream.text();
       return NextResponse.json(
         {
-          success: false,
-          error: `Polymarket API error (${upstream.status})`,
-          detail: text.slice(0, 300),
+          success: true,
+          user: user.toLowerCase(),
+          count: 0,
+          positions: [],
+          warning: `Polymarket API error (${upstream.status}): ${text.slice(0, 180)}`,
         },
-        { status: 502, headers: noCacheHeaders }
+        { headers: noCacheHeaders }
       );
     }
 
@@ -62,8 +64,14 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
-      { success: false, error: message },
-      { status: 500, headers: noCacheHeaders }
+      {
+        success: true,
+        user: "",
+        count: 0,
+        positions: [],
+        warning: `Positions fallback: ${message}`,
+      },
+      { headers: noCacheHeaders }
     );
   }
 }
