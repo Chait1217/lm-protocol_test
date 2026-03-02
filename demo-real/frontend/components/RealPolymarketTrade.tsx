@@ -83,6 +83,8 @@ function parseOrderOutcome(resp: any): { ok: boolean; orderId?: string; txHash?:
     if (successLikeTag.has(tag)) {
       return { ok: true, orderId: `status:${tag}` };
     }
+    // Pure string responses that are not obviously successful are treated as failures.
+    return { ok: false, error: tag };
   }
 
   const normalizedError =
@@ -125,19 +127,17 @@ function parseOrderOutcome(resp: any): { ok: boolean; orderId?: string; txHash?:
   const explicitFailure =
     resp?.success === false ||
     resp?.data?.success === false ||
-    (typeof resp?.errorMsg === "string" && !successLikeTag.has(String(resp.errorMsg).trim().toLowerCase())) ||
-    (typeof resp?.error === "string" && !successLikeTag.has(normalizedError)) ||
-    (typeof resp?.data?.errorMsg === "string" && !successLikeTag.has(String(resp.data.errorMsg).trim().toLowerCase())) ||
-    (typeof resp?.data?.error === "string" && !successLikeTag.has(normalizedError));
+    isNoLiquidityError(normalizedError) ||
+    isNoLiquidityError(normalizedErrorMsg) ||
+    isNoLiquidityError(normalizedStatus);
 
-  // Some market order responses can be successful without an explicit order id.
+  // Success is only when Polymarket explicitly reports success or a known good status.
   const explicitSuccess =
     resp?.success === true ||
     resp?.data?.success === true ||
     successLikeTag.has(normalizedStatus) ||
     successLikeTag.has(normalizedError) ||
-    successLikeTag.has(normalizedErrorMsg) ||
-    (typeof resp?.status === "string" && !["error", "failed", "rejected"].includes(resp.status.toLowerCase()));
+    successLikeTag.has(normalizedErrorMsg);
 
   if (explicitFailure) {
     return { ok: false, error: toErrorMessage(resp) };
@@ -175,6 +175,8 @@ function isFokNoFillError(message: string): boolean {
 function isNoLiquidityError(message: string): boolean {
   const m = message.toLowerCase();
   return (
+    m.includes("no orders") ||
+    m.includes("no_orders") ||
     m.includes("no orders found to match") ||
     m.includes("no match") ||
     m.includes("partially filled or killed") ||
@@ -263,8 +265,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   const notional = collateral * leverage;
   const borrowed = notional - collateral;
   const isLong = selectedOutcome === "YES";
-  const spendBufferPercent = 3;
-  const expectedPolymarketSpend = Number((notional * (1 + spendBufferPercent / 100)).toFixed(6));
 
   /* ── Polygon USDC.e balance ── */
   const polygonBalance = useReadContract({
@@ -667,39 +667,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
         negRisk,
         liq: preflightLiq,
       });
-      if (!preflightLiq.canSend) {
-        let continueWithMarketAttempt = false;
-        if (NO_LIQUIDITY_MODE === "rest") {
-          try {
-            const limitResp = await postRestingLimitOrder(client);
-            const limitParsed = parseOrderOutcome(limitResp);
-            if (limitParsed.ok) {
-              setResult({
-                orderId: limitParsed.orderId,
-                polyTxHash: limitParsed.txHash,
-                info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
-              });
-              setStep("done");
-              return false;
-            }
-            throw new Error(`Could not post resting GTC order: ${toErrorMessage(limitResp)}`);
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            // If resting fallback is unavailable (min size / transient service), continue to market execution.
-            if (!isRestingFallbackUnavailableError(msg)) {
-              throw err;
-            }
-            continueWithMarketAttempt = true;
-          }
-        }
-        if (!continueWithMarketAttempt) {
-          setResult({
-            error: "No opposite liquidity at a fillable price/size for FAK/FOK. Vault leg not opened.",
-          });
-          setStep("done");
-          return false;
-        }
-      }
 
       let resp: any;
       let noLiquidityDetected = false;
@@ -906,7 +873,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           }
         }
         setResult({
-          error: "No liquidity – order failed. No vault opened.",
+          error: "No opposite liquidity at a fillable price/size for FAK. Vault leg not opened.",
         });
         setStep("done");
         return false;
@@ -916,26 +883,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
 
       const parsed = parseOrderOutcome(resp);
       if (!parsed.ok) {
-        const rawMsg = (parsed.error || "").toLowerCase();
-        const successLike = ["matched", "filled", "live", "open", "posted", "accepted"];
-        if (
-          successLike.some(
-            (s) =>
-              rawMsg === s ||
-              rawMsg.includes(`"${s}"`) ||
-              rawMsg.includes(` ${s} `) ||
-              rawMsg.startsWith(`${s} `) ||
-              rawMsg.startsWith(`${s}|`) ||
-              rawMsg.includes(`${s} |`) ||
-              rawMsg.endsWith(` ${s}`)
-          )
-        ) {
-          setResult({
-            orderId: `status:${rawMsg.split("|")[0].trim() || "matched"}`,
-            polyTxHash: undefined,
-          });
-          return true;
-        }
         if (isNoLiquidityError(parsed.error || "")) {
           if (NO_LIQUIDITY_MODE === "rest") {
             try {
@@ -1048,14 +995,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               <span className="text-white font-mono font-semibold">${notional.toFixed(6)} USDC.e</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Expected wallet spend</span>
-              <span className="text-amber-300 font-mono">${expectedPolymarketSpend.toFixed(6)} USDC.e</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Price/fee buffer</span>
-              <span className="text-gray-300 font-mono">+{spendBufferPercent.toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between">
               <span className="text-gray-400">Borrowed from vault</span>
               <span className="text-yellow-400 font-mono">${borrowed.toFixed(6)} USDC.e</span>
             </div>
@@ -1134,9 +1073,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
                 <div className="text-emerald-400 font-semibold text-[10px]">Step 1: Polymarket</div>
                 <div className="text-gray-300">
                   Buy {selectedOutcome} @ ~{(price * 100).toFixed(1)}¢ with ${notional.toFixed(6)} USDC.e
-                </div>
-                <div className="text-gray-400 text-[10px] mt-0.5">
-                  Expected spend with buffer: ${expectedPolymarketSpend.toFixed(6)} USDC.e
                 </div>
                 <div className="text-gray-400 text-[10px]">You will receive position tokens on Polymarket after fill.</div>
               </div>
