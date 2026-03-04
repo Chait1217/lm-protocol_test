@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef, useReducer } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import TradingHeader from "@/components/TradingHeader";
@@ -30,14 +30,6 @@ const PolymarketLeverageBox = dynamic(() => import("@/components/PolymarketLever
   ssr: false,
   loading: () => (
     <div className="glass-card p-4 rounded-xl border border-emerald-500/20 min-h-[300px] flex items-center justify-center">
-      <span className="text-gray-500 text-sm">Loading…</span>
-    </div>
-  ),
-});
-const PositionsPanel = dynamic(() => import("@/components/PositionsPanel"), {
-  ssr: false,
-  loading: () => (
-    <div className="glass-card p-4 rounded-xl border border-emerald-500/20 min-h-[200px] flex items-center justify-center">
       <span className="text-gray-500 text-sm">Loading…</span>
     </div>
   ),
@@ -140,11 +132,8 @@ export default function TradeDemoPage() {
     chainId: polygon.id,
   });
 
-  const [positionRefreshTrigger, bumpPositionRefresh] = useReducer((x: number) => x + 1, 0);
-
   const handleVaultRefetch = useCallback(() => {
     refetchVault();
-    bumpPositionRefresh();
   }, [refetchVault]);
 
   return (
@@ -183,10 +172,6 @@ export default function TradeDemoPage() {
               borrowApr={borrowApr as bigint | undefined}
               insuranceBal={insuranceBal}
               protocolBal={protocolBal}
-            />
-            <PositionsPanel
-              refreshTrigger={positionRefreshTrigger}
-              onVaultRefetch={handleVaultRefetch}
             />
             <PolymarketPositionVerify />
           </div>

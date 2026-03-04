@@ -46,15 +46,22 @@ export const POLYMARKET_CLOB_API =
   "https://clob.polymarket.com";
 
 /**
- * Newsom market: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?"
- * Token IDs come from the Gamma/CLOB market response (clobTokenIds).
- * Condition ID / partition are used for CTF split/merge; for CLOB orders we use tokenId from the API.
+ * High-liquidity standard market: "Will the Iranian regime fall by June 30?"
+ * Token IDs from Gamma/CLOB. Condition ID for CTF; CLOB orders use tokenId from API.
  */
-export const BTC100K_MARKET_SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
+export const DEFAULT_MARKET_SLUG = "will-the-iranian-regime-fall-by-june-30";
 
-/** Placeholder: conditionId for BTC 100k (binary). Fill from Gamma API or Polymarket docs if needed for CTF.splitPosition. */
+export const FALLBACK_CLOB_TOKEN_IDS = [
+  "38397507750621893057346880033441136112987238933685677349709401910643842844855",
+  "95949957895141858444199258452803633110472396604599808168788254125381075552218",
+];
+
+/** @deprecated Use DEFAULT_MARKET_SLUG */
+export const BTC100K_MARKET_SLUG = DEFAULT_MARKET_SLUG;
+
+/** Condition ID for Iranian regime market (binary). */
 export const BTC100K_CONDITION_ID =
-  process.env.NEXT_PUBLIC_BTC100K_CONDITION_ID ?? ("0x" + "0".repeat(64)) as `0x${string}`;
+  (process.env.NEXT_PUBLIC_BTC100K_CONDITION_ID ?? "0x9352c559e9648ab4cab236087b64ca85c5b7123a4c7d9d7d4efde4a39c18056f") as `0x${string}`;
 
 /** Parent collection for binary markets (no parent). */
 export const PARENT_COLLECTION_ID = ("0x" + "0".repeat(64)) as `0x${string}`;

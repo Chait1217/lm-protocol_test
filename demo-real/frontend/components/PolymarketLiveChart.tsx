@@ -154,7 +154,7 @@ export default function PolymarketLiveChart({
 
       const noPrice = outcomePrices[1] != null ? parseFloat(String(outcomePrices[1])) : yesPrice != null ? 1 - yesPrice : null;
       return {
-        title: m?.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+        title: m?.question || "Will the Iranian regime fall by June 30?",
         slug: m?.slug ?? null,
         probability,
         volume: parseFloat(m?.volume) || parseFloat(m?.volumeNum) || 0,
@@ -168,7 +168,7 @@ export default function PolymarketLiveChart({
       };
     } catch {
       return {
-        title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+        title: "Will the Iranian regime fall by June 30?",
         slug: null,
         probability: null,
         volume: 0,

@@ -11,10 +11,10 @@ const HOST_FALLBACK_IPS: Record<string, string[]> = {
   "gamma-api.polymarket.com": ["104.18.34.205", "172.64.153.51"],
   "clob.polymarket.com": ["104.18.34.205", "172.64.153.51"],
 };
-const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
+const SLUG = "will-the-iranian-regime-fall-by-june-30";
 const FALLBACK_CLOB_TOKEN_IDS = [
-  "54533043819946592547517511176940999955633860128497669742211153063842200957669",
-  "87854174148074652060467921081181402357467303721471806610111179101805869578687",
+  "38397507750621893057346880033441136112987238933685677349709401910643842844855",
+  "95949957895141858444199258452803633110472396604599808168788254125381075552218",
 ];
 
 const noCacheHeaders = {
@@ -143,12 +143,12 @@ let lastKnownMarket: Record<string, unknown> | null = null;
 
 function buildFallbackMarket(): Record<string, unknown> {
   return {
-    question: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
-    title: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+    question: "Will the Iranian regime fall by June 30?",
+    title: "Will the Iranian regime fall by June 30?",
     slug: SLUG,
-    outcomePrices: JSON.stringify([0.25, 0.75]),
-    bestBid: 0.249,
-    bestAsk: 0.25,
+    outcomePrices: JSON.stringify([0.385, 0.615]),
+    bestBid: 0.38,
+    bestAsk: 0.39,
     priceSource: "gamma",
     oneDayPriceChange: "0",
     volume: "0",
@@ -156,8 +156,8 @@ function buildFallbackMarket(): Record<string, unknown> {
     volumeNum: 0,
     liquidity: "0",
     clobTokenIds: FALLBACK_CLOB_TOKEN_IDS,
-    tickSize: "0.001",
-    negRisk: true,
+    tickSize: "0.01",
+    negRisk: false,
   };
 }
 

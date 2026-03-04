@@ -18,6 +18,7 @@ import {
   MARGIN_ENGINE_ABI,
 } from "@/lib/contracts";
 import { formatUSDC, bpsToPercent } from "@/lib/utils";
+import { useVaultMetrics } from "@/hooks/useVaultMetrics";
 import {
   useAccount,
   useReadContract,
@@ -74,10 +75,10 @@ function AnimatedValue({
 
 const POLYMARKET_BASE = "https://polymarket.com";
 const FALLBACK_CLOB_TOKEN_IDS = [
-  "54533043819946592547517511176940999955633860128497669742211153063842200957669",
-  "87854174148074652060467921081181402357467303721471806610111179101805869578687",
+  "38397507750621893057346880033441136112987238933685677349709401910643842844855",
+  "95949957895141858444199258452803633110472396604599808168788254125381075552218",
 ];
-const POLYMARKET_SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
+const POLYMARKET_SLUG = "will-the-iranian-regime-fall-by-june-30";
 
 interface MarketData {
   title: string;
@@ -109,6 +110,7 @@ export default function PolymarketLeverageBox({
   onVaultRefetch?: () => void;
 }) {
   const { address, isConnected } = useAccount();
+  const { poolState } = useVaultMetrics(5000);
 
   // ─── Market state ────────────────────────────────────────────────
   const [market, setMarket] = useState<MarketData | null>(null);
@@ -173,7 +175,7 @@ export default function PolymarketLeverageBox({
       const negRisk = typeof m?.negRisk === "boolean" ? m.negRisk : undefined;
 
       return {
-        title: m?.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+        title: m?.question || "Will the Iranian regime fall by June 30?",
         slug: m?.slug ?? null,
         yesProbability,
         noProbability,
@@ -192,7 +194,7 @@ export default function PolymarketLeverageBox({
       };
     } catch {
       return {
-        title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+        title: "Will the Iranian regime fall by June 30?",
         slug: null,
         yesProbability: null,
         noProbability: null,
@@ -244,8 +246,8 @@ export default function PolymarketLeverageBox({
       if (retryCount < 3) { await new Promise((r) => setTimeout(r, 1000)); return fetchMarket(retryCount + 1); }
       setDataSource("fallback");
       return {
-        title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
-        slug: "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+        title: "Will the Iranian regime fall by June 30?",
+        slug: "will-the-iranian-regime-fall-by-june-30",
         yesProbability: 50,
         noProbability: 50,
         yesPrice: "50.0",
@@ -346,6 +348,26 @@ export default function PolymarketLeverageBox({
 
   return (
     <div className="glass-card p-2.5 sm:p-3 rounded-xl shadow-glow flex flex-col min-w-0">
+      <div className="grid grid-cols-3 gap-3 mb-4 p-3 rounded-xl bg-white/5 border border-white/10">
+        <div className="text-center">
+          <div className="text-xs text-gray-400 uppercase tracking-wider">Borrowed</div>
+          <div className="text-lg font-bold text-amber-400">
+            ${poolState.totalBorrowed.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs text-gray-400 uppercase tracking-wider">UTIL</div>
+          <div className="text-lg font-bold text-cyan-400">
+            {(poolState.utilization * 100).toFixed(1)}%
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-xs text-gray-400 uppercase tracking-wider">Borrow APR</div>
+          <div className="text-lg font-bold text-purple-400">
+            {(poolState.borrowRate * 100).toFixed(2)}%
+          </div>
+        </div>
+      </div>
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">

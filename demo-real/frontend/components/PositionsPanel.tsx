@@ -15,6 +15,7 @@ import {
 import { formatUSDC } from "@/lib/utils";
 import LivePositionTracker from "@/components/LivePositionTracker";
 import RealPolymarketClose from "@/components/RealPolymarketClose";
+import { useRiskMonitor, type RiskMonitorPosition } from "@/hooks/useRiskMonitor";
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -67,7 +68,7 @@ function parseMarketData(m: any): MarketData {
     } catch { clobTokenIds = []; }
 
     return {
-      title: m?.question || "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+      title: m?.question || "Will the Iranian regime fall by June 30?",
       slug: m?.slug ?? null,
       yesProbability,
       noProbability,
@@ -79,7 +80,7 @@ function parseMarketData(m: any): MarketData {
     };
   } catch {
     return {
-      title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+      title: "Will the Iranian regime fall by June 30?",
       slug: null,
       yesProbability: null,
       noProbability: null,
@@ -90,6 +91,24 @@ function parseMarketData(m: any): MarketData {
       negRisk: undefined,
     };
   }
+}
+
+function toRiskPosition(entry: { id: bigint; pos: PositionData }, clobTokenIds: string[]): RiskMonitorPosition {
+  const pos = entry.pos;
+  const notional = Number(pos.notional) / 1e6;
+  const entryPrice = Number(pos.entryPriceMock) / 1e6 || 0.01;
+  const tokenBalance = entryPrice > 0 ? notional / entryPrice : 0;
+  const tokenId = pos.isLong ? (clobTokenIds[0] ?? "") : (clobTokenIds[1] ?? "");
+  return {
+    id: Number(entry.id),
+    tokenId,
+    tokenBalance,
+    collateral: Number(pos.collateral) / 1e6,
+    borrowed: Number(pos.borrowed) / 1e6,
+    entryPrice,
+    isYes: pos.isLong,
+    openedAt: Number(pos.openTimestamp),
+  };
 }
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -106,7 +125,7 @@ export default function PositionsPanel({
   // ─── Market data (for live tracker + close) ────────────────────
   const [market, setMarket] = useState<MarketData | null>(null);
 
-  const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
+  const SLUG = "will-the-iranian-regime-fall-by-june-30";
   const fetchMarket = useCallback(async () => {
     try {
       let m: Record<string, unknown> | null = null;
@@ -163,6 +182,12 @@ export default function PositionsPanel({
   const openPositionEntries = recentPositionIds
     .map((id, idx) => ({ id, pos: positionsList[idx] }))
     .filter((entry): entry is { id: bigint; pos: PositionData } => entry.pos != null && entry.pos.isOpen);
+
+  const riskMonitorPositions = useMemo(
+    () => openPositionEntries.map((e) => toRiskPosition(e, market?.clobTokenIds ?? [])).filter((p) => p.tokenId),
+    [openPositionEntries, market?.clobTokenIds]
+  );
+  const { riskStatuses } = useRiskMonitor(riskMonitorPositions, 10000);
 
   const openIds = useMemo(() => new Set(openPositionEntries.map((e) => Number(e.id))), [openPositionEntries]);
   const firstOpenId = openPositionEntries.length > 0 ? Number(openPositionEntries[0].id) : null;
@@ -274,22 +299,37 @@ export default function PositionsPanel({
         ) : (
           openPositionEntries.map(({ id, pos }) => {
             const isSelected = activePositionId === Number(id);
+            const riskStatus = riskStatuses.get(Number(id));
             return (
               <div key={id.toString()} className="space-y-1">
                 <div
                   className={`rounded border p-1.5 text-[10px] ${
                     isSelected ? "border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/20" : "border-emerald-500/30 bg-emerald-500/5"
-                  }`}
+                  } ${riskStatus?.isLiquidatable ? "border-red-500/50 bg-red-500/10" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-mono font-semibold text-white text-[10px]">
-                      #{id.toString()} {pos.isLong ? <span className="text-green-400">L</span> : <span className="text-red-400">S</span>} {Number(pos.leverage)}x
+                      #{id.toString()} {pos.isLong ? <span className="text-green-400">YES</span> : <span className="text-red-400">NO</span>} @ ${(Number(pos.entryPriceMock) / 1e6).toFixed(3)}
                     </span>
                     <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
-                      <span className="text-emerald-400/90" title="Entry price">{(Number(pos.entryPriceMock) / 1e6 * 100).toFixed(1)}¢</span>
-                      <span>${formatUSDC(pos.collateral, 6)} / ${formatUSDC(pos.notional, 6)}</span>
+                      {riskStatus != null && (
+                        <>
+                          <span className={riskStatus.pnl >= 0 ? "text-green-400" : "text-red-400"}>
+                            {riskStatus.pnl >= 0 ? "+" : ""}{riskStatus.pnl.toFixed(2)} ({riskStatus.pnlPercent.toFixed(1)}%)
+                          </span>
+                          <span className={riskStatus.healthFactor < 1.5 ? "text-red-400" : "text-gray-400"}>
+                            HF: {Number.isFinite(riskStatus.healthFactor) ? riskStatus.healthFactor.toFixed(2) : "—"}
+                          </span>
+                          {riskStatus.isLiquidatable && (
+                            <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-red-500/30 text-red-400">LIQUIDATABLE</span>
+                          )}
+                        </>
+                      )}
                       <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-emerald-500/20 text-emerald-400">OPEN</span>
                     </div>
+                  </div>
+                  <div className="text-[9px] text-gray-400 mt-0.5">
+                    Collateral: ${formatUSDC(pos.collateral, 6)} | Borrowed: ${formatUSDC(pos.borrowed, 6)}
                   </div>
                   {!isSelected && (
                     <button type="button" onClick={() => setActivePositionId(Number(id))}

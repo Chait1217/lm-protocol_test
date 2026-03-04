@@ -17,6 +17,8 @@ import {
 import { erc20PolyAbi } from "@/lib/polymarketAbi";
 import { getContractAddresses, USDC_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 import { parseUSDC, formatUSDC, bpsToPercent } from "@/lib/utils";
+import { calculateOpenCloseFee } from "@/lib/lendingPool";
+import { usePolymarketSafe } from "@/hooks/usePolymarketSafe";
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -268,6 +270,7 @@ function checkFakLiquidity(params: {
 export default function RealPolymarketTrade({ market, selectedOutcome, collateral, leverage, entryPrice, onSuccess }: Props) {
   const { address } = useAccount();
   const { connectAsync, isPending: isConnectPending } = useConnect();
+  const { funderAddress, signatureType } = usePolymarketSafe();
 
   /* ── Derived values ── */
   const notional = collateral * leverage;
@@ -506,12 +509,10 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       }
 
       const host = POLYMARKET_CLOB_API;
-      const getClientForSig = async (signatureType: number) => {
-        const base = new ClobClient(host, 137, signer, undefined, signatureType, walletAddress);
-        const creds = await base.createOrDeriveApiKey();
-        return new ClobClient(host, 137, signer, creds, signatureType, walletAddress);
-      };
-      const client = await getClientForSig(0);
+      const funder = (funderAddress || walletAddress) ?? walletAddress;
+      const base = new ClobClient(host, 137, signer, undefined, signatureType, funder);
+      const creds = await base.createOrDeriveApiKey();
+      const client = new ClobClient(host, 137, signer, creds, signatureType, funder);
 
       const usdc = new ethers.Contract(
         POLYMKT_USDCE_ADDRESS,
@@ -579,328 +580,41 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       const tickSize = (market.tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
       const negRisk = market.negRisk ?? false;
 
-      const submitOrder = async (typedClient: any, orderType: any) => {
-        return typedClient.createAndPostMarketOrder(
-          {
-            tokenID: tokenId,
-            amount: notional,
-            side: Side.BUY,
-          },
-          { tickSize, negRisk },
-          orderType
-        );
-      };
-
-      const postRestingLimitOrder = async (typedClient: any) => {
-        // For BUY: add slippage so limit is slightly above best ask to improve fill chance; round to tickSize
-        const rawLimit = price * (1 + FAK_SLIPPAGE_BPS / 10_000);
-        const limitPrice = roundToTick(
-          Math.max(0.01, Math.min(0.99, rawLimit)),
-          tickSize
-        );
-        const size = Number((notional / limitPrice).toFixed(6));
-        if (size < MIN_RESTING_ORDER_SIZE) {
-          const minNotional = MIN_RESTING_ORDER_SIZE * limitPrice;
-          throw new Error(
-            `Resting GTC minimum size is ${MIN_RESTING_ORDER_SIZE}. Current size is ${size.toFixed(2)} at ${(limitPrice * 100).toFixed(1)}¢. Increase notional to at least $${minNotional.toFixed(2)}.`
-          );
-        }
-        return typedClient.createAndPostOrder(
-          {
-            tokenID: tokenId,
-            price: limitPrice,
-            size,
-            side: Side.BUY,
-          },
-          { tickSize, negRisk },
-          OrderType.GTC
-        );
-      };
-
-      if (POLYMARKET_EXECUTION_MODE === "rest_first") {
-        try {
-          let limitResp: any;
-          try {
-            limitResp = await postRestingLimitOrder(client);
-          } catch (firstRestErr: unknown) {
-            const firstMsg = firstRestErr instanceof Error ? firstRestErr.message : String(firstRestErr);
-            if (!isTransientRestingOrderError(firstMsg)) throw firstRestErr;
-            await sleep(1200);
-            limitResp = await postRestingLimitOrder(client);
-          }
-          const limitParsed = parseOrderOutcome(limitResp);
-          const tag = getOutcomeTag(limitResp);
-          const msg = toErrorMessage(limitResp).toLowerCase();
-          const successLike = ["matched", "filled", "live", "open", "posted", "accepted"];
-          const looksSuccessful = successLike.some((s) => tag.includes(s) || msg === s || msg.includes(`"${s}"`));
-          if (limitParsed.ok || looksSuccessful) {
-            const matchedNow = tag.includes("matched") || tag.includes("filled") || msg.includes("matched") || msg.includes("filled");
-            const orderId = limitParsed.orderId ?? (tag ? `status:${tag}` : "status:matched");
-            if (matchedNow) {
-              setResult({
-                orderId,
-                polyTxHash: limitParsed.txHash,
-              });
-              return true;
-            }
-            setResult({
-              orderId,
-              polyTxHash: limitParsed.txHash,
-              info: "Posted resting GTC order on Polymarket (rest-first mode). Vault leg was not opened because the order is resting.",
-            });
-            setStep("done");
-            return false;
-          }
-          throw new Error(`Could not post resting GTC order in rest-first mode: ${toErrorMessage(limitResp)}`);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          // Small orders and temporary rest service errors should continue with market execution path.
-          if (!isMinRestingSizeError(msg) && !isTransientRestingOrderError(msg)) {
-            throw err;
-          }
-        }
-      }
-
-      // Global preflight: avoid sending FAK/FOK when immediate opposite liquidity is absent.
-      const preflightBook = await client.getOrderBook(tokenId);
-      const preflightLiq = checkFakLiquidity({
-        side: "BUY",
-        notional,
-        targetPrice: price,
-        orderbook: preflightBook,
+      // GTC limit order at midpoint: fetch midpoint, deduct 0.4% open fee, place order
+      const hostBase = host.replace(/\/$/, "");
+      const midRes = await fetch(`${hostBase}/midpoint?token_id=${encodeURIComponent(tokenId)}&_=${Date.now()}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
       });
-      console.log("[Polymarket][orderbook-snapshot]", {
-        reason: "preflight_before_any_market_order",
-        marketSlug: market?.slug,
-        tokenId,
-        orderType: "FAK",
-        side: "BUY",
-        notional,
-        tickSize,
-        negRisk,
-        liq: preflightLiq,
-      });
+      if (!midRes.ok) throw new Error("Failed to fetch midpoint price");
+      const midJson = await midRes.json();
+      const midRaw = typeof midJson?.midpoint === "string" ? parseFloat(midJson.midpoint) : (typeof midJson?.mid === "number" ? midJson.mid : Number(midJson?.midpoint ?? midJson?.mid));
+      if (!Number.isFinite(midRaw) || midRaw <= 0 || midRaw >= 1) throw new Error(`Invalid midpoint price: ${midRaw}`);
 
-      let resp: any;
-      let noLiquidityDetected = false;
-      let activeClient: any = client;
-      let lastErr: unknown;
-      const signatureTypeCandidates = [0, 1, 2];
-      for (const sigType of signatureTypeCandidates) {
-        try {
-          const typedClient = sigType === 0 ? client : await getClientForSig(sigType);
-          activeClient = typedClient;
-          await typedClient.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
-          await sleep(900);
-          try {
-            resp = await submitOrder(typedClient, OrderType.FOK);
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            // FOK can fail on thin books; retry with FAK for partial fill.
-            if (isFokNoFillError(msg)) {
-              const orderbook = await typedClient.getOrderBook(tokenId);
-              const liq = checkFakLiquidity({
-                side: "BUY",
-                notional,
-                targetPrice: price,
-                orderbook,
-              });
-              const debugPayload = {
-                reason: "precheck_before_fak_after_fok_fail",
-                marketSlug: market?.slug,
-                tokenId,
-                orderType: "FAK",
-                side: "BUY",
-                notional,
-                tickSize,
-                negRisk,
-                liq,
-              };
-              console.log("[Polymarket][orderbook-snapshot]", debugPayload);
-              // Always attempt FAK after FOK no-fill. Local depth checks can be stale/pessimistic.
-              resp = await submitOrder(typedClient, OrderType.FAK);
-            } else if (isNoLiquidityError(msg)) {
-              const orderbook = await typedClient.getOrderBook(tokenId);
-              const liq = checkFakLiquidity({
-                side: "BUY",
-                notional,
-                targetPrice: price,
-                orderbook,
-              });
-              console.log("[Polymarket][orderbook-snapshot]", {
-                reason: "fak_no_match_throw",
-                marketSlug: market?.slug,
-                tokenId,
-                orderType: "FAK",
-                side: "BUY",
-                notional,
-                tickSize,
-                negRisk,
-                liq,
-              });
-              if (NO_LIQUIDITY_MODE === "rest") {
-                try {
-                  resp = await postRestingLimitOrder(typedClient);
-                } catch (restErr: unknown) {
-                  const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
-                  if (isRestingFallbackUnavailableError(restMsg)) {
-                    noLiquidityDetected = true;
-                    break;
-                  }
-                  throw restErr;
-                }
-              } else {
-                noLiquidityDetected = true;
-                break;
-              }
-            } else {
-              throw err;
-            }
-          }
-          // Some client responses return soft errors instead of throwing.
-          const firstParse = parseOrderOutcome(resp);
-          if (!firstParse.ok && isFokNoFillError(firstParse.error || "")) {
-            const orderbook = await typedClient.getOrderBook(tokenId);
-            const liq = checkFakLiquidity({
-              side: "BUY",
-              notional,
-              targetPrice: price,
-              orderbook,
-            });
-            console.log("[Polymarket][orderbook-snapshot]", {
-              reason: "fak_soft_error_after_fok",
-              marketSlug: market?.slug,
-              tokenId,
-              orderType: "FAK",
-              side: "BUY",
-              notional,
-              tickSize,
-              negRisk,
-              liq,
-            });
-            // Always attempt FAK after FOK no-fill. Local depth checks can be stale/pessimistic.
-            resp = await submitOrder(typedClient, OrderType.FAK);
-          } else if (!firstParse.ok && isNoLiquidityError(firstParse.error || "")) {
-            const orderbook = await typedClient.getOrderBook(tokenId);
-            const liq = checkFakLiquidity({
-              side: "BUY",
-              notional,
-              targetPrice: price,
-              orderbook,
-            });
-            console.log("[Polymarket][orderbook-snapshot]", {
-              reason: "fak_soft_no_match",
-              marketSlug: market?.slug,
-              tokenId,
-              orderType: "FAK",
-              side: "BUY",
-              notional,
-              tickSize,
-              negRisk,
-              liq,
-            });
-            if (NO_LIQUIDITY_MODE === "rest") {
-              try {
-                resp = await postRestingLimitOrder(typedClient);
-              } catch (restErr: unknown) {
-                const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
-                if (isRestingFallbackUnavailableError(restMsg)) {
-                  noLiquidityDetected = true;
-                  break;
-                }
-                throw restErr;
-              }
-            } else {
-              noLiquidityDetected = true;
-              break;
-            }
-          }
-          lastErr = undefined;
-          break;
-        } catch (err: unknown) {
-          lastErr = err;
-          const msg = err instanceof Error ? err.message : String(err);
-          if (isNoLiquidityError(msg)) {
-            noLiquidityDetected = true;
-            break;
-          }
-          if (!msg.toLowerCase().includes("not enough balance / allowance")) {
-            throw err;
-          }
-          // Try next signature type.
-        }
-      }
-      if (noLiquidityDetected && !resp) {
-        if (NO_LIQUIDITY_MODE === "rest") {
-          try {
-            const limitResp = await postRestingLimitOrder(activeClient);
-            const limitParsed = parseOrderOutcome(limitResp);
-            if (limitParsed.ok) {
-              setResult({
-                orderId: limitParsed.orderId,
-                polyTxHash: limitParsed.txHash,
-                info: "No immediate liquidity for FAK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
-              });
-              setStep("done");
-              return false;
-            }
-          } catch (restErr: unknown) {
-            const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
-            if (!isRestingFallbackUnavailableError(restMsg)) {
-              throw restErr;
-            }
-          }
-        }
-        setResult({
-          error: "No opposite liquidity for FAK/FOK and GTC fallback failed (min size or service unavailable). Vault leg not opened.",
-        });
-        setStep("done");
-        return false;
-      }
-      if (lastErr && !resp) throw lastErr;
-      console.log("[Polymarket] market order response", resp);
+      const limitPrice = roundToTick(Math.max(0.01, Math.min(0.99, midRaw)), tickSize);
+      const openFee = calculateOpenCloseFee(notional);
+      const netUSDC = notional - openFee;
+      const size = Number((netUSDC / limitPrice).toFixed(6));
+      if (size < 0.001) throw new Error("Order size too small after 0.4% open fee");
+
+      setResult(null);
+      const resp = await client.createAndPostOrder(
+        { tokenID: tokenId, price: limitPrice, size, side: Side.BUY },
+        { tickSize, negRisk },
+        OrderType.GTC
+      );
 
       const parsed = parseOrderOutcome(resp);
-      if (!parsed.ok) {
-        if (isNoLiquidityError(parsed.error || "")) {
-          if (NO_LIQUIDITY_MODE === "rest") {
-            try {
-              const limitResp = await postRestingLimitOrder(activeClient);
-              const limitParsed = parseOrderOutcome(limitResp);
-              if (limitParsed.ok) {
-                setResult({
-                  orderId: limitParsed.orderId,
-                  polyTxHash: limitParsed.txHash,
-                  info: "No immediate liquidity for FAK/FOK. A resting GTC limit order was posted on Polymarket; vault leg was not opened yet.",
-                });
-                setStep("done");
-                return false;
-              }
-            } catch (restErr: unknown) {
-              const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
-              if (!isRestingFallbackUnavailableError(restMsg)) {
-                throw restErr;
-              }
-            }
-          }
-          setResult({
-            error: "No opposite liquidity for FAK/FOK and GTC fallback failed (min size or service unavailable). Vault leg not opened.",
-          });
-          setStep("done");
-          return false;
-        }
-        const exchangeAllowance = Number(ethers.utils.formatUnits(exchangeAllowanceRaw, 6));
-        const ctfAllowance = Number(ethers.utils.formatUnits(ctfAllowanceRaw, 6));
-        const negRiskExchangeAllowance = Number(ethers.utils.formatUnits(negRiskExchangeAllowanceRaw, 6));
-        const negRiskAdapterAllowance = Number(ethers.utils.formatUnits(negRiskAdapterAllowanceRaw, 6));
-        throw new Error(
-          `${parsed.error || "Polymarket order failed"} | need=${requiredWithBuffer.toFixed(6)} balance=${clobBalance.toFixed(6)} clobAllowance=${clobAllowance.toFixed(6)} exchangeAllowance=${exchangeAllowance.toFixed(6)} ctfAllowance=${ctfAllowance.toFixed(6)} negRiskExchangeAllowance=${negRiskExchangeAllowance.toFixed(6)} negRiskAdapterAllowance=${negRiskAdapterAllowance.toFixed(6)}`
-        );
-      }
+      const tag = getOutcomeTag(resp);
+      const successLike = ["matched", "filled", "live", "open", "posted", "accepted"];
+      const looksOk = parsed.ok || successLike.some((s) => tag.includes(s));
+      if (!looksOk) throw new Error(parsed.error || toErrorMessage(resp));
 
+      const matchedNow = tag.includes("matched") || tag.includes("filled");
       setResult({
-        orderId: parsed.orderId,
+        orderId: parsed.orderId ?? (tag ? `status:${tag}` : undefined),
         polyTxHash: parsed.txHash,
+        info: matchedNow ? undefined : `GTC order placed at ${(limitPrice * 100).toFixed(1)}¢. It will fill when a seller appears.`,
       });
       return true;
     } catch (err: unknown) {
@@ -911,7 +625,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
     } finally {
       setPolymarketLoading(false);
     }
-  }, [market, tokenId, notional]);
+  }, [market, tokenId, notional, funderAddress, signatureType]);
 
   /* ── Combined execute ── */
   const handleExecute = useCallback(async () => {

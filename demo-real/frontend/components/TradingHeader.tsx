@@ -37,7 +37,7 @@ export default function TradingHeader({ yesProbability, noProbability, bestBid, 
         {/* Single compact row: Title + Prices + Wallet */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
           <div className="flex items-center gap-2">
-            <h1 className="text-white font-bold text-sm leading-tight">Will Gavin Newsom win the 2028 Democratic presidential nomination?</h1>
+            <h1 className="text-white font-bold text-sm leading-tight">Will the Iranian regime fall by June 30?</h1>
             <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/40">
               <Activity className="w-2.5 h-2.5 animate-pulse flex-shrink-0" />
               Live
