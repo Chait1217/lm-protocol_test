@@ -499,7 +499,7 @@ export default function RealPolymarketClose({
       const baseClient = new ClobClient(host, 137, signer);
       const creds = await baseClient.createOrDeriveApiKey();
       const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
-      const cancelResp = await client.cancelOrder(result.polyOrderId);
+      const cancelResp = await client.cancelOrder({ orderID: result.polyOrderId });
       const canceled =
         Array.isArray(cancelResp?.canceled) &&
         cancelResp.canceled.includes(result.polyOrderId);
