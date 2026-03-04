@@ -233,8 +233,13 @@ export default function RealPolymarketClose({
     await switchChainAsync({ chainId: polygon.id });
   }, [chainId, switchChainAsync]);
 
-  /* ── Step 1: Sell outcome tokens on Polymarket (Polygon) ── */
-  const sellOnPolymarket = useCallback(async (): Promise<number> => {
+  function roundToTick(price: number, tickSize: string | undefined): number {
+    const tick = parseFloat(tickSize || "0.01") || 0.01;
+    return Math.round(price / tick) * tick;
+  }
+
+  /* ── Step 1: Post GTC limit sell on Polymarket (Polygon) ── */
+  const sellOnPolymarket = useCallback(async (): Promise<boolean> => {
     if (!tokenId) throw new Error("Missing token ID for Polymarket sell");
     if (typeof window === "undefined" || !window.ethereum) throw new Error("No wallet found");
 
@@ -302,56 +307,65 @@ export default function RealPolymarketClose({
       throw new Error("No open Polymarket position found for this outcome (size=0).");
     }
 
-    // Clamp sell size to what Polymarket reports as available for this wallet to avoid
-    // "not enough balance / allowance" errors when size has changed since open.
+    // Determine a competitive limit price using the CLOB midpoint
+    let limitPriceCandidate = previewExitPrice;
     try {
-      const bal = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
-      const clobBalanceUsdc = Number(bal?.balance ?? "0") / 1e6;
-      if (Number.isFinite(clobBalanceUsdc) && clobBalanceUsdc > 0) {
-        if (sellAmount > clobBalanceUsdc) {
-          sellAmount = clobBalanceUsdc;
+      const base = host.replace(/\/$/, "");
+      const midRes = await fetch(`${base}/midpoint?token_id=${encodeURIComponent(tokenId)}&_=${Date.now()}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (midRes.ok) {
+        const midJson = await midRes.json();
+        const midRaw = typeof midJson?.midpoint === "string" ? parseFloat(midJson.midpoint) : Number(midJson?.midpoint);
+        if (Number.isFinite(midRaw) && midRaw > 0 && midRaw < 1) {
+          limitPriceCandidate = midRaw;
         }
-      } else {
-        throw new Error("No Polymarket wallet balance available for this outcome.");
       }
     } catch {
-      // If balance endpoint fails, continue with API-derived size; CLOB will return a clear error.
+      // fallback to previewExitPrice when midpoint fetch fails
     }
+    const limitPrice = roundToTick(
+      Math.max(0.01, Math.min(0.99, limitPriceCandidate)),
+      ts
+    );
 
-    const postSell = (orderType: typeof OrderType.FOK | typeof OrderType.FAK) =>
-      client.createAndPostMarketOrder(
-        { tokenID: tokenId, amount: sellAmount, side: Side.SELL },
-        { tickSize: ts, negRisk: nr },
-        orderType
-      );
-
-    let resp: any;
-    try {
-      resp = await postSell(OrderType.FOK);
-    } catch (fokErr: unknown) {
-      const msg = fokErr instanceof Error ? fokErr.message : String(fokErr);
-      if (msg.toLowerCase().includes("fully filled") || msg.toLowerCase().includes("couldn't be fully filled") || msg.toLowerCase().includes("no orders found to match")) {
-        resp = await postSell(OrderType.FAK);
-      } else {
-        throw fokErr;
-      }
-    }
+    // Post a resting GTC limit sell order at the chosen price
+    const size = Number(sellAmount.toFixed(6));
+    const resp = await client.createAndPostOrder(
+      { tokenID: tokenId, price: limitPrice, size, side: Side.SELL },
+      { tickSize: ts, negRisk: nr },
+      OrderType.GTC
+    );
 
     const statusTag = (resp?.status ?? resp?.errorMsg ?? resp?.error ?? "").toString().toLowerCase();
     const orderId = resp?.orderID ?? resp?.orderId ?? resp?.id ?? resp?.order_id;
     const polyTxHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash;
-    const fillPrice = resp?.averagePrice ?? resp?.avg_price ?? previewExitPrice;
+    const successLike = ["matched", "filled", "live", "posted", "open", "accepted"];
     const ok = Boolean(
       orderId ||
       polyTxHash ||
-      ["matched", "filled", "live", "posted", "open", "accepted"].some((s) => statusTag.includes(s))
+      successLike.some((s) => statusTag.includes(s))
     );
     if (!ok) {
       throw new Error((resp?.errorMsg ?? resp?.error ?? resp?.message ?? "Sell was not accepted").toString());
     }
 
-    setResult((prev) => ({ ...prev, polyOrderId: orderId ?? `status:${statusTag || "matched"}`, polyTxHash, actualExitPrice: fillPrice }));
-    return typeof fillPrice === "number" ? fillPrice : parseFloat(String(fillPrice)) || previewExitPrice;
+    const filledNow =
+      statusTag.includes("matched") ||
+      statusTag.includes("filled");
+
+    setResult((prev) => ({
+      ...prev,
+      polyOrderId: orderId ?? `status:${statusTag || "open"}`,
+      polyTxHash,
+      actualExitPrice: limitPrice,
+      info: filledNow
+        ? `Sell filled at ${(limitPrice * 100).toFixed(1)}¢. You can now close the vault leg.`
+        : `Sell order posted at ${(limitPrice * 100).toFixed(1)}¢. It will fill when a buyer appears. Check Polymarket or refresh later.`,
+    }));
+
+    return filledNow;
   }, [tokenId, notionalUsdc, tickSize, negRisk, previewExitPrice, address]);
 
   /* ── Step 2: Close position on Polygon vault (oracle-driven) ── */
@@ -414,9 +428,13 @@ export default function RealPolymarketClose({
 
     let sellDone = false;
     try {
-      const realExitPrice = await sellOnPolymarket();
-      setResult((prev) => ({ ...prev, actualExitPrice: realExitPrice }));
-      sellDone = true;
+      const filledNow = await sellOnPolymarket();
+      sellDone = filledNow;
+      if (!filledNow) {
+        // Resting GTC order posted; do not close the vault leg yet.
+        setStep("done");
+        return;
+      }
       setStep("closing-vault");
       await closeOnVault();
     } catch (err: unknown) {
@@ -452,6 +470,52 @@ export default function RealPolymarketClose({
       setStep("done");
     }
   }, [sellOnPolymarket, closeOnVault, vaultOnly]);
+
+  const cancelPolymarketOrder = useCallback(async () => {
+    if (!tokenId || !result?.polyOrderId) return;
+    if (typeof window === "undefined" || !window.ethereum) {
+      setResult((prev) => ({
+        ...(prev ?? {}),
+        error: "No wallet found to cancel order.",
+      }));
+      return;
+    }
+    try {
+      const { ethers } = await import("ethers");
+      const { ClobClient } = await import("@polymarket/clob-client");
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const walletAddress = await signer.getAddress();
+      if (address && walletAddress.toLowerCase() !== address.toLowerCase()) {
+        throw new Error("Connected wallet does not match active wallet.");
+      }
+      const host = POLYMARKET_CLOB_API;
+      const baseClient = new ClobClient(host, 137, signer);
+      const creds = await baseClient.createOrDeriveApiKey();
+      const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
+      const cancelResp = await client.cancelOrder(result.polyOrderId);
+      const canceled =
+        Array.isArray(cancelResp?.canceled) &&
+        cancelResp.canceled.includes(result.polyOrderId);
+      if (canceled) {
+        setResult((prev) => ({
+          ...(prev ?? {}),
+          info: "Sell order cancelled.",
+        }));
+      } else {
+        setResult((prev) => ({
+          ...(prev ?? {}),
+          error: "Cancel request sent but order was not reported as cancelled.",
+        }));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setResult((prev) => ({
+        ...(prev ?? {}),
+        error: `Cancel order failed: ${msg}`,
+      }));
+    }
+  }, [result?.polyOrderId, tokenId, address]);
 
   /* ── Render ── */
   if (!position.isOpen) return null;
@@ -664,6 +728,15 @@ export default function RealPolymarketClose({
           )}
           {result.info && (
             <div className="text-amber-300">{result.info}</div>
+          )}
+          {result.polyOrderId && !result.vaultTxHash && !result.error && (
+            <button
+              type="button"
+              onClick={cancelPolymarketOrder}
+              className="mt-1 inline-flex items-center gap-1 rounded border border-amber-500/40 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/10"
+            >
+              Cancel sell order
+            </button>
           )}
           {result.error && (
             <div className="space-y-1">
