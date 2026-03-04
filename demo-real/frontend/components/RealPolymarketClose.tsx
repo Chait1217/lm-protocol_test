@@ -330,8 +330,14 @@ export default function RealPolymarketClose({
       ts
     );
 
-    // Post a resting GTC limit sell order at the chosen price
-    const size = Number(sellAmount.toFixed(6));
+    // CLOB SELL orders require size in shares (outcome tokens), not USDC.
+    // Use position size from API when present (Polymarket returns shares); else notional/price.
+    const sizeInShares =
+      sizeFromPositionsApi != null && sizeFromPositionsApi > 0
+        ? sizeFromPositionsApi
+        : Number((notionalUsdc / limitPrice).toFixed(6));
+    const size = Math.max(0.001, Number(sizeInShares.toFixed(6)));
+
     const resp = await client.createAndPostOrder(
       { tokenID: tokenId, price: limitPrice, size, side: Side.SELL },
       { tickSize: ts, negRisk: nr },
