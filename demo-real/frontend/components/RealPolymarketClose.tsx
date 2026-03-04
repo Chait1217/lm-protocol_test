@@ -7,10 +7,18 @@ import { polygon } from "wagmi/chains";
 import {
   POLYMARKET_CLOB_API,
   POLYMKT_CTF_ADDRESS,
+  POLYMKT_CTF_EXCHANGE_ADDRESS,
   POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS,
   POLYMKT_NEG_RISK_ADAPTER_ADDRESS,
 } from "@/lib/polymarketConfig";
 import { getContractAddresses, MARGIN_ENGINE_ABI } from "@/lib/contracts";
+import {
+  calculateOpenCloseFee,
+  calculateInterestOwed,
+  calculateBorrowRate,
+  splitFee,
+  type FeeSplit,
+} from "@/lib/lendingPool";
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -261,15 +269,22 @@ export default function RealPolymarketClose({
     const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
 
     // Ensure CTF approvals so sells can transfer outcome tokens.
+    // Standard (non-negRisk) market uses main CTF Exchange; negRisk uses Neg Risk Exchange + Adapter.
     const ctfAbi = [
       "function setApprovalForAll(address operator, bool approved) external",
       "function isApprovedForAll(address account, address operator) view returns (bool)",
     ];
     const ctf = new ethers.Contract(POLYMKT_CTF_ADDRESS, ctfAbi, signer);
-    const operators = [POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS, POLYMKT_NEG_RISK_ADAPTER_ADDRESS];
+    const operators = (negRisk ?? false)
+      ? [POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS, POLYMKT_NEG_RISK_ADAPTER_ADDRESS]
+      : [POLYMKT_CTF_EXCHANGE_ADDRESS];
     for (const op of operators) {
       const approved = await ctf.isApprovedForAll(walletAddress, op);
       if (!approved) {
+        setResult((prev) => ({
+          ...(prev ?? {}),
+          info: "Approving CTF Exchange to sell tokens… Please confirm in your wallet.",
+        }));
         const tx = await ctf.setApprovalForAll(op, true);
         await tx.wait(1);
       }
@@ -281,8 +296,8 @@ export default function RealPolymarketClose({
     const ts = (tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
     const nr = negRisk ?? false;
 
-    // Use actual Polymarket position size for this token so close is accurate.
-    let sellAmount = notionalUsdc;
+    // Use Polymarket position size from API when available; otherwise use vault notional to derive shares.
+    // (Positions API may not list the position even when user holds tokens on-chain.)
     let sizeFromPositionsApi: number | null = null;
     try {
       const res = await fetch(`/api/polymarket-positions?user=${walletAddress}&size=50&t=${Date.now()}`, {
@@ -294,30 +309,30 @@ export default function RealPolymarketClose({
         const exact = rows.find((r) => String(r.asset ?? "") === String(tokenId));
         const amt = Number(exact?.size ?? 0);
         if (Number.isFinite(amt) && amt > 0) {
-          sellAmount = amt;
           sizeFromPositionsApi = amt;
-        } else if (Number.isFinite(amt) && amt === 0) {
-          sizeFromPositionsApi = 0;
         }
       }
     } catch {
-      // keep notional fallback when API is unavailable
+      // keep fallback when API is unavailable
     }
-    if (sizeFromPositionsApi === 0) {
-      throw new Error("No open Polymarket position found for this outcome (size=0).");
+    if (notionalUsdc <= 0) {
+      throw new Error("Position notional is zero; cannot compute sell size.");
     }
 
-    // Determine a competitive limit price using the CLOB midpoint
+    // Determine a competitive limit price using the CLOB midpoint (GTC sell at fair value)
     let limitPriceCandidate = previewExitPrice;
     try {
-      const base = host.replace(/\/$/, "");
-      const midRes = await fetch(`${base}/midpoint?token_id=${encodeURIComponent(tokenId)}&_=${Date.now()}`, {
+      const hostBase = host.replace(/\/$/, "");
+      const midRes = await fetch(`${hostBase}/midpoint?token_id=${encodeURIComponent(tokenId)}&_=${Date.now()}`, {
         cache: "no-store",
         headers: { Accept: "application/json" },
       });
       if (midRes.ok) {
         const midJson = await midRes.json();
-        const midRaw = typeof midJson?.midpoint === "string" ? parseFloat(midJson.midpoint) : Number(midJson?.midpoint);
+        const midRaw =
+          typeof midJson?.midpoint === "string"
+            ? parseFloat(midJson.midpoint)
+            : Number(midJson?.midpoint ?? midJson?.mid ?? NaN);
         if (Number.isFinite(midRaw) && midRaw > 0 && midRaw < 1) {
           limitPriceCandidate = midRaw;
         }
@@ -361,6 +376,36 @@ export default function RealPolymarketClose({
       statusTag.includes("matched") ||
       statusTag.includes("filled");
 
+    // Fee breakdown (LP 50% / Insurance 30% / Treasury 20%): close fee 0.4%, interest on borrowed
+    const grossProceeds = notionalUsdc;
+    const borrowedNum = Number(position.borrowed) / 1e6;
+    const collateralNum = Number(position.collateral) / 1e6;
+    const openedAt = Number(position.openTimestamp);
+    const now = Math.floor(Date.now() / 1000);
+    const durationSeconds = Math.max(0, now - openedAt);
+    const utilization = 0.5; // placeholder; in production use poolState.utilization
+    const borrowRate = calculateBorrowRate(utilization);
+    const interestOwed = calculateInterestOwed(borrowedNum, borrowRate, durationSeconds);
+    const interestSplit: FeeSplit = splitFee(interestOwed);
+    const closeFee = calculateOpenCloseFee(grossProceeds);
+    const closeFeeSplit: FeeSplit = splitFee(closeFee);
+    const totalFees = interestOwed + closeFee;
+    const toLp = interestSplit.lp + closeFeeSplit.lp;
+    const toInsurance = interestSplit.insurance + closeFeeSplit.insurance;
+    const toTreasury = interestSplit.treasury + closeFeeSplit.treasury;
+    const traderReceives = grossProceeds - borrowedNum - totalFees;
+    if (typeof console !== "undefined" && console.log) {
+      console.log("=== Close Fee Breakdown ===");
+      console.log(`Gross proceeds: $${grossProceeds.toFixed(4)}`);
+      console.log(`Interest owed: $${interestOwed.toFixed(4)} (${(borrowRate * 100).toFixed(1)}% APR for ${(durationSeconds / 3600).toFixed(1)}h)`);
+      console.log(`Close fee: $${closeFee.toFixed(4)} (0.4% of notional)`);
+      console.log(`  -> LP (50%): $${toLp.toFixed(4)}`);
+      console.log(`  -> Insurance (30%): $${toInsurance.toFixed(4)}`);
+      console.log(`  -> Treasury (20%): $${toTreasury.toFixed(4)}`);
+      console.log(`Borrowed returned: $${borrowedNum.toFixed(4)}`);
+      console.log(`Trader receives: $${traderReceives.toFixed(4)}`);
+    }
+
     setResult((prev) => ({
       ...prev,
       polyOrderId: orderId ?? `status:${statusTag || "open"}`,
@@ -368,7 +413,7 @@ export default function RealPolymarketClose({
       actualExitPrice: limitPrice,
       info: filledNow
         ? `Sell filled at ${(limitPrice * 100).toFixed(1)}¢. You can now close the vault leg.`
-        : `Sell order posted at ${(limitPrice * 100).toFixed(1)}¢. It will fill when a buyer appears. Check Polymarket or refresh later.`,
+        : `Sell order posted at $${limitPrice.toFixed(3)} (${(limitPrice * 100).toFixed(1)}¢). It will fill when a buyer appears. Check back shortly.`,
     }));
 
     return filledNow;
