@@ -5,10 +5,34 @@ import dns from "node:dns";
 export const dynamic = "force-dynamic";
 
 const CLOB_HOST = "clob.polymarket.com";
+const CLOB_FALLBACK_IPS = ["104.18.34.205", "172.64.153.51"];
 
 const resolver = new dns.Resolver();
 resolver.setServers(["8.8.8.8", "1.1.1.1"]);
 let cachedClobIp: { ip: string; ts: number } | null = null;
+
+async function resolveViaDoh(host: string): Promise<string | null> {
+  const providers = [
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`,
+    `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`,
+  ];
+  for (const url of providers) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/dns-json" },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as { Answer?: Array<{ data?: string; type?: number }> };
+      const answers = Array.isArray(json?.Answer) ? json.Answer : [];
+      const ip = answers.find((a) => a?.type === 1 && typeof a?.data === "string")?.data;
+      if (ip) return ip;
+    } catch {
+      // try next provider
+    }
+  }
+  return null;
+}
 
 async function resolveClob(): Promise<string> {
   if (cachedClobIp && Date.now() - cachedClobIp.ts < 60_000)
@@ -24,13 +48,25 @@ async function resolveClob(): Promise<string> {
       return addrs[0];
     }
   } catch {
-    const addr = await new Promise<string>((resolve, reject) =>
-      dns.lookup(CLOB_HOST, 4, (err, address) =>
-        err || !address ? reject(err) : resolve(address)
-      )
-    );
-    cachedClobIp = { ip: addr, ts: Date.now() };
-    return addr;
+    try {
+      const addr = await new Promise<string>((resolve, reject) =>
+        dns.lookup(CLOB_HOST, 4, (err, address) =>
+          err || !address ? reject(err) : resolve(address)
+        )
+      );
+      cachedClobIp = { ip: addr, ts: Date.now() };
+      return addr;
+    } catch {
+      const doh = await resolveViaDoh(CLOB_HOST);
+      if (doh) {
+        cachedClobIp = { ip: doh, ts: Date.now() };
+        return doh;
+      }
+      if (CLOB_FALLBACK_IPS.length > 0) {
+        cachedClobIp = { ip: CLOB_FALLBACK_IPS[0], ts: Date.now() };
+        return CLOB_FALLBACK_IPS[0];
+      }
+    }
   }
   throw new Error(`DNS resolution failed for ${CLOB_HOST}`);
 }

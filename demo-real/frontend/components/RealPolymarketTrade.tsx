@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { AlertTriangle, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useConnect, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { polygon } from "wagmi/chains";
+import { injected } from "wagmi/connectors";
 import {
   POLYGON_CHAIN_ID,
   POLYMKT_USDCE_ADDRESS,
@@ -48,9 +49,9 @@ type FlowStep = "idle" | "polymarket" | "borrow" | "borrow-confirming" | "done";
 type NoLiquidityMode = "abort" | "rest";
 type ExecutionMode = "market_first" | "rest_first";
 const NO_LIQUIDITY_MODE: NoLiquidityMode =
-  ((process.env.NEXT_PUBLIC_POLYMARKET_NO_LIQUIDITY_MODE || "abort").toLowerCase() === "abort"
-    ? "abort"
-    : "rest");
+  ((process.env.NEXT_PUBLIC_POLYMARKET_NO_LIQUIDITY_MODE || "rest").toLowerCase() === "rest"
+    ? "rest"
+    : "abort");
 const POLYMARKET_EXECUTION_MODE: ExecutionMode =
   ((process.env.NEXT_PUBLIC_POLYMARKET_EXECUTION_MODE || "market_first").toLowerCase() === "market_first"
     ? "market_first"
@@ -214,6 +215,12 @@ function toLevels(levels: Array<{ price: string; size: string }> | undefined): A
     .filter((l) => Number.isFinite(l.price) && Number.isFinite(l.size) && l.price > 0 && l.size > 0);
 }
 
+/** Round price to market tick size (e.g. 0.01 → 0.52, 0.001 → 0.521). */
+function roundToTick(price: number, tickSize: string): number {
+  const tick = parseFloat(tickSize) || 0.01;
+  return Math.round(price / tick) * tick;
+}
+
 function checkFakLiquidity(params: {
   side: "BUY" | "SELL";
   notional: number;
@@ -260,6 +267,7 @@ function checkFakLiquidity(params: {
 
 export default function RealPolymarketTrade({ market, selectedOutcome, collateral, leverage, entryPrice, onSuccess }: Props) {
   const { address } = useAccount();
+  const { connectAsync, isPending: isConnectPending } = useConnect();
 
   /* ── Derived values ── */
   const notional = collateral * leverage;
@@ -584,7 +592,12 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       };
 
       const postRestingLimitOrder = async (typedClient: any) => {
-        const limitPrice = Math.max(0.01, Math.min(0.99, Number(price.toFixed(4))));
+        // For BUY: add slippage so limit is slightly above best ask to improve fill chance; round to tickSize
+        const rawLimit = price * (1 + FAK_SLIPPAGE_BPS / 10_000);
+        const limitPrice = roundToTick(
+          Math.max(0.01, Math.min(0.99, rawLimit)),
+          tickSize
+        );
         const size = Number((notional / limitPrice).toFixed(6));
         if (size < MIN_RESTING_ORDER_SIZE) {
           const minNotional = MIN_RESTING_ORDER_SIZE * limitPrice;
@@ -704,25 +717,8 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
                 liq,
               };
               console.log("[Polymarket][orderbook-snapshot]", debugPayload);
-              if (!liq.canSend) {
-                if (NO_LIQUIDITY_MODE === "rest") {
-                  try {
-                    resp = await postRestingLimitOrder(typedClient);
-                  } catch (restErr: unknown) {
-                    const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
-                    if (isRestingFallbackUnavailableError(restMsg)) {
-                      noLiquidityDetected = true;
-                      break;
-                    }
-                    throw restErr;
-                  }
-                } else {
-                  noLiquidityDetected = true;
-                  break;
-                }
-              } else {
-                resp = await submitOrder(typedClient, OrderType.FAK);
-              }
+              // Always attempt FAK after FOK no-fill. Local depth checks can be stale/pessimistic.
+              resp = await submitOrder(typedClient, OrderType.FAK);
             } else if (isNoLiquidityError(msg)) {
               const orderbook = await typedClient.getOrderBook(tokenId);
               const liq = checkFakLiquidity({
@@ -782,25 +778,8 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
               negRisk,
               liq,
             });
-            if (!liq.canSend) {
-              if (NO_LIQUIDITY_MODE === "rest") {
-                try {
-                  resp = await postRestingLimitOrder(typedClient);
-                } catch (restErr: unknown) {
-                  const restMsg = restErr instanceof Error ? restErr.message : String(restErr);
-                  if (isRestingFallbackUnavailableError(restMsg)) {
-                    noLiquidityDetected = true;
-                    break;
-                  }
-                  throw restErr;
-                }
-              } else {
-                noLiquidityDetected = true;
-                break;
-              }
-            } else {
-              resp = await submitOrder(typedClient, OrderType.FAK);
-            }
+            // Always attempt FAK after FOK no-fill. Local depth checks can be stale/pessimistic.
+            resp = await submitOrder(typedClient, OrderType.FAK);
           } else if (!firstParse.ok && isNoLiquidityError(firstParse.error || "")) {
             const orderbook = await typedClient.getOrderBook(tokenId);
             const liq = checkFakLiquidity({
@@ -873,7 +852,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
           }
         }
         setResult({
-          error: "No opposite liquidity at a fillable price/size for FAK. Vault leg not opened.",
+          error: "No opposite liquidity for FAK/FOK and GTC fallback failed (min size or service unavailable). Vault leg not opened.",
         });
         setStep("done");
         return false;
@@ -905,7 +884,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
             }
           }
           setResult({
-            error: "No opposite liquidity at a fillable price/size for FAK/FOK. Vault leg not opened.",
+            error: "No opposite liquidity for FAK/FOK and GTC fallback failed (min size or service unavailable). Vault leg not opened.",
           });
           setStep("done");
           return false;
@@ -938,8 +917,6 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
   const handleExecute = useCallback(async () => {
     setResult(null);
     setVaultTxHash(undefined);
-    const oracleOk = await ensureVaultOracleFresh();
-    if (!oracleOk) return;
     const polyOk = await placePolymarketOrder();
     if (!polyOk) return;
 
@@ -949,8 +926,26 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       onSuccess?.();
       return;
     }
+    const oracleOk = await ensureVaultOracleFresh();
+    if (!oracleOk) {
+      setResult((prev) => ({
+        ...(prev ?? {}),
+        info: "Polymarket leg filled, but vault open is paused until oracle refresh succeeds.",
+      }));
+      return;
+    }
     startBorrow();
   }, [ensureVaultOracleFresh, placePolymarketOrder, startBorrow, onSuccess]);
+
+  const handleConnectWallet = useCallback(async () => {
+    try {
+      await connectAsync({ connector: injected({ shimDisconnect: true }) });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setResult({ error: `Wallet connection failed: ${msg}` });
+      setStep("done");
+    }
+  }, [connectAsync]);
 
   /* ── Render ── */
   if (!market) return null;
@@ -968,7 +963,17 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       </p>
 
       {!address ? (
-        <p className="text-gray-400 text-[11px]">Connect wallet to trade.</p>
+        <div className="space-y-2">
+          <p className="text-gray-400 text-[11px]">Connect wallet to trade.</p>
+          <button
+            type="button"
+            onClick={handleConnectWallet}
+            disabled={isConnectPending}
+            className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isConnectPending ? "Connecting wallet..." : "Connect Wallet"}
+          </button>
+        </div>
       ) : (
         <>
           {/* ── Trade Summary ── */}

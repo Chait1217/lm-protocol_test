@@ -42,9 +42,8 @@ export const POLYMKT_NEG_RISK_ADAPTER_ADDRESS = (
  * The proxy at /api/clob-proxy forwards requests to https://clob.polymarket.com.
  */
 export const POLYMARKET_CLOB_API =
-  typeof window !== "undefined"
-    ? `${window.location.origin}/api/clob-proxy`
-    : "https://clob.polymarket.com";
+  (process.env.NEXT_PUBLIC_POLYMARKET_CLOB_API || "").trim() ||
+  "https://clob.polymarket.com";
 
 /**
  * Newsom market: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?"

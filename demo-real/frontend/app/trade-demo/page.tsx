@@ -17,10 +17,34 @@ import {
 } from "wagmi";
 import { polygon } from "wagmi/chains";
 
-const PolymarketLiveChart = dynamic(() => import("@/components/PolymarketLiveChart"), { ssr: false });
-const PolymarketLeverageBox = dynamic(() => import("@/components/PolymarketLeverageBox"), { ssr: false });
-const PositionsPanel = dynamic(() => import("@/components/PositionsPanel"), { ssr: false });
-const PolymarketPositionVerify = dynamic(() => import("@/components/PolymarketPositionVerify"), { ssr: false });
+const chartLoading = () => (
+  <div className="rounded-xl border border-neon/20 bg-gradient-to-br from-gray-900 to-black p-8 flex items-center justify-center min-h-[200px]">
+    <span className="text-gray-500 text-sm">Loading chart…</span>
+  </div>
+);
+const PolymarketLiveChart = dynamic(() => import("@/components/PolymarketLiveChart"), {
+  ssr: false,
+  loading: chartLoading,
+});
+const PolymarketLeverageBox = dynamic(() => import("@/components/PolymarketLeverageBox"), {
+  ssr: false,
+  loading: () => (
+    <div className="glass-card p-4 rounded-xl border border-emerald-500/20 min-h-[300px] flex items-center justify-center">
+      <span className="text-gray-500 text-sm">Loading…</span>
+    </div>
+  ),
+});
+const PositionsPanel = dynamic(() => import("@/components/PositionsPanel"), {
+  ssr: false,
+  loading: () => (
+    <div className="glass-card p-4 rounded-xl border border-emerald-500/20 min-h-[200px] flex items-center justify-center">
+      <span className="text-gray-500 text-sm">Loading…</span>
+    </div>
+  ),
+});
+const PolymarketPositionVerify = dynamic(() => import("@/components/PolymarketPositionVerify"), {
+  ssr: false,
+});
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const addresses = getContractAddresses();
@@ -37,13 +61,25 @@ function useHeaderMarket(interval = 2500) {
     spread: number | null;
   }>({ yesProbability: null, noProbability: null, bestBid: null, bestAsk: null, oneDayChange: 0, spread: null });
 
+  const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
   const fetch_ = useCallback(async () => {
     try {
       const res = await fetch("/api/polymarket-live", { cache: "no-store" });
-      if (!res.ok) return;
-      const j = await res.json();
-      if (!j.success || !j.market) return;
-      const m = j.market;
+      let m: Record<string, unknown> | null = null;
+      if (res.ok) {
+        const j = await res.json();
+        m = j?.success && j?.market ? j.market : null;
+      }
+      if (!m) {
+        const fallback = await fetch(`/api/gamma/markets/slug/${encodeURIComponent(SLUG)}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (!fallback.ok) return;
+        const data = await fallback.json();
+        m = Array.isArray(data) ? data[0] : data;
+        if (!m || typeof m !== "object") return;
+      }
       let outcomePrices: number[] = [];
       try { outcomePrices = typeof m.outcomePrices === "string" ? JSON.parse(m.outcomePrices) : m.outcomePrices ?? []; } catch { outcomePrices = []; }
       const yp = outcomePrices[0] != null ? parseFloat(String(outcomePrices[0])) : null;
@@ -54,7 +90,7 @@ function useHeaderMarket(interval = 2500) {
         noProbability: yp != null ? Math.round((1 - yp) * 1000) / 10 : null,
         bestBid: bb,
         bestAsk: ba,
-        oneDayChange: parseFloat(m.oneDayPriceChange) || 0,
+        oneDayChange: parseFloat(String(m.oneDayPriceChange ?? "")) || 0,
         spread: bb != null && ba != null ? Math.abs(ba - bb) : null,
       });
     } catch { /* ignore */ }

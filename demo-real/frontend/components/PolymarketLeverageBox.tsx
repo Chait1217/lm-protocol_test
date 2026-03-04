@@ -73,6 +73,11 @@ function AnimatedValue({
 // ─── Types ───────────────────────────────────────────────────────────
 
 const POLYMARKET_BASE = "https://polymarket.com";
+const FALLBACK_CLOB_TOKEN_IDS = [
+  "54533043819946592547517511176940999955633860128497669742211153063842200957669",
+  "87854174148074652060467921081181402357467303721471806610111179101805869578687",
+];
+const POLYMARKET_SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
 
 interface MarketData {
   title: string;
@@ -163,6 +168,7 @@ export default function PolymarketLeverageBox({
       } catch {
         clobTokenIds = [];
       }
+      if (clobTokenIds.length < 2) clobTokenIds = FALLBACK_CLOB_TOKEN_IDS;
       const tickSize = typeof m?.tickSize === "string" ? m.tickSize : undefined;
       const negRisk = typeof m?.negRisk === "boolean" ? m.negRisk : undefined;
 
@@ -199,9 +205,9 @@ export default function PolymarketLeverageBox({
         oneDayChange: 0,
         bestBid: null,
         bestAsk: null,
-        clobTokenIds: [],
+        clobTokenIds: FALLBACK_CLOB_TOKEN_IDS,
         tickSize: undefined,
-        negRisk: undefined,
+        negRisk: true,
       };
     }
   };
@@ -217,12 +223,44 @@ export default function PolymarketLeverageBox({
         throw new Error(`Server error: ${response.status}`);
       }
       const result = await response.json();
-      if (result.success && result.market) { setDataSource("live"); return parseMarketData(result.market); }
-      throw new Error(result.error || "Failed to fetch");
+      if (result.success && result.market) {
+        setDataSource("live");
+        return parseMarketData(result.market);
+      }
+      const fallback = await fetch(`/api/gamma/markets/slug/${encodeURIComponent(POLYMARKET_SLUG)}?_=${Date.now()}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (fallback.ok) {
+        const data = await fallback.json();
+        const first = Array.isArray(data) ? data[0] : data;
+        if (first && typeof first === "object") {
+          setDataSource("live");
+          return parseMarketData(first);
+        }
+      }
+      throw new Error(result?.error || "Failed to fetch");
     } catch (err: any) {
       if (retryCount < 3) { await new Promise((r) => setTimeout(r, 1000)); return fetchMarket(retryCount + 1); }
       setDataSource("fallback");
-      return null;
+      return {
+        title: "Will Gavin Newsom win the 2028 Democratic presidential nomination ?",
+        slug: "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568",
+        yesProbability: 50,
+        noProbability: 50,
+        yesPrice: "50.0",
+        noPrice: "50.0",
+        volume: 0,
+        volume24h: 0,
+        liquidity: 0,
+        traders: null,
+        oneDayChange: 0,
+        bestBid: 0.49,
+        bestAsk: 0.51,
+        clobTokenIds: FALLBACK_CLOB_TOKEN_IDS,
+        tickSize: "0.01",
+        negRisk: true,
+      };
     }
   }, []);
 

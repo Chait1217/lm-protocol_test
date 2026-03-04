@@ -106,15 +106,29 @@ export default function PositionsPanel({
   // ─── Market data (for live tracker + close) ────────────────────
   const [market, setMarket] = useState<MarketData | null>(null);
 
+  const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
   const fetchMarket = useCallback(async () => {
     try {
+      let m: Record<string, unknown> | null = null;
       const res = await fetch(`/api/polymarket-live?t=${Date.now()}`, {
         cache: "no-store",
         headers: { Accept: "application/json", "Cache-Control": "no-cache" },
       });
-      if (!res.ok) return;
-      const j = await res.json();
-      if (j.success && j.market) setMarket(parseMarketData(j.market));
+      if (res.ok) {
+        const j = await res.json();
+        if (j.success && j.market) m = j.market;
+      }
+      if (!m) {
+        const fallback = await fetch(`/api/gamma/markets/slug/${encodeURIComponent(SLUG)}?t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (fallback.ok) {
+          const data = await fallback.json();
+          m = Array.isArray(data) ? data[0] : data;
+        }
+      }
+      if (m && typeof m === "object") setMarket(parseMarketData(m));
     } catch { /* ignore */ }
   }, []);
 

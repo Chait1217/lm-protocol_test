@@ -269,7 +269,9 @@ export default function RealPolymarketClose({
         await tx.wait(1);
       }
     }
+    // Sync CLOB allowances for both collateral and conditional (CTF) balances
     await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+    await client.updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId });
 
     const ts = (tickSize as "0.1" | "0.01" | "0.001" | "0.0001") ?? "0.01";
     const nr = negRisk ?? false;

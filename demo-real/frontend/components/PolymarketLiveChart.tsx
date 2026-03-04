@@ -101,7 +101,10 @@ const POLYMARKET_BASE = "https://polymarket.com";
 
 /** Use our proxy so CLOB works in browser (avoids CORS / DNS). */
 function getClobApiBase(): string {
-  if (typeof window !== "undefined") return `${window.location.origin}/api/clob-proxy`;
+  if (typeof window !== "undefined") {
+    const override = (process.env.NEXT_PUBLIC_POLYMARKET_CLOB_API || "").trim();
+    return override || "https://clob.polymarket.com";
+  }
   return "https://clob.polymarket.com";
 }
 
@@ -182,15 +185,25 @@ export default function PolymarketLiveChart({
 
   const fetchPriceHistory = useCallback(async (tokenId: string) => {
     if (!tokenId) return null;
+    const bases =
+      typeof window !== "undefined"
+        ? [getClobApiBase(), `${window.location.origin}/api/clob-proxy`]
+        : [getClobApiBase()];
     try {
-      const base = getClobApiBase();
-      const response = await fetch(
-        `${base}/prices-history?market=${encodeURIComponent(tokenId)}&tokenId=${encodeURIComponent(tokenId)}&interval=1d&fidelity=60`
-      );
-      if (!response.ok) return null;
-      const data = await response.json();
-      const history = data.history || data || [];
-      if (!Array.isArray(history) || history.length === 0) return null;
+      let history: any[] | null = null;
+      for (const base of bases) {
+        const response = await fetch(
+          `${base}/prices-history?market=${encodeURIComponent(tokenId)}&tokenId=${encodeURIComponent(tokenId)}&interval=1d&fidelity=60`
+        );
+        if (!response.ok) continue;
+        const data = await response.json();
+        const parsed = data.history || data || [];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          history = parsed;
+          break;
+        }
+      }
+      if (!history || history.length === 0) return null;
 
       const sorted = [...history].sort((a: any, b: any) => (a.t || 0) - (b.t || 0));
       return sorted.map((point: any) => {
@@ -209,26 +222,43 @@ export default function PolymarketLiveChart({
     }
   }, []);
 
+  const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
   const fetchMarket = useCallback(async (retryCount = 0): Promise<MarketData | null> => {
     try {
       const response = await fetch(`/api/polymarket-live?t=${Date.now()}`, {
         cache: "no-store",
         headers: { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" },
       });
-      if (!response.ok) {
-        if (retryCount < 3) {
+      let marketObj: Record<string, unknown> | null = null;
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.market) {
+          marketObj = result.market;
+        }
+      }
+      if (!marketObj) {
+        const fallback = await fetch(`/api/gamma/markets/slug/${encodeURIComponent(SLUG)}?t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (fallback.ok) {
+          const data = await fallback.json();
+          marketObj = Array.isArray(data) ? data[0] : data;
+          if (marketObj && typeof marketObj === "object") {
+            setDataSource("live");
+            setError(null);
+            return parseMarketData(marketObj);
+          }
+        }
+        if (!response.ok && retryCount < 3) {
           await new Promise((r) => setTimeout(r, 1000));
           return fetchMarket(retryCount + 1);
         }
         throw new Error(`Server error: ${response.status}`);
       }
-      const result = await response.json();
-      if (result.success && result.market) {
-        setDataSource("live");
-        setError(null);
-        return parseMarketData(result.market);
-      }
-      throw new Error(result.error || "Failed to fetch");
+      setDataSource("live");
+      setError(null);
+      return parseMarketData(marketObj);
     } catch (err: any) {
       if (retryCount < 3) {
         await new Promise((r) => setTimeout(r, 1000));

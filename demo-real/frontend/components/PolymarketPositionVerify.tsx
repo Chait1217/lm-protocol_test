@@ -119,7 +119,9 @@ export default function PolymarketPositionVerify() {
             await tx.wait(1);
           }
         }
+        // Refresh CLOB view of both collateral and conditional balances
         await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+        await client.updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId });
         await new Promise((r) => setTimeout(r, 1500));
 
         const tickSize: "0.1" | "0.01" | "0.001" | "0.0001" = "0.01";
@@ -230,7 +232,9 @@ export default function PolymarketPositionVerify() {
             await tx.wait(1);
           }
         }
+        // Refresh CLOB view of both collateral and conditional balances
         await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+        await client.updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId });
         await new Promise((r) => setTimeout(r, 1500));
 
         const tickSize: "0.1" | "0.01" | "0.001" | "0.0001" = "0.01";
