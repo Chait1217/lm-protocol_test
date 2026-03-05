@@ -1,96 +1,70 @@
 import { NextResponse } from "next/server";
 
-const WALLET =
-  process.env.NEXT_PUBLIC_TRADER_WALLET ||
-  "0x6CcBdc898016F2E49ada47496696d635b8D4fB31";
-const CLOB = "https://clob.polymarket.com";
+const WALLET = "0x6CcBdc898016F2E49ada47496696d635b8D4fB31";
+const DATA_API = "https://data-api.polymarket.com";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-async function safeFetch(url: string, timeoutMs = 5000): Promise<any> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+export async function GET() {
   try {
+    const url = `${DATA_API}/positions?user=${WALLET}&sizeThreshold=0&limit=50`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+
     const res = await fetch(url, {
       signal: ctrl.signal,
       cache: "no-store",
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  } finally {
     clearTimeout(timer);
-  }
-}
 
-export async function GET() {
-  try {
-    // Verified working endpoint: returns array of position objects
-    const url = `https://data-api.polymarket.com/positions?user=${WALLET}&sizeThreshold=0&limit=100`;
-    const rawPositions = await safeFetch(url);
-
-    if (!Array.isArray(rawPositions)) {
-      return NextResponse.json({
-        success: true,
-        positions: [],
-        wallet: WALLET,
-      });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return NextResponse.json(
+        { success: false, error: `Data API returned ${res.status}: ${text.slice(0, 200)}` },
+        { status: 502 }
+      );
     }
 
-    // Filter out dust positions and enrich with live CLOB prices
-    const positions = [];
-    for (const p of rawPositions) {
-      const size = parseFloat(p.size || "0");
-      if (size < 0.001) continue;
+    const raw = await res.json();
+    if (!Array.isArray(raw)) {
+      return NextResponse.json(
+        { success: false, error: "Unexpected response format", positions: [] },
+        { status: 502 }
+      );
+    }
 
-      // Get live price from CLOB for this specific asset
-      let livePrice = parseFloat(p.curPrice || "0");
-      try {
-        const clobPrice = await safeFetch(
-          `${CLOB}/price?token_id=${p.asset}&side=buy`,
-          2000
-        );
-        if (clobPrice?.price) {
-          livePrice = parseFloat(clobPrice.price);
-        }
-      } catch {
-        // Use curPrice from data-api as fallback
-      }
-
-      const avgPrice = parseFloat(p.avgPrice || "0");
-      const currentValue = size * livePrice;
-      const cost = size * avgPrice;
-      const pnl = currentValue - cost;
-      const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
-
-      positions.push({
-        market: p.title || p.market || "Unknown",
+    // Filter positions with size > 0.001
+    const positions = raw
+      .filter((p: any) => parseFloat(p.size) > 0.001)
+      .map((p: any) => ({
+        market: p.title || "Unknown Market",
         slug: p.slug || "",
-        outcome: p.outcome || "Unknown",
-        size: p.size,
-        avgPrice: avgPrice.toString(),
-        currentPrice: livePrice.toString(),
-        currentValue: currentValue.toFixed(6),
-        cost: cost.toFixed(6),
-        pnl: pnl.toFixed(6),
-        pnlPct: pnlPct.toFixed(2),
+        outcome: p.outcome || "Yes",
+        size: String(p.size),
+        avgPrice: String(p.avgPrice),
+        currentPrice: String(p.curPrice),
+        currentValue: String(p.currentValue),
+        cost: String(p.initialValue),
+        pnl: String(p.cashPnl),
+        pnlPct: String(p.percentPnl),
         asset: p.asset,
         conditionId: p.conditionId || "",
-        negRisk: p.negRisk === true || p.negRisk === "true",
-      });
-    }
+        negRisk: Boolean(p.negativeRisk),
+        icon: p.icon || "",
+        endDate: p.endDate || "",
+        oppositeAsset: p.oppositeAsset || "",
+      }));
 
     return NextResponse.json({
       success: true,
+      count: positions.length,
       positions,
-      wallet: WALLET,
     });
-  } catch (err) {
+  } catch (err: any) {
     return NextResponse.json(
-      { success: false, error: String(err), positions: [] },
+      { success: false, error: err?.message || String(err), positions: [] },
       { status: 500 }
     );
   }

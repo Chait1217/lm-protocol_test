@@ -16,6 +16,9 @@ interface Position {
   asset: string;
   conditionId: string;
   negRisk: boolean;
+  icon: string;
+  endDate: string;
+  oppositeAsset: string;
 }
 
 export default function PolymarketPositionVerify() {
@@ -130,9 +133,14 @@ export default function PolymarketPositionVerify() {
                   {/* Market name */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-white truncate">
+                      <a
+                        href={`https://polymarket.com/event/${pos.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-white truncate hover:text-[#00ff88] transition-colors block"
+                      >
                         {pos.market}
-                      </div>
+                      </a>
                       <div className="flex items-center gap-2 mt-1">
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded ${
