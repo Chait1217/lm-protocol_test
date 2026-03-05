@@ -1,78 +1,99 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * GET /api/polymarket-positions?address=0x...
+ *
+ * Fetches REAL positions from the Polymarket Data API.
+ * Uses https://data-api.polymarket.com/positions?user={address}
+ *
+ * This returns all open positions for the wallet including:
+ * - size, avgPrice, currentValue, cashPnl, percentPnl
+ * - title, outcome, curPrice, slug
+ */
+
+const DATA_API = "https://data-api.polymarket.com";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const noCacheHeaders = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-  Pragma: "no-cache",
-  Expires: "0",
-};
-
-function isAddress(value: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(value);
-}
-
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const user = (request.nextUrl.searchParams.get("user") || "").trim();
-    const sizeRaw = request.nextUrl.searchParams.get("size") || "10";
-    const size = Math.min(100, Math.max(1, Number(sizeRaw) || 10));
+    const { searchParams } = new URL(req.url);
+    const address = searchParams.get("address");
 
-    if (!isAddress(user)) {
+    if (!address) {
       return NextResponse.json(
-        { success: false, error: "Missing or invalid 'user' wallet address" },
-        { status: 400, headers: noCacheHeaders }
+        { success: false, error: "Missing address parameter" },
+        { status: 400 }
       );
     }
 
-    const url = `https://data-api.polymarket.com/positions?user=${encodeURIComponent(user)}&size=${size}`;
-    const upstream = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "LMProtocol/1.0",
-      },
+    // Fetch positions from Polymarket Data API
+    // sizeThreshold=0 to include all positions (even small ones)
+    const url = `${DATA_API}/positions?user=${address}&sizeThreshold=0&limit=100&sortBy=CURRENT&sortDirection=DESC`;
+
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 0 },
     });
 
-    if (!upstream.ok) {
-      const text = await upstream.text();
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
       return NextResponse.json(
-        {
-          success: true,
-          user: user.toLowerCase(),
-          count: 0,
-          positions: [],
-          warning: `Polymarket API error (${upstream.status}): ${text.slice(0, 180)}`,
-        },
-        { headers: noCacheHeaders }
+        { success: false, error: `Data API returned ${res.status}: ${errText}` },
+        { status: 502 }
       );
     }
 
-    const data = await upstream.json();
-    const positions = Array.isArray(data) ? data : [];
+    const rawPositions = await res.json();
 
-    return NextResponse.json(
-      {
+    if (!Array.isArray(rawPositions)) {
+      return NextResponse.json({
         success: true,
-        user: user.toLowerCase(),
-        count: positions.length,
-        positions,
-      },
-      { headers: noCacheHeaders }
-    );
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      {
-        success: true,
-        user: "",
-        count: 0,
         positions: [],
-        warning: `Positions fallback: ${message}`,
-      },
-      { headers: noCacheHeaders }
+        count: 0,
+      });
+    }
+
+    // Map to a clean format for the frontend
+    const positions = rawPositions
+      .filter((p: any) => p.size > 0.001) // filter out dust
+      .map((p: any) => ({
+        market: p.title || "Unknown Market",
+        slug: p.slug || "",
+        eventSlug: p.eventSlug || "",
+        outcome: p.outcome || "Unknown",
+        outcomeIndex: p.outcomeIndex ?? 0,
+        size: p.size || 0,
+        avgPrice: p.avgPrice || 0,
+        currentPrice: p.curPrice || 0,
+        initialValue: p.initialValue || 0,
+        currentValue: p.currentValue || 0,
+        pnl: p.cashPnl || 0,
+        pnlPct: p.percentPnl || 0,
+        realizedPnl: p.realizedPnl || 0,
+        totalBought: p.totalBought || 0,
+        asset: p.asset || "",
+        oppositeAsset: p.oppositeAsset || "",
+        conditionId: p.conditionId || "",
+        redeemable: p.redeemable || false,
+        mergeable: p.mergeable || false,
+        negativeRisk: p.negativeRisk || false,
+        endDate: p.endDate || "",
+        icon: p.icon || "",
+      }));
+
+    return NextResponse.json({
+      success: true,
+      positions,
+      count: positions.length,
+      wallet: address,
+    });
+  } catch (err) {
+    console.error("polymarket-positions error:", err);
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
     );
   }
 }
-

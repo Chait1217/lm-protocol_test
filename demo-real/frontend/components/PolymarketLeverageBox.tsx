@@ -1,504 +1,599 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  RefreshCw,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Zap,
-  AlertTriangle,
-  ExternalLink,
-} from "lucide-react";
-import RealPolymarketTrade from "@/components/RealPolymarketTrade";
-import {
-  getContractAddresses,
-  MOCK_USDC_ABI,
-  MARGIN_ENGINE_ABI,
-} from "@/lib/contracts";
-import { formatUSDC, bpsToPercent } from "@/lib/utils";
-import { useVaultMetrics } from "@/hooks/useVaultMetrics";
-import {
-  useAccount,
-  useReadContract,
-} from "wagmi";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useAccount, useBalance, useReadContract } from "wagmi";
 import { polygon } from "wagmi/chains";
+import { formatUnits } from "viem";
+import { getContractAddresses, VAULT_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 
+const USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
 const addresses = getContractAddresses();
 
-// ─── Animated Value ──────────────────────────────────────────────────
-function AnimatedValue({
-  value,
-  format,
-  className,
-  prefix = "",
-  suffix = "",
-}: {
-  value: any;
-  format?: (v: any) => string;
-  className?: string;
-  prefix?: string;
-  suffix?: string;
-}) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [isChanging, setIsChanging] = useState(false);
-  const prevValue = useRef(value);
+/* ─── Fee Constants ─── */
+const OPEN_FEE_RATE = 0.004; // 0.4% open fee on notional
 
-  useEffect(() => {
-    if (value !== prevValue.current && value !== null) {
-      setIsChanging(true);
-      setDisplayValue(value);
-      prevValue.current = value;
-      const timer = setTimeout(() => setIsChanging(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [value]);
-
-  if (value === null || value === undefined)
-    return <span className={className}>--</span>;
-
-  return (
-    <motion.span
-      className={`${className} transition-colors duration-300 ${isChanging ? "text-emerald-400" : ""}`}
-      animate={isChanging ? { scale: [1, 1.05, 1] } : {}}
-      transition={{ duration: 0.3 }}
-    >
-      {prefix}
-      {format ? format(displayValue) : displayValue}
-      {suffix}
-    </motion.span>
-  );
-}
-
-// ─── Types ───────────────────────────────────────────────────────────
-
-const POLYMARKET_BASE = "https://polymarket.com";
-const FALLBACK_CLOB_TOKEN_IDS = [
-  "38397507750621893057346880033441136112987238933685677349709401910643842844855",
-  "95949957895141858444199258452803633110472396604599808168788254125381075552218",
-];
-const POLYMARKET_SLUG = "will-the-iranian-regime-fall-by-june-30";
-
-interface MarketData {
-  title: string;
-  slug: string | null;
-  yesProbability: number | null;
-  noProbability: number | null;
-  yesPrice: string | null;
-  noPrice: string | null;
-  volume: number;
-  volume24h: number;
-  liquidity: number;
-  traders: number | null;
-  oneDayChange: number;
-  bestBid: number | null;
-  bestAsk: number | null;
-  /** CLOB token IDs: [yesTokenId, noTokenId] for real Polymarket orders */
-  clobTokenIds: string[];
-  tickSize?: string;
-  negRisk?: boolean;
-}
-
-// ─── Main Component ──────────────────────────────────────────────────
-
-export default function PolymarketLeverageBox({
-  refreshInterval = 4000,
-  onVaultRefetch,
-}: {
-  refreshInterval?: number;
+interface PolymarketLeverageBoxProps {
   onVaultRefetch?: () => void;
-}) {
+}
+
+type TradeStatus = "idle" | "submitting" | "success" | "error";
+type CloseStatus = "idle" | "closing" | "success" | "error";
+
+export default function PolymarketLeverageBox({ onVaultRefetch }: PolymarketLeverageBoxProps) {
   const { address, isConnected } = useAccount();
-  const { poolState } = useVaultMetrics(5000);
 
-  // ─── Market state ────────────────────────────────────────────────
-  const [market, setMarket] = useState<MarketData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [dataSource, setDataSource] = useState<string | null>(null);
-  const [priceChange, setPriceChange] = useState(0);
-  const prevProbability = useRef<number | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  // Form State
+  const [side, setSide] = useState<"YES" | "NO">("YES");
+  const [leverage, setLeverage] = useState(2);
+  const [collateral, setCollateral] = useState("");
+  const [tradeStatus, setTradeStatus] = useState<TradeStatus>("idle");
+  const [closeStatus, setCloseStatus] = useState<CloseStatus>("idle");
+  const [statusMsg, setStatusMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [tradeResult, setTradeResult] = useState<any>(null);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 
-  // ─── Trade state ─────────────────────────────────────────────────
-  type TradeSide = "Buy YES" | "Buy NO";
-  const [selectedSide, setSelectedSide] = useState<TradeSide>("Buy YES");
-  const [leverage, setLeverage] = useState<number>(3);
-  const [collateralInput, setCollateralInput] = useState("50");
+  // ─── LIVE PRICES (updated every 1s) ───
+  const [yesPrice, setYesPrice] = useState<number | null>(null);
+  const [noPrice, setNoPrice] = useState<number | null>(null);
+  const [priceLoading, setPriceLoading] = useState(true);
 
-  const selectedOutcome: "YES" | "NO" = selectedSide === "Buy YES" ? "YES" : "NO";
-  // ─── Contract reads ──────────────────────────────────────────────
-
-  const { data: userBalance } = useReadContract({
-    address: addresses.mockUsdc,
-    abi: MOCK_USDC_ABI,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: polygon.id,
-  });
-
-  const { data: openFeeBpsData } = useReadContract({
-    address: addresses.marginEngine,
-    abi: MARGIN_ENGINE_ABI,
-    functionName: "openFeeBps",
-    chainId: polygon.id,
-  });
-
-  // ─── Market data fetching ────────────────────────────────────────
-
-  const parseMarketData = (m: any): MarketData => {
+  const fetchPrices = useCallback(async () => {
     try {
-      let outcomePrices: number[] = [];
-      try {
-        if (typeof m?.outcomePrices === "string") outcomePrices = JSON.parse(m.outcomePrices);
-        else if (Array.isArray(m?.outcomePrices)) outcomePrices = m.outcomePrices;
-      } catch { outcomePrices = []; }
-
-      const yesPrice = outcomePrices[0] != null ? parseFloat(String(outcomePrices[0])) : null;
-      const noPrice = outcomePrices[1] != null ? parseFloat(String(outcomePrices[1])) : yesPrice != null ? 1 - yesPrice : null;
-      let yesProbability: number | null = null;
-      let noProbability: number | null = null;
-      if (yesPrice != null && yesPrice > 0 && yesPrice <= 1) {
-        yesProbability = Math.round(yesPrice * 1000) / 10;
-        noProbability = Math.round((1 - yesPrice) * 1000) / 10;
-      }
-      let clobTokenIds: string[] = [];
-      try {
-        if (typeof m?.clobTokenIds === "string") clobTokenIds = JSON.parse(m.clobTokenIds);
-        else if (Array.isArray(m?.clobTokenIds)) clobTokenIds = m.clobTokenIds;
-      } catch {
-        clobTokenIds = [];
-      }
-      if (clobTokenIds.length < 2) clobTokenIds = FALLBACK_CLOB_TOKEN_IDS;
-      const tickSize = typeof m?.tickSize === "string" ? m.tickSize : undefined;
-      const negRisk = typeof m?.negRisk === "boolean" ? m.negRisk : undefined;
-
-      return {
-        title: m?.question || "Will the Iranian regime fall by June 30?",
-        slug: m?.slug ?? null,
-        yesProbability,
-        noProbability,
-        yesPrice: yesPrice != null ? (yesPrice * 100).toFixed(1) : null,
-        noPrice: noPrice != null ? (noPrice * 100).toFixed(1) : null,
-        volume: parseFloat(m?.volume) || 0,
-        volume24h: parseFloat(m?.volume24hr) || 0,
-        liquidity: parseFloat(m?.liquidity) || 0,
-        traders: parseInt(m?.uniqueBettors, 10) || parseInt(m?.uniqueTraders, 10) || null,
-        oneDayChange: parseFloat(m?.oneDayPriceChange) || 0,
-        bestBid: m?.bestBid != null ? parseFloat(String(m.bestBid)) : null,
-        bestAsk: m?.bestAsk != null ? parseFloat(String(m.bestAsk)) : null,
-        clobTokenIds,
-        tickSize,
-        negRisk,
-      };
-    } catch {
-      return {
-        title: "Will the Iranian regime fall by June 30?",
-        slug: null,
-        yesProbability: null,
-        noProbability: null,
-        yesPrice: null,
-        noPrice: null,
-        volume: 0,
-        volume24h: 0,
-        liquidity: 0,
-        traders: null,
-        oneDayChange: 0,
-        bestBid: null,
-        bestAsk: null,
-        clobTokenIds: FALLBACK_CLOB_TOKEN_IDS,
-        tickSize: undefined,
-        negRisk: true,
-      };
-    }
-  };
-
-  const fetchMarket = useCallback(async (retryCount = 0): Promise<MarketData | null> => {
-    try {
-      const response = await fetch(`/api/polymarket-live?t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" },
-      });
-      if (!response.ok) {
-        if (retryCount < 3) { await new Promise((r) => setTimeout(r, 1000)); return fetchMarket(retryCount + 1); }
-        throw new Error(`Server error: ${response.status}`);
-      }
-      const result = await response.json();
-      if (result.success && result.market) {
-        setDataSource("live");
-        return parseMarketData(result.market);
-      }
-      const fallback = await fetch(`/api/gamma/markets/slug/${encodeURIComponent(POLYMARKET_SLUG)}?_=${Date.now()}`, {
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      });
-      if (fallback.ok) {
-        const data = await fallback.json();
-        const first = Array.isArray(data) ? data[0] : data;
-        if (first && typeof first === "object") {
-          setDataSource("live");
-          return parseMarketData(first);
+      const res = await fetch("/api/polymarket-live", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.market) {
+          const prices = data.market.outcomePrices;
+          if (Array.isArray(prices) && prices.length >= 2) {
+            setYesPrice(parseFloat(String(prices[0])));
+            setNoPrice(parseFloat(String(prices[1])));
+          } else if (data.market.bestBid != null) {
+            setYesPrice(parseFloat(String(data.market.bestBid)));
+            setNoPrice(1 - parseFloat(String(data.market.bestBid)));
+          }
         }
       }
-      throw new Error(result?.error || "Failed to fetch");
-    } catch (err: any) {
-      if (retryCount < 3) { await new Promise((r) => setTimeout(r, 1000)); return fetchMarket(retryCount + 1); }
-      setDataSource("fallback");
-      return {
-        title: "Will the Iranian regime fall by June 30?",
-        slug: "will-the-iranian-regime-fall-by-june-30",
-        yesProbability: 50,
-        noProbability: 50,
-        yesPrice: "50.0",
-        noPrice: "50.0",
-        volume: 0,
-        volume24h: 0,
-        liquidity: 0,
-        traders: null,
-        oneDayChange: 0,
-        bestBid: 0.49,
-        bestAsk: 0.51,
-        clobTokenIds: FALLBACK_CLOB_TOKEN_IDS,
-        tickSize: "0.01",
-        negRisk: true,
-      };
-    }
+    } catch { /* ignore */ }
+    setPriceLoading(false);
   }, []);
 
-  const loadData = useCallback(async (showRefreshing = false) => {
-    if (showRefreshing) setIsRefreshing(true);
-    try {
-      const marketData = await fetchMarket();
-      if (marketData) {
-        if (prevProbability.current !== null && marketData.yesProbability !== null)
-          setPriceChange(marketData.yesProbability - prevProbability.current);
-        prevProbability.current = marketData.yesProbability;
-        setMarket(marketData);
-        setLastUpdate(new Date());
-      }
-    } finally { setLoading(false); setIsRefreshing(false); }
-  }, [fetchMarket]);
-
-  const loadDataRef = useRef(loadData);
-  loadDataRef.current = loadData;
+  const priceRef = useRef(fetchPrices);
+  priceRef.current = fetchPrices;
   useEffect(() => {
-    loadDataRef.current();
-    const interval = setInterval(() => loadDataRef.current(false), refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval]);
+    priceRef.current();
+    const id = setInterval(() => priceRef.current(), 1000);
+    return () => clearInterval(id);
+  }, []);
 
-  // ─── Trade computations ──────────────────────────────────────────
+  // Current entry price based on selected side
+  const entryPrice = side === "YES" ? yesPrice : noPrice;
 
-  // Entry price: Buy YES = ask, Buy NO = NO ask (1 - YES bid)
-  const entryPriceDisplay = selectedSide === "Buy YES"
-    ? (market?.bestAsk ?? (market?.yesProbability != null ? market.yesProbability / 100 : 0.41))
-    : (market?.bestBid != null ? 1 - market.bestBid : (market?.noProbability != null ? market.noProbability / 100 : 0.59));
-  const entryPriceCents = Math.round(entryPriceDisplay * 1000) / 10;
-  const entryPriceOutcome = entryPriceDisplay;
+  // Balances
+  const { data: usdcBalance } = useBalance({
+    address,
+    token: USDC_E as `0x${string}`,
+    chainId: polygon.id,
+  });
 
-  const buyYesCents = market?.bestAsk != null ? market.bestAsk * 100 : (market?.yesProbability ?? null);
-  const buyNoCents = market?.bestBid != null ? (1 - market.bestBid) * 100 : (market?.noProbability ?? null);
+  const walletBalance = usdcBalance
+    ? parseFloat(formatUnits(usdcBalance.value, usdcBalance.decimals))
+    : 0;
 
-  const collateralUsdc = parseFloat(collateralInput) || 0;
-  const isLong = selectedOutcome === "YES"; // true=LONG, false=SHORT
-  const notional = collateralUsdc * leverage;
-  const borrowed = notional - collateralUsdc;
-  const openFeeBps = openFeeBpsData ? Number(openFeeBpsData as bigint) : 15;
-  const openFee = (notional * openFeeBps) / 10000;
+  // Vault available liquidity
+  const { data: vaultAssets } = useReadContract({
+    address: addresses.vault as `0x${string}`,
+    abi: VAULT_ABI,
+    functionName: "totalAssets",
+    chainId: polygon.id,
+  });
+  const { data: vaultBorrowed } = useReadContract({
+    address: addresses.vault as `0x${string}`,
+    abi: VAULT_ABI,
+    functionName: "totalBorrowed",
+    chainId: polygon.id,
+  });
 
-  // Leverage box calcs (use outcome price so PnL/liq match contract)
-  const shares = entryPriceOutcome > 0 ? notional / entryPriceOutcome : 0;
-  const liquidationDecimal = entryPriceOutcome * (1 - 1 / leverage);
-  const liquidationCents = Math.max(0, Math.round(liquidationDecimal * 1000) / 10);
-  const maxWin = entryPriceOutcome > 0 && entryPriceOutcome < 1 ? shares * (1 - entryPriceOutcome) : 0;
+  const vaultAssetsNum = vaultAssets ? parseFloat(formatUnits(vaultAssets as bigint, 6)) : 0;
+  const vaultBorrowedNum = vaultBorrowed ? parseFloat(formatUnits(vaultBorrowed as bigint, 6)) : 0;
+  const availableLiquidity = vaultAssetsNum - vaultBorrowedNum;
 
-  // ─── Actions ─────────────────────────────────────────────────────
+  // ─── Borrow APR from MarginEngine ───
+  const { data: borrowAprRaw } = useReadContract({
+    address: addresses.marginEngine as `0x${string}`,
+    abi: MARGIN_ENGINE_ABI,
+    functionName: "borrowAPR",
+    chainId: polygon.id,
+  });
 
-  // ─── Render ──────────────────────────────────────────────────────
+  // borrowAPR is in basis points (e.g. 800 = 8.00%)
+  const borrowAprBps = borrowAprRaw ? Number(borrowAprRaw) : 0;
+  const borrowAprPct = borrowAprBps / 100; // e.g. 8.00
 
-  if (loading) {
-    return (
-      <div className="glass-card p-4 rounded-xl border border-emerald-500/20 shadow-glow h-full flex flex-col justify-center items-center min-h-[300px]">
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-          <RefreshCw className="w-6 h-6 text-emerald-400" />
-        </motion.div>
-        <span className="mt-2 text-gray-400 text-sm">Loading live market data...</span>
-      </div>
-    );
-  }
+  // ─── Computed values ───
+  const collateralNum = parseFloat(collateral) || 0;
+  const notional = collateralNum * leverage;
+  const borrowAmount = notional - collateralNum;
+  const estimatedShares = entryPrice && entryPrice > 0 ? notional / entryPrice : 0;
 
-  if (!market) {
-    return (
-      <div className="glass-card p-4 rounded-xl border border-emerald-500/20 shadow-glow h-full flex flex-col justify-center items-center min-h-[300px]">
-        <AlertTriangle className="w-8 h-8 text-amber-400 mb-2" />
-        <span className="text-gray-300 text-sm text-center">Live market data unavailable</span>
-        <span className="text-gray-500 text-xs mt-1 text-center">Polymarket API may be slow or temporarily down.</span>
-        <button
-          type="button"
-          onClick={() => loadData(true)}
-          disabled={isRefreshing}
-          className="mt-4 px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-semibold hover:bg-emerald-500/30 disabled:opacity-50"
-        >
-          {isRefreshing ? "Retrying…" : "Retry"}
-        </button>
-      </div>
-    );
-  }
+  // ─── Fee Calculations ───
+  const openFee = notional * OPEN_FEE_RATE;                      // 0.4% of notional
+  const dailyInterest = borrowAmount * (borrowAprPct / 100) / 365; // daily interest on borrowed amount
+  const hourlyInterest = dailyInterest / 24;                       // hourly interest
+  const totalUpfrontCost = collateralNum + openFee;                // what you pay upfront
+
+  // FIXED: Only check collateral + open fee, not full notional
+  const hasEnoughCollateral = walletBalance >= totalUpfrontCost;
+  const hasEnoughVaultLiquidity = leverage <= 1 || availableLiquidity >= borrowAmount;
+
+  const getValidationMessage = (): string | null => {
+    if (!isConnected) return "Connect wallet to trade";
+    if (collateralNum <= 0) return "Enter collateral amount";
+    if (!hasEnoughCollateral)
+      return `Insufficient balance. You have $${walletBalance.toFixed(2)}, need $${totalUpfrontCost.toFixed(4)} (collateral + open fee)`;
+    if (!hasEnoughVaultLiquidity)
+      return `Vault liquidity too low. Available: $${availableLiquidity.toFixed(2)}, need to borrow: $${borrowAmount.toFixed(2)}`;
+    return null;
+  };
+
+  const validationMsg = getValidationMessage();
+  const canTrade = !validationMsg && tradeStatus === "idle" && !activeOrderId;
+
+  // ─── EXECUTE TRADE ───
+  const executeTrade = useCallback(async () => {
+    if (!canTrade || !address) return;
+    setTradeStatus("submitting");
+    setStatusMsg(leverage > 1 ? "Borrowing from vault & placing order..." : "Placing order on Polymarket...");
+    setErrorMsg("");
+    setTradeResult(null);
+
+    try {
+      const res = await fetch("/api/polymarket-trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet: address,
+          side,
+          collateral: collateralNum,
+          leverage,
+          notional,
+          borrowAmount: leverage > 1 ? borrowAmount : 0,
+          openFee,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || "Trade execution failed");
+      }
+
+      setTradeResult(data);
+      if (data.orderId) setActiveOrderId(data.orderId);
+      setTradeStatus("success");
+      setStatusMsg(`Trade executed! Order: ${data.orderId ? data.orderId.slice(0, 10) + "..." : "confirmed"}`);
+      onVaultRefetch?.();
+    } catch (err) {
+      setTradeStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatusMsg("");
+    }
+  }, [canTrade, address, side, collateralNum, leverage, notional, borrowAmount, openFee, onVaultRefetch]);
+
+  // ─── CLOSE TRADE ───
+  const closeTrade = useCallback(async () => {
+    if (!address || !activeOrderId) return;
+    setCloseStatus("closing");
+    setErrorMsg("");
+    setStatusMsg("Closing position...");
+
+    try {
+      const res = await fetch("/api/polymarket-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet: address,
+          orderId: activeOrderId,
+          side,
+          notional,
+          borrowAmount: leverage > 1 ? borrowAmount : 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || "Close trade failed");
+      }
+
+      setCloseStatus("success");
+      setStatusMsg("Position closed successfully!");
+      setActiveOrderId(null);
+      setTradeResult(null);
+      onVaultRefetch?.();
+      setTimeout(() => {
+        setCloseStatus("idle");
+        setTradeStatus("idle");
+        setStatusMsg("");
+      }, 3000);
+    } catch (err) {
+      setCloseStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+    }
+  }, [address, activeOrderId, side, notional, borrowAmount, leverage, onVaultRefetch]);
+
+  const resetTrade = () => {
+    setTradeStatus("idle");
+    setCloseStatus("idle");
+    setStatusMsg("");
+    setErrorMsg("");
+    setTradeResult(null);
+    setActiveOrderId(null);
+  };
 
   return (
-    <div className="glass-card p-2.5 sm:p-3 rounded-xl shadow-glow flex flex-col min-w-0">
-      <div className="grid grid-cols-3 gap-3 mb-4 p-3 rounded-xl bg-white/5 border border-white/10">
-        <div className="text-center">
-          <div className="text-xs text-gray-400 uppercase tracking-wider">Borrowed</div>
-          <div className="text-lg font-bold text-amber-400">
-            ${poolState.totalBorrowed.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-xs text-gray-400 uppercase tracking-wider">UTIL</div>
-          <div className="text-lg font-bold text-cyan-400">
-            {(poolState.utilization * 100).toFixed(1)}%
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-xs text-gray-400 uppercase tracking-wider">Borrow APR</div>
-          <div className="text-lg font-bold text-purple-400">
-            {(poolState.borrowRate * 100).toFixed(2)}%
-          </div>
-        </div>
-      </div>
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="px-1.5 py-0.5 rounded-full text-[0.5rem] bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 uppercase tracking-widest font-semibold flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-            LIVE
+    <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <svg className="w-4 h-4 text-[#00ff88]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+          Leveraged Trade
+        </h3>
+        {activeOrderId && (
+          <span className="tag-neon text-[10px]">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-pulse-neon" />
+            POSITION OPEN
           </span>
-          {isConnected && (
-            <span className="px-1 py-0.5 rounded-full text-[0.45rem] bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-widest font-semibold">
-              REAL ONCHAIN
+        )}
+      </div>
+
+      <div className="p-5 space-y-5">
+        {/* ─── Side Selection — LIVE PRICES EVERY 1s ─── */}
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-2 block">Direction</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setSide("YES")}
+              disabled={tradeStatus !== "idle"}
+              className={`py-3 rounded-xl text-sm font-semibold transition-all relative ${
+                side === "YES"
+                  ? "bg-[#00ff88]/12 text-[#00ff88] border border-[#00ff88]/30 shadow-[0_0_15px_rgba(0,255,136,0.08)]"
+                  : "bg-white/[0.02] text-[#666] border border-white/5 hover:border-white/10"
+              }`}
+            >
+              <div className="flex flex-col items-center gap-0.5">
+                <span>YES</span>
+                <span className={`text-[11px] mono font-bold ${side === "YES" ? "text-[#00ff88]" : "text-[#888]"}`}>
+                  {priceLoading ? "..." : yesPrice != null ? `${(yesPrice * 100).toFixed(1)}¢` : "—"}
+                </span>
+              </div>
+            </button>
+            <button
+              onClick={() => setSide("NO")}
+              disabled={tradeStatus !== "idle"}
+              className={`py-3 rounded-xl text-sm font-semibold transition-all relative ${
+                side === "NO"
+                  ? "bg-red-500/12 text-red-400 border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.08)]"
+                  : "bg-white/[0.02] text-[#666] border border-white/5 hover:border-white/10"
+              }`}
+            >
+              <div className="flex flex-col items-center gap-0.5">
+                <span>NO</span>
+                <span className={`text-[11px] mono font-bold ${side === "NO" ? "text-red-400" : "text-[#888]"}`}>
+                  {priceLoading ? "..." : noPrice != null ? `${(noPrice * 100).toFixed(1)}¢` : "—"}
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* ─── Collateral Input ─── */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium">
+              Collateral (USDC.e)
+            </label>
+            <button
+              onClick={() => setCollateral(walletBalance.toFixed(2))}
+              className="text-[10px] text-[#00ff88] hover:text-[#33ffaa] font-medium transition-colors"
+            >
+              Max: ${walletBalance.toFixed(2)}
+            </button>
+          </div>
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#555] text-sm">$</span>
+            <input
+              type="number"
+              value={collateral}
+              onChange={(e) => setCollateral(e.target.value)}
+              placeholder="0.00"
+              disabled={tradeStatus !== "idle"}
+              className="w-full input-dark pl-8 pr-4 py-3 text-sm mono"
+              step="0.01"
+              min="0"
+            />
+          </div>
+        </div>
+
+        {/* ─── Leverage Slider ─── */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium">Leverage</label>
+            <span className="text-sm font-bold text-[#00ff88] mono">{leverage}x</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={5}
+            step={0.5}
+            value={leverage}
+            onChange={(e) => setLeverage(parseFloat(e.target.value))}
+            disabled={tradeStatus !== "idle"}
+            className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-white/5
+              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#00ff88]
+              [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(0,255,136,0.4)]
+              [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-all
+              [&::-webkit-slider-thumb]:hover:scale-110"
+          />
+          <div className="flex justify-between text-[10px] text-[#555] mt-1 mono">
+            <span>1x</span><span>2x</span><span>3x</span><span>4x</span><span>5x</span>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            TRADE SUMMARY — includes Open Fee + Interest Fees
+            ═══════════════════════════════════════════════════════ */}
+        <div className="rounded-xl bg-white/[0.02] border border-white/5 p-4 space-y-2.5">
+          {/* Entry Price */}
+          <div className="flex justify-between text-xs">
+            <span className="text-[#666]">Entry Price ({side})</span>
+            <span className={`mono font-bold ${side === "YES" ? "text-[#00ff88]" : "text-red-400"}`}>
+              {entryPrice != null ? `$${entryPrice.toFixed(4)}` : "—"}
             </span>
+          </div>
+
+          {/* Collateral */}
+          <div className="flex justify-between text-xs">
+            <span className="text-[#666]">Your Collateral</span>
+            <span className="text-white mono font-medium">${collateralNum.toFixed(2)}</span>
+          </div>
+
+          {/* Borrowed */}
+          {leverage > 1 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-[#666]">Borrowed from Vault</span>
+              <span className="text-[#f59e0b] mono font-medium">${borrowAmount.toFixed(2)}</span>
+            </div>
+          )}
+
+          <div className="h-px bg-white/5" />
+
+          {/* Total Notional */}
+          <div className="flex justify-between text-xs">
+            <span className="text-[#888] font-medium">Total Notional</span>
+            <span className="text-white mono font-bold">${notional.toFixed(2)}</span>
+          </div>
+
+          {/* Est. Shares */}
+          {estimatedShares > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-[#666]">Est. Shares</span>
+              <span className="text-[#ccc] mono font-medium">{estimatedShares.toFixed(2)}</span>
+            </div>
+          )}
+
+          {/* Direction */}
+          <div className="flex justify-between text-xs">
+            <span className="text-[#666]">Direction</span>
+            <span className={side === "YES" ? "text-[#00ff88] font-medium" : "text-red-400 font-medium"}>
+              {side}
+            </span>
+          </div>
+
+          {/* Vault Available */}
+          {leverage > 1 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-[#666]">Vault Available</span>
+              <span className={`mono font-medium ${availableLiquidity >= borrowAmount ? "text-[#00ff88]" : "text-red-400"}`}>
+                ${availableLiquidity.toFixed(2)}
+              </span>
+            </div>
+          )}
+
+          {/* ─── FEES SECTION ─── */}
+          <div className="h-px bg-white/5" />
+          <div className="text-[10px] uppercase tracking-wider text-[#888] font-semibold pt-0.5">Fees</div>
+
+          {/* Open Fee: 0.4% */}
+          <div className="flex justify-between text-xs">
+            <span className="text-[#666] flex items-center gap-1">
+              Open Fee
+              <span className="text-[10px] text-[#555]">(0.4%)</span>
+            </span>
+            <span className="text-[#f59e0b] mono font-medium">
+              {collateralNum > 0 ? `-$${openFee.toFixed(4)}` : "$0.00"}
+            </span>
+          </div>
+
+          {/* Interest Rate (APR) */}
+          {leverage > 1 && (
+            <>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#666] flex items-center gap-1">
+                  Borrow APR
+                  <span className="text-[10px] text-[#555]">(on borrowed)</span>
+                </span>
+                <span className="text-[#f59e0b] mono font-medium">
+                  {borrowAprPct > 0 ? `${borrowAprPct.toFixed(2)}%` : "—"}
+                </span>
+              </div>
+
+              {/* Daily Interest */}
+              <div className="flex justify-between text-xs">
+                <span className="text-[#666] flex items-center gap-1">
+                  Daily Interest
+                  <span className="text-[10px] text-[#555]">(est.)</span>
+                </span>
+                <span className="text-[#f59e0b] mono font-medium">
+                  {collateralNum > 0 && borrowAmount > 0
+                    ? `-$${dailyInterest.toFixed(4)}/day`
+                    : "$0.00/day"}
+                </span>
+              </div>
+
+              {/* Hourly Interest */}
+              <div className="flex justify-between text-xs">
+                <span className="text-[#666] flex items-center gap-1">
+                  Hourly Interest
+                  <span className="text-[10px] text-[#555]">(est.)</span>
+                </span>
+                <span className="text-[#888] mono text-[11px]">
+                  {collateralNum > 0 && borrowAmount > 0
+                    ? `-$${hourlyInterest.toFixed(6)}/hr`
+                    : "$0.00/hr"}
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* Total Upfront Cost */}
+          <div className="h-px bg-white/5" />
+          <div className="flex justify-between text-xs">
+            <span className="text-[#888] font-semibold">Total Upfront Cost</span>
+            <span className="text-white mono font-bold">
+              ${totalUpfrontCost.toFixed(4)}
+            </span>
+          </div>
+          <div className="text-[10px] text-[#555] leading-tight">
+            Collateral (${collateralNum.toFixed(2)}) + Open Fee (${openFee.toFixed(4)})
+            {leverage > 1 && <> · Interest accrues on ${borrowAmount.toFixed(2)} borrowed</>}
+          </div>
+        </div>
+
+        {/* ─── Validation / Status Messages ─── */}
+        {validationMsg && tradeStatus === "idle" && (
+          <div className="rounded-lg bg-[#f59e0b]/5 border border-[#f59e0b]/20 px-4 py-2.5 text-xs text-[#f59e0b]">
+            {validationMsg}
+          </div>
+        )}
+
+        {statusMsg && (
+          <div className={`rounded-lg px-4 py-2.5 text-xs border ${
+            tradeStatus === "success" || closeStatus === "success"
+              ? "bg-[#00ff88]/5 border-[#00ff88]/20 text-[#00ff88]"
+              : tradeStatus === "error" || closeStatus === "error"
+              ? "bg-red-500/5 border-red-500/20 text-red-400"
+              : "bg-[#3b82f6]/5 border-[#3b82f6]/20 text-[#3b82f6]"
+          }`}>
+            <div className="flex items-center gap-2">
+              {(tradeStatus === "submitting" || closeStatus === "closing") && <div className="spinner" />}
+              {statusMsg}
+            </div>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="rounded-lg bg-red-500/5 border border-red-500/20 px-4 py-2.5 text-xs text-red-400">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* ─── Action Buttons ─── */}
+        <div className="space-y-2">
+          {!activeOrderId ? (
+            <button
+              onClick={executeTrade}
+              disabled={!canTrade}
+              className="w-full btn-primary py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+            >
+              {tradeStatus === "submitting" ? (
+                <><div className="spinner" /> Executing Trade...</>
+              ) : (
+                `Open ${side} Position — $${notional.toFixed(2)} (${leverage}x)`
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={closeTrade}
+              disabled={closeStatus === "closing"}
+              className="w-full btn-danger py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+            >
+              {closeStatus === "closing" ? (
+                <><div className="spinner" /> Closing Position...</>
+              ) : (
+                "Close Position"
+              )}
+            </button>
+          )}
+
+          {(tradeStatus === "error" || tradeStatus === "success" || closeStatus === "error") && (
+            <button
+              onClick={resetTrade}
+              className="w-full bg-white/[0.03] text-[#888] border border-white/5 py-2.5 rounded-xl text-xs font-medium hover:bg-white/[0.06] hover:text-white transition-all"
+            >
+              Reset
+            </button>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => loadData(true)} disabled={isRefreshing} className="p-0.5 rounded hover:bg-emerald-500/10 transition-colors disabled:opacity-50">
-            <motion.div animate={isRefreshing ? { rotate: 360 } : {}} transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}>
-              <RefreshCw className="w-3 h-3 text-emerald-400" />
-            </motion.div>
-          </button>
-          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568`}
-            target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-emerald-400 transition-colors">
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </div>
 
-      {/* ── Buy YES / Buy NO only ── */}
-      <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <motion.button
-          type="button"
-          onClick={() => setSelectedSide("Buy YES")}
-          whileTap={{ scale: 0.97 }}
-          className={`relative px-2 py-1.5 rounded-lg border transition-all text-left ${
-            selectedSide === "Buy YES" ? "bg-emerald-500/10 border-emerald-500 shadow-glow" : "bg-black/40 border-gray-700 hover:border-emerald-500/50"
-          }`}
-        >
-          <div className="text-[9px] text-gray-500 uppercase font-semibold">Buy</div>
-          <div className="flex items-center justify-between gap-1">
-            <span className={`text-[10px] font-semibold ${selectedSide === "Buy YES" ? "text-emerald-400" : "text-gray-400"}`}>YES</span>
-            <AnimatedValue value={buyYesCents} format={(v: number) => (v != null ? v.toFixed(1) : "--")} className={`text-sm font-bold font-mono ${selectedSide === "Buy YES" ? "text-emerald-400" : "text-white"}`} suffix="¢" />
-          </div>
-        </motion.button>
-        <motion.button
-          type="button"
-          onClick={() => setSelectedSide("Buy NO")}
-          whileTap={{ scale: 0.97 }}
-          className={`relative px-2 py-1.5 rounded-lg border transition-all text-left ${
-            selectedSide === "Buy NO" ? "bg-red-500/10 border-red-500" : "bg-black/40 border-gray-700 hover:border-red-500/50"
-          }`}
-        >
-          <div className="text-[9px] text-gray-500 uppercase font-semibold">Buy</div>
-          <div className="flex items-center justify-between gap-1">
-            <span className={`text-[10px] font-semibold ${selectedSide === "Buy NO" ? "text-red-400" : "text-gray-400"}`}>NO</span>
-            <AnimatedValue value={buyNoCents} format={(v: number) => (v != null ? v.toFixed(1) : "--")} className={`text-sm font-bold font-mono ${selectedSide === "Buy NO" ? "text-red-400" : "text-white"}`} suffix="¢" />
-          </div>
-        </motion.button>
-      </div>
-      {market?.bestBid != null && market?.bestAsk != null && (
-        <p className="text-[10px] text-gray-500 mb-2 text-center">
-          Spread <span className="font-mono text-gray-400">{(Math.abs((market.bestAsk - market.bestBid) * 100)).toFixed(1)}¢</span>
-        </p>
-      )}
-
-      {/* ── Selected side summary ── */}
-      <div className="flex items-center justify-between bg-black/50 rounded px-2 py-1 border border-emerald-900/20 mb-2 text-[10px]">
-        <span className="text-gray-500">Selected</span>
-        <span className={`font-semibold ${selectedOutcome === "YES" ? "text-emerald-400" : "text-red-400"}`}>
-          {selectedSide} @ {entryPriceCents.toFixed(1)}¢
-        </span>
-      </div>
-
-      {/* ═══ Leverage Controls ═══ */}
-      <div className="border border-emerald-500/20 rounded-lg p-2 bg-black/40 mb-2">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-emerald-400 text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
-            <Zap className="w-2.5 h-2.5" />
-            {isConnected ? "Leveraged Position" : "Preview"}
-          </span>
-          {isConnected && (
-            <span className="text-[7px] px-1 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">REAL POLYMARKET</span>
-          )}
-        </div>
-
-        {/* Collateral + Leverage side-by-side */}
-        <div className="grid grid-cols-2 gap-1.5 mb-1.5">
-          <div>
-            <label className="text-gray-400 text-[9px] block mb-0.5">Collateral</label>
-            <div className="flex rounded border border-gray-700 bg-black overflow-hidden">
-              <span className="px-1.5 py-1 text-gray-500 text-xs border-r border-gray-700"><DollarSign className="w-3 h-3" /></span>
-              <input type="number" min="0.5" step="0.5" value={collateralInput}
-                onChange={(e) => setCollateralInput(e.target.value)} placeholder="5"
-                className="flex-1 bg-transparent px-1.5 py-1 text-white text-xs focus:outline-none w-0" />
-              {isConnected && (
-                <button onClick={() => setCollateralInput((Number(userBalance ?? BigInt(0)) / 1e6).toString())}
-                  className="px-1 text-emerald-400/60 text-[8px] hover:text-emerald-400">MAX</button>
+        {/* ─── Trade Result Details ─── */}
+        {tradeResult && (
+          <div className="rounded-xl bg-white/[0.02] border border-white/5 p-4">
+            <div className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-2">Trade Details</div>
+            <div className="space-y-1.5 text-xs">
+              {tradeResult.orderId && (
+                <div className="flex justify-between">
+                  <span className="text-[#666]">Order ID</span>
+                  <span className="text-[#999] mono text-[11px]">{tradeResult.orderId.slice(0, 16)}...</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-[#666]">Entry Price</span>
+                <span className="text-white mono font-bold">
+                  ${tradeResult.fillPrice ? parseFloat(tradeResult.fillPrice).toFixed(4) : entryPrice?.toFixed(4) || "—"}
+                </span>
+              </div>
+              {tradeResult.yesPrice && (
+                <div className="flex justify-between">
+                  <span className="text-[#666]">YES Price</span>
+                  <span className="text-[#00ff88] mono">${parseFloat(tradeResult.yesPrice).toFixed(4)}</span>
+                </div>
+              )}
+              {tradeResult.noPrice && (
+                <div className="flex justify-between">
+                  <span className="text-[#666]">NO Price</span>
+                  <span className="text-red-400 mono">${parseFloat(tradeResult.noPrice).toFixed(4)}</span>
+                </div>
+              )}
+              {tradeResult.shares && (
+                <div className="flex justify-between">
+                  <span className="text-[#666]">Shares</span>
+                  <span className="text-white mono">{parseFloat(tradeResult.shares).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-[#666]">Notional</span>
+                <span className="text-white mono">${tradeResult.notional ? parseFloat(tradeResult.notional).toFixed(2) : notional.toFixed(2)}</span>
+              </div>
+              {tradeResult.borrowAmount && parseFloat(tradeResult.borrowAmount) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-[#666]">Borrowed</span>
+                  <span className="text-[#f59e0b] mono">${parseFloat(tradeResult.borrowAmount).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="h-px bg-white/5 my-1" />
+              <div className="flex justify-between">
+                <span className="text-[#666]">Open Fee Paid</span>
+                <span className="text-[#f59e0b] mono">-${openFee.toFixed(4)}</span>
+              </div>
+              {leverage > 1 && borrowAprPct > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-[#666]">Interest Rate</span>
+                  <span className="text-[#f59e0b] mono">{borrowAprPct.toFixed(2)}% APR</span>
+                </div>
               )}
             </div>
-            {isConnected && <span className="text-gray-500 text-[9px]">Bal: ${formatUSDC(userBalance as bigint | undefined, 6)}</span>}
           </div>
-          <div>
-            <label className="text-gray-400 text-[9px] block mb-0.5">Leverage</label>
-            <div className="flex gap-0.5">
-              {[2, 3, 4, 5].map((x) => (
-                <button key={x} onClick={() => setLeverage(x)}
-                  className={`flex-1 py-1 rounded text-[10px] font-bold border transition-colors ${
-                    leverage === x ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" : "bg-black/30 text-gray-500 border-emerald-900/20 hover:border-emerald-500/30"
-                  }`}>{x}x</button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Trade Summary — compact 2-col grid */}
-        <div className="bg-black/50 rounded px-2 py-1.5 border border-emerald-500/10 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] mb-1.5">
-          <div className="flex justify-between"><span className="text-gray-400">Entry</span><AnimatedValue value={entryPriceCents} format={(v: number) => (v ?? 0).toFixed(1)} className="text-white font-mono font-semibold" suffix="¢" /></div>
-          <div className="flex justify-between"><span className="text-gray-400">Notional</span><span className="text-white font-medium">${notional.toFixed(6)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Borrowed</span><span className="text-yellow-400 font-medium">${borrowed.toFixed(6)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Fee ({bpsToPercent(openFeeBps)})</span><span className="text-gray-300">${openFee.toFixed(6)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Liq.</span><span className="text-red-400 font-semibold font-mono">{liquidationCents.toFixed(1)}¢</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Max profit</span><span className="text-emerald-400 font-semibold">${maxWin.toFixed(6)}</span></div>
-        </div>
-
-        {/* Trade action */}
-        <RealPolymarketTrade
-          market={market ? { title: market.title, slug: market.slug, bestBid: market.bestBid, bestAsk: market.bestAsk, clobTokenIds: market.clobTokenIds, tickSize: market.tickSize, negRisk: market.negRisk } : null}
-          selectedOutcome={selectedOutcome}
-          collateral={collateralUsdc}
-          leverage={leverage}
-          entryPrice={entryPriceOutcome}
-          onSuccess={onVaultRefetch}
-        />
+        )}
       </div>
     </div>
   );

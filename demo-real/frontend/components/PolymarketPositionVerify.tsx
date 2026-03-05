@@ -1,406 +1,264 @@
 "use client";
 
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAccount } from "wagmi";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
-import {
-  POLYMARKET_CLOB_API,
-  POLYMKT_CTF_ADDRESS,
-  POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS,
-  POLYMKT_NEG_RISK_ADAPTER_ADDRESS,
-} from "@/lib/polymarketConfig";
 
-type PositionRow = {
-  title?: string;
-  slug?: string;
-  outcome?: string;
-  size?: number;
-  avgPrice?: number;
-  curPrice?: number;
-  initialValue?: number;
-  currentValue?: number;
-  cashPnl?: number;
-  /** Token ID for CLOB sell (from positions API "asset") */
-  asset?: string;
-  negativeRisk?: boolean;
-};
+interface PositionData {
+  market: string;
+  slug: string;
+  eventSlug: string;
+  outcome: string;
+  outcomeIndex: number;
+  size: number;
+  avgPrice: number;
+  currentPrice: number;
+  initialValue: number;
+  currentValue: number;
+  pnl: number;
+  pnlPct: number;
+  realizedPnl: number;
+  totalBought: number;
+  asset: string;
+  oppositeAsset: string;
+  conditionId: string;
+  redeemable: boolean;
+  mergeable: boolean;
+  negativeRisk: boolean;
+  endDate: string;
+  icon: string;
+}
 
 export default function PolymarketPositionVerify() {
   const { address, isConnected } = useAccount();
+  const [positions, setPositions] = useState<PositionData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [positions, setPositions] = useState<PositionRow[]>([]);
-  const [lastSync, setLastSync] = useState<Date | null>(null);
-  const [closing, setClosing] = useState(false);
-  const [postingLimit, setPostingLimit] = useState(false);
-  const [closeResult, setCloseResult] = useState<{ ok: boolean; message: string; txHash?: string } | null>(null);
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [closingAsset, setClosingAsset] = useState<string | null>(null);
+  const [closeMsg, setCloseMsg] = useState<string | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   const fetchPositions = useCallback(async () => {
-    if (!address) {
-      setPositions([]);
-      setError(null);
-      return;
-    }
+    if (!address) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/polymarket-positions?user=${address}&size=20&t=${Date.now()}`, {
-        cache: "no-store",
-      });
-      const j = await res.json();
-      if (!res.ok || !j?.success) {
-        throw new Error(j?.error || "Could not fetch Polymarket positions");
+      const res = await fetch(`/api/polymarket-positions?address=${address}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch positions");
+      const data = await res.json();
+      if (data.success) {
+        setPositions(data.positions || []);
+      } else {
+        throw new Error(data.error || "Unknown error");
       }
-      const raw = Array.isArray(j.positions) ? j.positions : [];
-      setPositions(raw.map((p: Record<string, unknown>) => ({
-        title: p.title as string | undefined,
-        slug: p.slug as string | undefined,
-        outcome: p.outcome as string | undefined,
-        size: typeof p.size === "number" ? p.size : typeof p.size === "string" ? parseFloat(p.size) : undefined,
-        avgPrice: typeof p.avgPrice === "number" ? p.avgPrice : typeof p.avgPrice === "string" ? parseFloat(p.avgPrice) : undefined,
-        curPrice: typeof p.curPrice === "number" ? p.curPrice : undefined,
-        initialValue: typeof p.initialValue === "number" ? p.initialValue : undefined,
-        currentValue: typeof p.currentValue === "number" ? p.currentValue : undefined,
-        cashPnl: typeof p.cashPnl === "number" ? p.cashPnl : undefined,
-        asset: typeof p.asset === "string" ? p.asset : undefined,
-        negativeRisk: typeof p.negativeRisk === "boolean" ? p.negativeRisk : true,
-      })));
-      setLastSync(new Date());
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not fetch positions";
-      setError(message);
+      setLastChecked(new Date().toLocaleTimeString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   }, [address]);
 
-  const closePositionHere = useCallback(
-    async (pos: PositionRow) => {
-      const tokenId = pos?.asset;
-      const size = pos?.size;
-      if (!tokenId || size == null || size <= 0) {
-        setCloseResult({ ok: false, message: "Missing asset or size for this position." });
-        return;
-      }
-      if (typeof window === "undefined" || !window.ethereum) {
-        setCloseResult({ ok: false, message: "No wallet (e.g. MetaMask) found." });
-        return;
-      }
-      setCloseResult(null);
-      setClosing(true);
-      try {
-        const { ethers } = await import("ethers");
-        const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const walletAddress = await signer.getAddress();
-        if (walletAddress?.toLowerCase() !== address?.toLowerCase()) {
-          setCloseResult({ ok: false, message: "Connected wallet does not match this position. Switch wallet and try again." });
-          setClosing(false);
-          return;
-        }
-        const host = POLYMARKET_CLOB_API;
-        const baseClient = new ClobClient(host, 137, signer);
-        const creds = await baseClient.createOrDeriveApiKey();
-        const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
-        const { AssetType } = await import("@polymarket/clob-client");
-
-        // Approve CTF (ERC-1155) so Polymarket can transfer outcome tokens when selling
-        const ctfAbi = [
-          "function setApprovalForAll(address operator, bool approved) external",
-          "function isApprovedForAll(address account, address operator) view returns (bool)",
-        ];
-        const ctf = new ethers.Contract(POLYMKT_CTF_ADDRESS, ctfAbi, signer);
-        const operators = [POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS, POLYMKT_NEG_RISK_ADAPTER_ADDRESS];
-        for (const op of operators) {
-          const approved = await ctf.isApprovedForAll(walletAddress, op);
-          if (!approved) {
-            const tx = await ctf.setApprovalForAll(op, true);
-            await tx.wait(1);
-          }
-        }
-        // Refresh CLOB view of both collateral and conditional balances
-        await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
-        await client.updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId });
-        await new Promise((r) => setTimeout(r, 1500));
-
-        const tickSize: "0.1" | "0.01" | "0.001" | "0.0001" = "0.01";
-        const negRisk = pos.negativeRisk ?? true;
-        const amount = Number(size);
-        const hasSuccess = (r: any) => {
-          const status = (r?.status ?? r?.errorMsg ?? r?.error ?? "").toString().toLowerCase();
-          if (["matched", "filled", "live", "accepted", "posted", "open"].some((s) => status.includes(s))) return true;
-          if (r?.success === true) return true;
-          const id = r?.orderID ?? r?.orderId ?? r?.id ?? r?.order_id;
-          const tx = r?.transactionHash ?? r?.txHash ?? r?.transaction_hash ?? (Array.isArray(r?.transactionHashes) ? r.transactionHashes?.[0] : undefined);
-          return Boolean(id || tx);
-        };
-
-        let resp: any;
-        try {
-          resp = await client.createAndPostMarketOrder(
-            { tokenID: tokenId, amount, side: Side.SELL },
-            { tickSize, negRisk },
-            OrderType.FOK
-          );
-        } catch (fokErr: unknown) {
-          const msg = fokErr instanceof Error ? fokErr.message : String(fokErr);
-          if (
-            msg.toLowerCase().includes("fully filled") ||
-            msg.toLowerCase().includes("couldn't be fully filled") ||
-            msg.toLowerCase().includes("no orders found to match") ||
-            msg.toLowerCase().includes("no orders found")
-          ) {
-            resp = await client.createAndPostMarketOrder(
-              { tokenID: tokenId, amount, side: Side.SELL },
-              { tickSize, negRisk },
-              OrderType.FAK
-            );
-          } else {
-            throw fokErr;
-          }
-        }
-
-        if (!hasSuccess(resp)) {
-          const errMsg = (resp?.errorMsg ?? resp?.error ?? resp?.message ?? "No fill").toString();
-          setCloseResult({ ok: false, message: `Instant sell did not fill: ${errMsg}. Try "Post limit sell" below or try again later.` });
-          setClosing(false);
-          return;
-        }
-
-        const orderId = resp?.orderID ?? resp?.id ?? resp?.order_id;
-        const txHash = resp?.transactionHash ?? resp?.txHash ?? resp?.transaction_hash ?? (Array.isArray(resp?.transactionHashes) ? resp.transactionHashes[0] : undefined);
-        const hashStr = typeof txHash === "string" ? txHash : undefined;
-        setCloseResult({
-          ok: true,
-          message: hashStr ? "Position closed. Transaction submitted." : orderId ? `Position closed. Order ID: ${String(orderId).slice(0, 20)}…` : "Position closed.",
-          txHash: hashStr,
-        });
-        fetchPositions();
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        setCloseResult({ ok: false, message: message.length > 200 ? message.slice(0, 200) + "…" : message });
-      } finally {
-        setClosing(false);
-      }
-    },
-    [address, fetchPositions]
-  );
-
-  const postLimitSell = useCallback(
-    async (pos: PositionRow) => {
-      const tokenId = pos?.asset;
-      const size = pos?.size;
-      if (!tokenId || size == null || size <= 0) {
-        setCloseResult({ ok: false, message: "Missing asset or size." });
-        return;
-      }
-      if (typeof window === "undefined" || !window.ethereum) {
-        setCloseResult({ ok: false, message: "No wallet found." });
-        return;
-      }
-      setCloseResult(null);
-      setPostingLimit(true);
-      try {
-        const { ethers } = await import("ethers");
-        const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const walletAddress = await signer.getAddress();
-        if (walletAddress?.toLowerCase() !== address?.toLowerCase()) {
-          setCloseResult({ ok: false, message: "Connected wallet does not match. Switch wallet." });
-          setPostingLimit(false);
-          return;
-        }
-        const host = POLYMARKET_CLOB_API;
-        const baseClient = new ClobClient(host, 137, signer);
-        const creds = await baseClient.createOrDeriveApiKey();
-        const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
-        const { AssetType } = await import("@polymarket/clob-client");
-
-        // Approve CTF (ERC-1155) so Polymarket can transfer outcome tokens when selling
-        const ctfAbi = [
-          "function setApprovalForAll(address operator, bool approved) external",
-          "function isApprovedForAll(address account, address operator) view returns (bool)",
-        ];
-        const ctf = new ethers.Contract(POLYMKT_CTF_ADDRESS, ctfAbi, signer);
-        const operators = [POLYMKT_NEG_RISK_CTF_EXCHANGE_ADDRESS, POLYMKT_NEG_RISK_ADAPTER_ADDRESS];
-        for (const op of operators) {
-          const approved = await ctf.isApprovedForAll(walletAddress, op);
-          if (!approved) {
-            const tx = await ctf.setApprovalForAll(op, true);
-            await tx.wait(1);
-          }
-        }
-        // Refresh CLOB view of both collateral and conditional balances
-        await client.updateBalanceAllowance({ asset_type: AssetType.COLLATERAL });
-        await client.updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: tokenId });
-        await new Promise((r) => setTimeout(r, 1500));
-
-        const tickSize: "0.1" | "0.01" | "0.001" | "0.0001" = "0.01";
-        const negRisk = pos.negativeRisk ?? true;
-        const price = Math.max(0.01, Math.min(0.99, (pos.curPrice ?? pos.avgPrice ?? 0.26)));
-        const orderSize = Number(size);
-        const resp = await client.createAndPostOrder(
-          { tokenID: tokenId, price, size: orderSize, side: Side.SELL },
-          { tickSize, negRisk },
-          OrderType.GTC
-        );
-        const orderId = resp?.orderID ?? resp?.id ?? resp?.order_id;
-        const txHash = resp?.transactionHash ?? resp?.txHash;
-        const status = (resp?.status ?? resp?.errorMsg ?? resp?.error ?? "").toString().toLowerCase();
-        const ok = Boolean(orderId || txHash || ["matched", "filled", "live", "posted", "open"].some((s) => status.includes(s)));
-        if (ok) {
-          setCloseResult({
-            ok: true,
-            message: orderId ? "Limit sell order posted. It may fill when someone buys. Check Polymarket or refresh." : "Order posted.",
-            txHash: typeof txHash === "string" ? txHash : undefined,
-          });
-          fetchPositions();
-        } else {
-          setCloseResult({ ok: false, message: (resp?.errorMsg ?? resp?.error ?? "Failed to post order").toString() });
-        }
-      } catch (err: unknown) {
-        setCloseResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
-      } finally {
-        setPostingLimit(false);
-      }
-    },
-    [address, fetchPositions]
-  );
-
+  // Auto-fetch on mount and every 10s
   const fetchRef = useRef(fetchPositions);
   fetchRef.current = fetchPositions;
-
   useEffect(() => {
+    if (!isConnected || !address) return;
     fetchRef.current();
-    const id = setInterval(() => fetchRef.current(), 6000);
+    const id = setInterval(() => fetchRef.current(), 10000);
     return () => clearInterval(id);
-  }, [fetchPositions]);
+  }, [isConnected, address]);
 
-  if (!isConnected) return null;
+  // Close a specific position
+  const closePosition = useCallback(async (pos: PositionData) => {
+    if (!address) return;
+    setClosingAsset(pos.asset);
+    setCloseMsg("Closing position...");
+    setCloseError(null);
 
-  const top = positions[0];
-  const marketUrl =
-    top?.slug && top.slug.length > 0
-      ? `https://polymarket.com/market/${top.slug}`
-      : "https://polymarket.com/portfolio";
+    try {
+      const res = await fetch("/api/polymarket-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet: address,
+          asset: pos.asset,
+          size: pos.size,
+          side: pos.outcome.toUpperCase(),
+          negativeRisk: pos.negativeRisk,
+          conditionId: pos.conditionId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Close failed");
+      }
+      setCloseMsg(`Sell order placed! ${data.closeMethod} order: ${data.closeOrderId?.slice(0, 12) || "submitted"}...`);
+      // Refresh positions after a short delay
+      setTimeout(() => {
+        fetchRef.current();
+        setClosingAsset(null);
+        setCloseMsg(null);
+      }, 5000);
+    } catch (err) {
+      setCloseError(err instanceof Error ? err.message : "Unknown error");
+      setClosingAsset(null);
+      setCloseMsg(null);
+    }
+  }, [address]);
 
   return (
-    <div className="glass-card rounded-xl border border-emerald-500/20 shadow-glow p-2.5 mt-2">
-      <div className="flex items-center justify-between mb-1.5">
-        <h4 className="text-white font-semibold text-[10px] flex items-center gap-1">
-          <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
-          Verify on Polymarket API
-        </h4>
+    <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <svg className="w-4 h-4 text-[#8b5cf6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Polymarket Positions
+        </h3>
         <button
-          type="button"
-          onClick={() => fetchPositions()}
-          disabled={loading}
-          className="text-gray-400 hover:text-emerald-400 disabled:opacity-50"
+          onClick={fetchPositions}
+          disabled={!isConnected || loading}
+          className="text-xs font-medium text-[#00ff88] hover:text-[#33ffaa] disabled:text-[#444] disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
         >
-          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+          {loading ? (
+            <><div className="spinner" style={{ width: 12, height: 12 }} /> Checking...</>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </>
+          )}
         </button>
       </div>
 
-      {error ? (
-        <p className="text-red-300 text-[10px]">{error}</p>
-      ) : positions.length === 0 ? (
-        <p className="text-gray-500 text-[10px]">
-          No open positions returned by Polymarket API for this wallet.
-        </p>
-      ) : (
-        <div className="space-y-1.5">
-          <div className="rounded border border-emerald-900/30 bg-black/40 p-2 text-[10px]">
-            <div className="text-white font-semibold truncate" title={top?.title || ""}>
-              {top?.title || "Open position"}
-            </div>
-            <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5">
-              <span className="text-gray-400">Outcome</span>
-              <span className="text-emerald-300">{top?.outcome ?? "--"}</span>
-              <span className="text-gray-400">Size</span>
-              <span className="text-gray-200">{top?.size != null ? top.size.toFixed(4) : "--"}</span>
-              <span className="text-gray-400">Entry (avg price)</span>
-              <span className="text-emerald-300 font-mono">{top?.avgPrice != null ? `${(top.avgPrice * 100).toFixed(2)}¢` : "--"}</span>
-              <span className="text-gray-400">Current value</span>
-              <span className="text-gray-200">${top?.currentValue != null ? top.currentValue.toFixed(4) : "--"}</span>
-              <span className="text-gray-400">PnL</span>
-              <span className={`${(top?.cashPnl ?? 0) >= 0 ? "text-emerald-300" : "text-red-300"}`}>
-                {top?.cashPnl != null ? `${top.cashPnl >= 0 ? "+" : ""}$${top.cashPnl.toFixed(4)}` : "--"}
-              </span>
-            </div>
+      {/* Content */}
+      <div className="px-5 py-4">
+        {!isConnected ? (
+          <p className="text-[#555] text-xs text-center py-6">Connect wallet to verify positions</p>
+        ) : positions.length === 0 && !loading ? (
+          <div className="text-center py-6">
+            <p className="text-[#555] text-xs mb-2">No open positions found</p>
+            {lastChecked && (
+              <p className="text-[#444] text-[10px]">Last checked: {lastChecked}</p>
+            )}
           </div>
-          <p className="text-[9px] text-gray-500">
-            If no popup appears, ensure Polygon is selected in your wallet. Success only when you see a green message and/or a Polygonscan link.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => closePositionHere(top)}
-              disabled={closing || postingLimit || !top?.asset || (top?.size ?? 0) <= 0}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 py-1.5 px-2.5 text-[10px] font-semibold hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {closing ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-              {closing ? "Closing…" : "Close now (instant sell, sign in wallet)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => postLimitSell(top)}
-              disabled={closing || postingLimit || !top?.asset || (top?.size ?? 0) <= 0}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 py-1.5 px-2.5 text-[10px] font-semibold hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {postingLimit ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-              {postingLimit ? "Posting…" : "Post limit sell (resting order)"}
-            </button>
-            <a
-              href={marketUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[10px] text-emerald-400 hover:underline"
-            >
-              Open on Polymarket <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-          <p className="text-[9px] text-gray-500">
-            If instant close fails (no liquidity), use <strong>Post limit sell</strong>: you sign once and the order rests on the book until it fills.
-          </p>
-          {closeResult && (
-            <div
-              className={`text-[10px] mt-1.5 p-1.5 rounded border ${
-                closeResult.ok ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-red-500/40 bg-red-500/10 text-red-300"
-              }`}
-            >
-              <div>{closeResult.message}</div>
-              {closeResult.ok && closeResult.txHash && (
-                <a
-                  href={`https://polygonscan.com/tx/${closeResult.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 mt-1 text-emerald-400 hover:underline"
-                >
-                  View on Polygonscan <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-              {closeResult.ok && !closeResult.txHash && address && (
-                <a
-                  href={`https://polygonscan.com/address/${address}#internaltx`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 mt-1 text-emerald-400 hover:underline"
-                >
-                  View wallet on Polygonscan (find your tx here) <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+        ) : (
+          <div className="space-y-3">
+            {positions.map((pos, i) => {
+              const isClosing = closingAsset === pos.asset;
+              const pnlColor = pos.pnl >= 0 ? "text-[#00ff88]" : "text-red-400";
+              const sideColor = pos.outcome === "Yes" ? "text-[#00ff88]" : "text-red-400";
 
-      <p className="text-[9px] text-gray-500 mt-1.5">
-        Source: data-api.polymarket.com for wallet {address?.slice(0, 6)}...{address?.slice(-4)}
-        {lastSync ? ` · synced ${lastSync.toLocaleTimeString()}` : ""}
-      </p>
+              return (
+                <div key={`${pos.asset}-${i}`} className="rounded-xl bg-white/[0.02] border border-white/5 p-4">
+                  {/* Market Title + PnL */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0 mr-3">
+                      <a
+                        href={`https://polymarket.com/event/${pos.eventSlug || pos.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-white hover:text-[#00ff88] transition-colors truncate block"
+                        title={pos.market}
+                      >
+                        {pos.market}
+                        <svg className="w-3 h-3 inline-block ml-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    </div>
+                    <span className={`text-xs font-bold mono whitespace-nowrap ${pnlColor}`}>
+                      {pos.pnl >= 0 ? "+" : ""}{pos.pnl.toFixed(3)} ({pos.pnlPct.toFixed(1)}%)
+                    </span>
+                  </div>
+
+                  {/* Position Details */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] mb-3">
+                    <div className="flex justify-between">
+                      <span className="text-[#666]">Side</span>
+                      <span className={`font-medium ${sideColor}`}>{pos.outcome}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#666]">Shares</span>
+                      <span className="text-[#999] mono">{pos.size.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#666]">Entry</span>
+                      <span className="text-[#999] mono">${pos.avgPrice.toFixed(4)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#666]">Current</span>
+                      <span className="text-white mono font-medium">${pos.currentPrice.toFixed(4)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#666]">Value</span>
+                      <span className="text-[#999] mono">${pos.currentValue.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#666]">Cost</span>
+                      <span className="text-[#999] mono">${pos.initialValue.toFixed(3)}</span>
+                    </div>
+                  </div>
+
+                  {/* Close Button */}
+                  <button
+                    onClick={() => closePosition(pos)}
+                    disabled={isClosing}
+                    className="w-full btn-danger py-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isClosing ? (
+                      <><div className="spinner" style={{ width: 12, height: 12 }} /> Closing...</>
+                    ) : (
+                      <>
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Close Position ({pos.size.toFixed(2)} shares)
+                      </>
+                    )}
+                  </button>
+
+                  {/* Close status messages */}
+                  {isClosing && closeMsg && (
+                    <div className="mt-2 rounded-lg bg-[#00ff88]/5 border border-[#00ff88]/20 px-3 py-2 text-[11px] text-[#00ff88]">
+                      {closeMsg}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Close error */}
+        {closeError && (
+          <div className="mt-3 rounded-lg bg-red-500/5 border border-red-500/20 px-3 py-2 text-xs text-red-400">
+            Close error: {closeError}
+            <button
+              onClick={() => setCloseError(null)}
+              className="ml-2 text-red-300 hover:text-red-200 underline"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-3 rounded-lg bg-red-500/5 border border-red-500/20 px-3 py-2 text-xs text-red-400">
+            {error}
+          </div>
+        )}
+
+        {lastChecked && positions.length > 0 && (
+          <p className="text-[#444] text-[10px] mt-3 text-center">
+            Auto-refreshes every 10s · Last: {lastChecked}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
-

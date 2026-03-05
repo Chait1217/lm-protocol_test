@@ -133,6 +133,13 @@ export const VAULT_ABI = [
     inputs: [{ name: "usdcAmount", type: "uint256" }],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    name: "maxWithdraw",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 export const MARGIN_ENGINE_ABI = [

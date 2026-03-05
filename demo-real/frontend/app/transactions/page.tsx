@@ -1,336 +1,320 @@
 "use client";
 
-/**
- * /transactions – All opened and closed positions (trades) with full details.
- * Polygon PoS · MarginEngine.
- */
-import { useMemo, useEffect, useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Navbar from "@/components/Navbar";
-import {
-  useAccount,
-  useReadContract,
-  useReadContracts,
-  usePublicClient,
-} from "wagmi";
+import { useAccount, useReadContract, usePublicClient } from "wagmi";
 import { polygon } from "wagmi/chains";
-import { parseAbiItem } from "viem";
-import { MARGIN_ENGINE_ADDRESS } from "@/lib/baseAddresses";
-import { marginEngineAbi } from "@/lib/abi";
-import { formatUSDC } from "@/lib/utils";
-import {
-  RefreshCw,
-  FileText,
-  TrendingUp,
-  TrendingDown,
-  Clock,
-  ExternalLink,
-} from "lucide-react";
+import { formatUnits, decodeEventLog } from "viem";
+import { getContractAddresses, MARGIN_ENGINE_ABI } from "@/lib/contracts";
 
+const addresses = getContractAddresses();
 const ZERO = "0x0000000000000000000000000000000000000000";
-const hasEngine = MARGIN_ENGINE_ADDRESS !== ZERO && MARGIN_ENGINE_ADDRESS.length === 42;
-const POLYGONSCAN = "https://polygonscan.com";
+const hasEngine = addresses.marginEngine !== ZERO && addresses.marginEngine.length === 42;
 
 interface Position {
-  owner: string;
+  id: number;
+  trader: string;
+  isLong: boolean;
+  leverage: number;
   collateral: bigint;
   borrowed: bigint;
   notional: bigint;
-  entryPriceMock: bigint;
-  leverage: bigint;
-  isLong: boolean;
-  marketId: `0x${string}`;
-  openTimestamp: bigint;
+  entryPrice: bigint;
   isOpen: boolean;
+  openedAt: bigint;
+  // Closed data (from events)
+  exitPrice?: bigint;
+  pnl?: bigint;
+  closedAt?: string;
 }
 
-function entryPriceToCents(entryPriceMock: bigint): string {
-  const n = Number(entryPriceMock) / 1e6;
-  return (n * 100).toFixed(1);
+function fmt(val: bigint | undefined, decimals = 6, dp = 2): string {
+  if (val == null) return "—";
+  return parseFloat(formatUnits(val, decimals)).toFixed(dp);
 }
 
-function exitPriceToCents(exitPriceMock: bigint): string {
-  const n = Number(exitPriceMock) / 1e6;
-  return (n * 100).toFixed(1);
+function fmtPrice(val: bigint | undefined, decimals = 8, dp = 4): string {
+  if (val == null) return "—";
+  return parseFloat(formatUnits(val, decimals)).toFixed(dp);
 }
-
-const POSITION_CLOSED_EVENT = parseAbiItem(
-  "event PositionClosed(uint256 indexed positionId, address indexed owner, uint256 exitPriceMock, int256 pnl, uint256 interest, uint256 returnedToUser)"
-);
 
 export default function TransactionsPage() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient({ chainId: polygon.id });
-  const [exitByPositionId, setExitByPositionId] = useState<Record<number, { exitPriceMock: bigint; pnl: bigint; returnedToUser: bigint }>>({});
-  const [exitRefresh, setExitRefresh] = useState(0);
-  const [exitLoading, setExitLoading] = useState(false);
-  const [exitLoadError, setExitLoadError] = useState<string | null>(null);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: userPositionIdsRaw, refetch: refetchPositions } = useReadContract({
-    address: hasEngine ? MARGIN_ENGINE_ADDRESS : undefined,
-    abi: marginEngineAbi,
+  // Get user position IDs
+  const { data: positionIds } = useReadContract({
+    address: hasEngine ? (addresses.marginEngine as `0x${string}`) : undefined,
+    abi: MARGIN_ENGINE_ABI,
     functionName: "getUserPositions",
     args: address ? [address] : undefined,
     chainId: polygon.id,
-    query: { refetchInterval: 10000 },
   });
 
-  const positionIds = (userPositionIdsRaw as bigint[] | undefined) ?? [];
-  const idsNewestFirst = useMemo(() => [...positionIds].reverse(), [positionIds]);
-  const maxPositions = 50;
-  const idsToFetch = idsNewestFirst.slice(0, maxPositions);
+  const fetchPositions = useCallback(async () => {
+    if (!positionIds || !Array.isArray(positionIds) || positionIds.length === 0 || !publicClient) return;
 
-  const { data: positionsData, refetch: refetchPositionData } = useReadContracts({
-    contracts: idsToFetch.map((id) => ({
-      address: MARGIN_ENGINE_ADDRESS,
-      abi: marginEngineAbi,
-      functionName: "getPosition" as const,
-      args: [id],
-      chainId: polygon.id,
-    })),
-  });
+    setLoading(true);
+    setError(null);
 
-  const positions = useMemo(() => {
-    return idsToFetch.map((id, idx) => {
-      const res = positionsData?.[idx]?.result as Position | undefined;
-      return res ? { id: Number(id), ...res } : null;
-    }).filter(Boolean) as { id: number; owner: string; collateral: bigint; borrowed: bigint; notional: bigint; entryPriceMock: bigint; leverage: bigint; isLong: boolean; openTimestamp: bigint; isOpen: boolean }[];
-  }, [idsToFetch, positionsData]);
+    try {
+      const positionsData: Position[] = [];
 
-  const openCount = positions.filter((p) => p.isOpen).length;
-  const closedCount = positions.filter((p) => !p.isOpen).length;
-  const closedIds = useMemo(() => positions.filter((p) => !p.isOpen).map((p) => p.id), [positions]);
+      for (const id of positionIds) {
+        try {
+          const data = await publicClient.readContract({
+            address: addresses.marginEngine as `0x${string}`,
+            abi: MARGIN_ENGINE_ABI,
+            functionName: "getPosition",
+            args: [id],
+          });
+
+          if (data && typeof data === "object") {
+            const pos = data as any;
+            positionsData.push({
+              id: Number(id),
+              trader: pos.trader || address || "",
+              isLong: pos.isLong ?? true,
+              leverage: Number(pos.leverage || 1),
+              collateral: pos.collateral || BigInt(0),
+              borrowed: pos.borrowed || BigInt(0),
+              notional: pos.notional || BigInt(0),
+              entryPrice: pos.entryPrice || BigInt(0),
+              isOpen: pos.isOpen ?? true,
+              openedAt: pos.openedAt || BigInt(0),
+            });
+          }
+        } catch (posErr) {
+          console.warn(`Failed to fetch position ${id}:`, posErr);
+        }
+      }
+
+      // Fetch close events for closed positions
+      try {
+        const closedLogs = await publicClient.getLogs({
+          address: addresses.marginEngine as `0x${string}`,
+          event: {
+            type: "event",
+            name: "PositionClosed",
+            inputs: [
+              { name: "positionId", type: "uint256", indexed: true },
+              { name: "trader", type: "address", indexed: true },
+              { name: "exitPrice", type: "uint256", indexed: false },
+              { name: "pnl", type: "int256", indexed: false },
+            ],
+          },
+          fromBlock: "earliest",
+        });
+
+        for (const log of closedLogs) {
+          const posId = Number(log.args?.positionId);
+          const pos = positionsData.find((p) => p.id === posId);
+          if (pos) {
+            pos.exitPrice = log.args?.exitPrice as bigint;
+            pos.pnl = log.args?.pnl as bigint;
+          }
+        }
+      } catch {
+        // Events may not be available
+      }
+
+      setPositions(positionsData.sort((a, b) => b.id - a.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch positions");
+    } finally {
+      setLoading(false);
+    }
+  }, [positionIds, publicClient, address]);
 
   useEffect(() => {
-    if (!publicClient || !hasEngine || closedIds.length === 0) return;
-    let cancelled = false;
-    setExitLoadError(null);
-    setExitLoading(true);
-    const CHUNK_SIZE = BigInt(50);
-    const MAX_CHUNKS = 300;
-    (async () => {
-      try {
-        const currentBlock = await publicClient.getBlockNumber();
-        const allLogs: { args: unknown }[] = [];
-        let toBlock = currentBlock;
-        let fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : BigInt(0);
-        let chunks = 0;
-        while (chunks < MAX_CHUNKS && toBlock > BigInt(0)) {
-          if (cancelled) return;
-          try {
-            const logs = await publicClient.getLogs({
-              address: MARGIN_ENGINE_ADDRESS,
-              event: POSITION_CLOSED_EVENT,
-              fromBlock,
-              toBlock,
-            });
-            allLogs.push(...logs);
-          } catch (chunkErr) {
-            if (cancelled) return;
-            console.warn("Exit logs chunk failed:", chunkErr);
-          }
-          chunks++;
-          if (fromBlock <= BigInt(0)) break;
-          toBlock = fromBlock - BigInt(1);
-          fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : BigInt(0);
-        }
-        if (cancelled) return;
-        const map: Record<number, { exitPriceMock: bigint; pnl: bigint; returnedToUser: bigint }> = {};
-        for (const log of allLogs) {
-          const args = log.args as { positionId?: bigint; exitPriceMock?: bigint; pnl?: bigint; returnedToUser?: bigint };
-          if (args?.positionId != null && args?.exitPriceMock != null)
-            map[Number(args.positionId)] = {
-              exitPriceMock: args.exitPriceMock,
-              pnl: args.pnl ?? BigInt(0),
-              returnedToUser: args.returnedToUser ?? BigInt(0),
-            };
-        }
-        setExitByPositionId(map);
-        setExitLoadError(null);
-      } catch (e) {
-        if (!cancelled) {
-          setExitByPositionId({});
-          setExitLoadError(e instanceof Error ? e.message : "Failed to load exit prices");
-        }
-      } finally {
-        if (!cancelled) setExitLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [publicClient, closedIds.length, hasEngine, exitRefresh]);
+    fetchPositions();
+  }, [fetchPositions]);
 
-  const refetchAll = () => {
-    refetchPositions();
-    refetchPositionData();
-    setExitRefresh((n) => n + 1);
-  };
+  const openPositions = positions.filter((p) => p.isOpen);
+  const closedPositions = positions.filter((p) => !p.isOpen);
 
   return (
-    <>
+    <div className="min-h-screen bg-terminal-gradient">
       <Navbar />
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:py-12">
-        <div className="mb-8 flex items-center justify-between">
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        {/* Page Header */}
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl flex items-center gap-2">
-              <FileText className="h-7 w-7 text-emerald-400" />
-              Transactions
-            </h1>
-            <p className="text-sm text-gray-400 mt-1">
-              All opened and closed positions on Polygon PoS
-            </p>
+            <h1 className="text-2xl font-bold text-white mb-2">Transaction History</h1>
+            <p className="text-[#666] text-sm">View your open and closed MarginEngine positions on Polygon.</p>
           </div>
           <button
-            onClick={refetchAll}
-            className="rounded-lg p-2 text-gray-400 transition hover:bg-white/10 hover:text-white"
-            title="Refresh"
+            onClick={fetchPositions}
+            disabled={loading || !isConnected}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium text-[#00ff88] border border-[#00ff88]/20 bg-[#00ff88]/5 hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <RefreshCw className="h-5 w-5" />
+            {loading ? <div className="spinner" /> : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
+            Refresh
           </button>
         </div>
 
         {!isConnected ? (
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-12 text-center">
-            <FileText className="mx-auto mb-4 h-12 w-12 text-gray-600" />
-            <h2 className="mb-2 text-lg font-semibold text-white">Connect Your Wallet</h2>
-            <p className="text-sm text-gray-500">Connect to see your trade history</p>
+          <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] p-12 text-center">
+            <p className="text-[#555] text-sm">Connect your wallet to view transaction history.</p>
           </div>
-        ) : !hasEngine ? (
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-center">
-            <p className="text-amber-200 text-sm">Margin engine not configured.</p>
-          </div>
-        ) : positions.length === 0 ? (
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-12 text-center">
-            <FileText className="mx-auto mb-4 h-12 w-12 text-gray-600" />
-            <h2 className="mb-2 text-lg font-semibold text-white">No positions yet</h2>
-            <p className="text-sm text-gray-500">Open a leveraged trade on the Trade Demo page.</p>
+        ) : error ? (
+          <div className="rounded-xl bg-red-500/5 border border-red-500/20 px-5 py-4 text-sm text-red-400 mb-6">
+            {error}
           </div>
         ) : (
           <>
-            <div className="mb-4 flex items-center gap-4 text-sm">
-              <span className="text-gray-400">
-                <span className="text-emerald-400 font-semibold">{openCount}</span> open
-              </span>
-              <span className="text-gray-600">·</span>
-              <span className="text-gray-400">
-                <span className="text-white font-semibold">{closedCount}</span> closed
-              </span>
+            {/* Open Positions */}
+            <div className="mb-8">
+              <div className="flex items-center gap-3 mb-4">
+                <h2 className="text-lg font-semibold text-white">Open Positions</h2>
+                <span className="tag-neon text-[10px]">{openPositions.length}</span>
+              </div>
+
+              {openPositions.length === 0 ? (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] p-8 text-center">
+                  <p className="text-[#555] text-sm">No open positions</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="table-dark">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Direction</th>
+                          <th>Leverage</th>
+                          <th>Collateral</th>
+                          <th>Borrowed</th>
+                          <th>Notional</th>
+                          <th>Entry Price</th>
+                          <th>Opened</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {openPositions.map((pos) => (
+                          <tr key={pos.id}>
+                            <td className="mono font-medium text-white">#{pos.id}</td>
+                            <td>
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                                pos.isLong
+                                  ? "bg-[#00ff88]/8 text-[#00ff88] border border-[#00ff88]/20"
+                                  : "bg-red-500/8 text-red-400 border border-red-500/20"
+                              }`}>
+                                {pos.isLong ? "LONG" : "SHORT"}
+                              </span>
+                            </td>
+                            <td className="mono font-medium text-[#f59e0b]">{pos.leverage}x</td>
+                            <td className="mono">${fmt(pos.collateral)}</td>
+                            <td className="mono">${fmt(pos.borrowed)}</td>
+                            <td className="mono font-medium text-white">${fmt(pos.notional)}</td>
+                            <td className="mono">${fmtPrice(pos.entryPrice)}</td>
+                            <td className="text-[#666] text-xs">
+                              {pos.openedAt ? new Date(Number(pos.openedAt) * 1000).toLocaleDateString() : "—"}
+                            </td>
+                            <td>
+                              <a
+                                href={`https://polygonscan.com/address/${addresses.marginEngine}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#3b82f6] hover:text-[#60a5fa] text-xs"
+                              >
+                                View
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-gray-800 text-[10px] uppercase tracking-wider text-gray-500">
-                      <th className="px-4 py-3 font-semibold">#</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold">Direction</th>
-                      <th className="px-4 py-3 font-semibold">Leverage</th>
-                      <th className="px-4 py-3 font-semibold">Collateral</th>
-                      <th className="px-4 py-3 font-semibold">Borrowed</th>
-                      <th className="px-4 py-3 font-semibold">Notional</th>
-                      <th className="px-4 py-3 font-semibold">Entry</th>
-                      <th className="px-4 py-3 font-semibold">Exit</th>
-                      <th className="px-4 py-3 font-semibold">Exit value</th>
-                      <th className="px-4 py-3 font-semibold">Opened</th>
-                      <th className="px-4 py-3 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {positions.map((pos) => (
-                      <tr
-                        key={pos.id}
-                        className={`border-b border-gray-800/50 transition hover:bg-white/5 ${
-                          !pos.isOpen ? "opacity-75" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3">
-                          <span className="font-mono font-semibold text-white">#{pos.id}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              pos.isOpen
-                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                                : "bg-gray-700/50 text-gray-400 border border-gray-600"
-                            }`}
-                          >
-                            {pos.isOpen ? "OPEN" : "CLOSED"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {pos.isLong ? (
-                            <span className="inline-flex items-center gap-1 text-green-400 font-medium text-sm">
-                              <TrendingUp className="h-3.5 w-3.5 shrink-0" /> Buy YES
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-red-400 font-medium text-sm">
-                              <TrendingDown className="h-3.5 w-3.5 shrink-0" /> Buy NO
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-white text-sm">{Number(pos.leverage)}x</td>
-                        <td className="px-4 py-3 font-mono text-white text-sm">${formatUSDC(pos.collateral, 6)}</td>
-                        <td className="px-4 py-3 font-mono text-amber-400 text-sm">${formatUSDC(pos.borrowed, 6)}</td>
-                        <td className="px-4 py-3 font-mono text-white text-sm">${formatUSDC(pos.notional, 6)}</td>
-                        <td className="px-4 py-3 font-mono text-gray-300 text-sm">
-                          {entryPriceToCents(pos.entryPriceMock)}¢
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm">
-                          {pos.isOpen ? (
-                            <span className="text-gray-500">—</span>
-                          ) : exitByPositionId[pos.id] != null ? (
-                            <span className="text-emerald-400">{exitPriceToCents(exitByPositionId[pos.id].exitPriceMock)}¢</span>
-                          ) : exitLoading ? (
-                            <span className="text-gray-500">…</span>
-                          ) : (
-                            <span className="text-gray-500">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm">
-                          {pos.isOpen ? (
-                            <span className="text-gray-500">—</span>
-                          ) : exitByPositionId[pos.id] != null ? (
-                            <span className="text-white">${formatUSDC(exitByPositionId[pos.id].returnedToUser, 6)}</span>
-                          ) : exitLoading ? (
-                            <span className="text-gray-500">…</span>
-                          ) : (
-                            <span className="text-gray-500">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 text-xs flex items-center gap-1">
-                          <Clock className="h-3 w-3 shrink-0" />
-                          {new Date(Number(pos.openTimestamp) * 1000).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <a
-                            href={`${POLYGONSCAN}/address/${MARGIN_ENGINE_ADDRESS}#readContract`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-gray-500 hover:text-emerald-400 transition p-1 inline-block"
-                            title="View on Polygonscan"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Closed Positions */}
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <h2 className="text-lg font-semibold text-white">Closed Positions</h2>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-white/5 text-[#888] border border-white/5">
+                  {closedPositions.length}
+                </span>
               </div>
+
+              {closedPositions.length === 0 ? (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] p-8 text-center">
+                  <p className="text-[#555] text-sm">No closed positions</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="table-dark">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Direction</th>
+                          <th>Leverage</th>
+                          <th>Collateral</th>
+                          <th>Notional</th>
+                          <th>Entry</th>
+                          <th>Exit</th>
+                          <th>PnL</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {closedPositions.map((pos) => {
+                          const pnlNum = pos.pnl ? parseFloat(formatUnits(pos.pnl, 6)) : 0;
+                          return (
+                            <tr key={pos.id}>
+                              <td className="mono font-medium text-white">#{pos.id}</td>
+                              <td>
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                                  pos.isLong
+                                    ? "bg-[#00ff88]/8 text-[#00ff88]/60 border border-[#00ff88]/10"
+                                    : "bg-red-500/8 text-red-400/60 border border-red-500/10"
+                                }`}>
+                                  {pos.isLong ? "LONG" : "SHORT"}
+                                </span>
+                              </td>
+                              <td className="mono text-[#888]">{pos.leverage}x</td>
+                              <td className="mono text-[#888]">${fmt(pos.collateral)}</td>
+                              <td className="mono text-[#888]">${fmt(pos.notional)}</td>
+                              <td className="mono text-[#888]">${fmtPrice(pos.entryPrice)}</td>
+                              <td className="mono text-[#888]">${fmtPrice(pos.exitPrice)}</td>
+                              <td>
+                                <span className={`mono font-semibold ${pnlNum >= 0 ? "text-[#00ff88]" : "text-red-400"}`}>
+                                  {pnlNum >= 0 ? "+" : ""}{pnlNum.toFixed(2)}
+                                </span>
+                              </td>
+                              <td>
+                                <a
+                                  href={`https://polygonscan.com/address/${addresses.marginEngine}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#3b82f6] hover:text-[#60a5fa] text-xs"
+                                >
+                                  View
+                                </a>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
-            {exitLoadError && (
-              <p className="mt-2 text-amber-400 text-xs flex items-center gap-2">
-                Exit prices: {exitLoadError}
-                <button type="button" onClick={refetchAll} className="text-emerald-400 hover:underline">Retry</button>
-              </p>
-            )}
           </>
         )}
       </main>
-    </>
+    </div>
   );
 }

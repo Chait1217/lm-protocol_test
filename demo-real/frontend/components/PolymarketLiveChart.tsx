@@ -1,464 +1,299 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from "recharts";
-import {
-  ExternalLink,
-  RefreshCw,
-  TrendingUp,
-  TrendingDown,
-} from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
-// Custom tooltip
-function CustomTooltip({ active, payload, label }: any) {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-[#111111] border border-emerald-500/30 rounded-lg px-3 py-2 shadow-glow">
-        <p className="text-emerald-400 font-semibold text-sm">
-          {payload[0].value.toFixed(1)}%
-        </p>
-        <p className="text-gray-400 text-xs">{label}</p>
-      </div>
-    );
-  }
-  return null;
+interface PricePoint {
+  t: number;
+  p: number;
 }
 
-// Animated number
-function AnimatedValue({
-  value,
-  format,
-  className,
-  prefix = "",
-  suffix = "",
-}: {
-  value: any;
-  format?: (v: any) => string;
-  className?: string;
-  prefix?: string;
-  suffix?: string;
-}) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [isChanging, setIsChanging] = useState(false);
-  const prevValue = useRef(value);
+type Interval = "1m" | "5m" | "1h" | "6h" | "1d" | "1w";
 
-  useEffect(() => {
-    if (value !== prevValue.current && value !== null) {
-      setIsChanging(true);
-      setDisplayValue(value);
-      prevValue.current = value;
-      const timer = setTimeout(() => setIsChanging(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [value]);
+const INTERVAL_LABELS: { key: Interval; label: string }[] = [
+  { key: "1m", label: "1M" },
+  { key: "5m", label: "5M" },
+  { key: "1h", label: "1H" },
+  { key: "6h", label: "6H" },
+  { key: "1d", label: "1D" },
+  { key: "1w", label: "1W" },
+];
 
-  if (value === null || value === undefined)
-    return <span className={className}>N/A</span>;
+// *** 1-SECOND REFRESH for 1m and 5m, fast refresh for others ***
+const REFRESH_MS: Record<Interval, number> = {
+  "1m": 1000,    // every 1s
+  "5m": 1000,    // every 1s
+  "1h": 3000,    // every 3s
+  "6h": 5000,    // every 5s
+  "1d": 10000,   // every 10s
+  "1w": 30000,   // every 30s
+};
 
-  return (
-    <motion.span
-      className={`${className} ${isChanging ? "text-neon" : ""}`}
-      animate={isChanging ? { scale: [1, 1.05, 1] } : {}}
-      transition={{ duration: 0.3 }}
-    >
-      {prefix}
-      {format ? format(displayValue) : displayValue}
-      {suffix}
-    </motion.span>
-  );
-}
-
-interface MarketData {
-  title: string;
-  slug: string | null;
-  probability: number | null;
-  volume: number;
-  volume24h: number;
-  liquidity: number;
-  lastPrice: number;
-  clobTokenIds: string[];
-  oneDayPriceChange: number;
-  yesPriceCents: number | null;
-  noPriceCents: number | null;
-}
-
-interface ChartPoint {
-  probability: number;
-  date: string;
-  time: string;
-  timestamp: number;
-}
-
-const POLYMARKET_BASE = "https://polymarket.com";
-
-/** Use our proxy so CLOB works in browser (avoids CORS / DNS). */
-function getClobApiBase(): string {
-  if (typeof window !== "undefined") {
-    const override = (process.env.NEXT_PUBLIC_POLYMARKET_CLOB_API || "").trim();
-    return override || "https://clob.polymarket.com";
-  }
-  return "https://clob.polymarket.com";
-}
-
-export default function PolymarketLiveChart({
-  settlementDate = "Dec 31, 2026",
-  refreshInterval = 4000,
-}: {
-  settlementDate?: string;
-  refreshInterval?: number;
-}) {
-  const [market, setMarket] = useState<MarketData | null>(null);
-  const [priceHistory, setPriceHistory] = useState<ChartPoint[]>([]);
+export default function PolymarketLiveChart() {
+  const [history, setHistory] = useState<PricePoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [dataSource, setDataSource] = useState<string | null>(null);
-  const [priceChange, setPriceChange] = useState(0);
-  const prevProbability = useRef<number | null>(null);
-  const chartUpdateCount = useRef(0);
+  const [interval, setInterval_] = useState<Interval>("1h");
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const parseMarketData = (m: any): MarketData => {
+  const fetchHistory = useCallback(async (iv: Interval) => {
     try {
-      let outcomePrices: number[] = [];
-      try {
-        if (typeof m?.outcomePrices === "string") outcomePrices = JSON.parse(m.outcomePrices);
-        else if (Array.isArray(m?.outcomePrices)) outcomePrices = m.outcomePrices;
-      } catch {
-        outcomePrices = [];
-      }
-
-      const yesPrice = outcomePrices[0] != null ? parseFloat(String(outcomePrices[0])) : null;
-      let probability: number | null = null;
-      if (yesPrice != null && yesPrice > 0 && yesPrice <= 1) {
-        probability = Math.round(yesPrice * 1000) / 10;
-      } else if (m?.lastTradePrice != null && parseFloat(String(m.lastTradePrice)) <= 1) {
-        probability = Math.round(parseFloat(String(m.lastTradePrice)) * 1000) / 10;
-      }
-
-      let clobTokenIds: string[] = [];
-      try {
-        if (typeof m?.clobTokenIds === "string") clobTokenIds = JSON.parse(m.clobTokenIds);
-        else if (Array.isArray(m?.clobTokenIds)) clobTokenIds = m.clobTokenIds;
-      } catch {
-        clobTokenIds = [];
-      }
-
-      const noPrice = outcomePrices[1] != null ? parseFloat(String(outcomePrices[1])) : yesPrice != null ? 1 - yesPrice : null;
-      return {
-        title: m?.question || "Will the Iranian regime fall by June 30?",
-        slug: m?.slug ?? null,
-        probability,
-        volume: parseFloat(m?.volume) || parseFloat(m?.volumeNum) || 0,
-        volume24h: parseFloat(m?.volume24hr) || 0,
-        liquidity: parseFloat(m?.liquidity) || 0,
-        lastPrice: yesPrice ?? (parseFloat(String(m?.lastTradePrice)) || 0.41),
-        clobTokenIds,
-        oneDayPriceChange: parseFloat(m?.oneDayPriceChange) || 0,
-        yesPriceCents: yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null,
-        noPriceCents: noPrice != null ? Math.round(noPrice * 1000) / 10 : null,
-      };
-    } catch {
-      return {
-        title: "Will the Iranian regime fall by June 30?",
-        slug: null,
-        probability: null,
-        volume: 0,
-        volume24h: 0,
-        liquidity: 0,
-        lastPrice: 0.41,
-        clobTokenIds: [],
-        oneDayPriceChange: 0,
-        yesPriceCents: null,
-        noPriceCents: null,
-      };
-    }
-  };
-
-  const fetchPriceHistory = useCallback(async (tokenId: string) => {
-    if (!tokenId) return null;
-    const bases =
-      typeof window !== "undefined"
-        ? [getClobApiBase(), `${window.location.origin}/api/clob-proxy`]
-        : [getClobApiBase()];
-    try {
-      let history: any[] | null = null;
-      for (const base of bases) {
-        const response = await fetch(
-          `${base}/prices-history?market=${encodeURIComponent(tokenId)}&tokenId=${encodeURIComponent(tokenId)}&interval=1d&fidelity=60`
-        );
-        if (!response.ok) continue;
-        const data = await response.json();
-        const parsed = data.history || data || [];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          history = parsed;
-          break;
+      const res = await fetch(`/api/polymarket-history?interval=${iv}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.history && data.history.length > 0) {
+          setHistory(data.history);
         }
       }
-      if (!history || history.length === 0) return null;
-
-      const sorted = [...history].sort((a: any, b: any) => (a.t || 0) - (b.t || 0));
-      return sorted.map((point: any) => {
-        const p = point.p != null ? point.p : point.price;
-        const prob = typeof p === "number" ? (p <= 1 ? p * 100 : p) : 0;
-        const timestamp = point.t ? new Date(point.t * 1000) : new Date();
-        return {
-          probability: Math.round(prob * 10) / 10,
-          date: timestamp.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-          time: timestamp.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-          timestamp: point.t || Date.now() / 1000,
-        };
-      });
     } catch {
-      return null;
+      /* ignore */
     }
+    setLoading(false);
   }, []);
 
-  const SLUG = "will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568";
-  const fetchMarket = useCallback(async (retryCount = 0): Promise<MarketData | null> => {
-    try {
-      const response = await fetch(`/api/polymarket-live?t=${Date.now()}`, {
-        cache: "no-store",
-        headers: { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" },
-      });
-      let marketObj: Record<string, unknown> | null = null;
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.market) {
-          marketObj = result.market;
-        }
-      }
-      if (!marketObj) {
-        const fallback = await fetch(`/api/gamma/markets/slug/${encodeURIComponent(SLUG)}?t=${Date.now()}`, {
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-        });
-        if (fallback.ok) {
-          const data = await fallback.json();
-          marketObj = Array.isArray(data) ? data[0] : data;
-          if (marketObj && typeof marketObj === "object") {
-            setDataSource("live");
-            setError(null);
-            return parseMarketData(marketObj);
-          }
-        }
-        if (!response.ok && retryCount < 3) {
-          await new Promise((r) => setTimeout(r, 1000));
-          return fetchMarket(retryCount + 1);
-        }
-        throw new Error(`Server error: ${response.status}`);
-      }
-      setDataSource("live");
-      setError(null);
-      return parseMarketData(marketObj);
-    } catch (err: any) {
-      if (retryCount < 3) {
-        await new Promise((r) => setTimeout(r, 1000));
-        return fetchMarket(retryCount + 1);
-      }
-      setError(err.message);
-      setDataSource("fallback");
-      return null;
-    }
-  }, []);
-
-  const loadAllData = useCallback(
-    async (showRefreshing = false) => {
-      if (showRefreshing) setIsRefreshing(true);
-      try {
-        const marketData = await fetchMarket();
-        if (marketData) {
-          if (prevProbability.current !== null && marketData.probability !== null) {
-            setPriceChange(marketData.probability - prevProbability.current);
-          }
-          prevProbability.current = marketData.probability;
-          setMarket(marketData);
-
-          if (marketData.probability !== null) {
-            setError(null);
-            const now = new Date();
-            const newPoint: ChartPoint = {
-              probability: marketData.probability,
-              date: now.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-              time: now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-              timestamp: Date.now() / 1000,
-            };
-            setPriceHistory((prev) => {
-              if (prev.length > 0) return [...prev, newPoint].slice(-100);
-              return [newPoint];
-            });
-          }
-
-          chartUpdateCount.current++;
-          if (chartUpdateCount.current % 5 === 1 && marketData.clobTokenIds?.length > 0) {
-            const history = await fetchPriceHistory(marketData.clobTokenIds[0]);
-            if (history && history.length > 0) setPriceHistory(history);
-          }
-          setLastUpdate(new Date());
-        }
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [fetchMarket, fetchPriceHistory]
-  );
-
-  const loadAllDataRef = useRef(loadAllData);
-  loadAllDataRef.current = loadAllData;
+  // Fetch on mount and on interval change, with live refresh
   useEffect(() => {
-    loadAllDataRef.current();
-    const interval = setInterval(() => loadAllDataRef.current(false), refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval]);
+    setLoading(true);
+    fetchHistory(interval);
+    const id = window.setInterval(() => fetchHistory(interval), REFRESH_MS[interval]);
+    return () => window.clearInterval(id);
+  }, [interval, fetchHistory]);
 
-  const formatVolume = (v: number) => {
-    if (v === null || v === undefined || isNaN(v)) return "N/A";
-    if (v >= 1000000) return `$${(v / 1000000).toFixed(2)}M`;
-    if (v >= 1000) return `$${(v / 1000).toFixed(1)}K`;
-    return `$${Math.round(v).toLocaleString()}`;
-  };
+  // Draw chart
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || history.length < 2) return;
 
-  const chartData = useMemo(() => {
-    if (priceHistory.length > 0) return priceHistory;
-    const prob = market?.probability || 41;
-    const now = new Date();
-    const data: ChartPoint[] = [];
-    for (let i = 50; i >= 0; i--) {
-      const variation = Math.sin(i / 5) * 1 + (Math.random() - 0.5) * 0.5;
-      const value = Math.max(0, Math.min(100, prob + variation));
-      const datePoint = new Date(now.getTime() - i * 30 * 60 * 1000);
-      data.push({
-        probability: Math.round(value * 10) / 10,
-        date: datePoint.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        time: datePoint.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-        timestamp: datePoint.getTime() / 1000,
-      });
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    const pad = { top: 20, right: 10, bottom: 30, left: 50 };
+
+    const prices = history.map((p) => p.p);
+    const minP = Math.max(0, Math.min(...prices) - 0.03);
+    const maxP = Math.min(1, Math.max(...prices) + 0.03);
+    const minT = history[0].t;
+    const maxT = history[history.length - 1].t;
+
+    const xScale = (t: number) => pad.left + ((t - minT) / (maxT - minT || 1)) * (w - pad.left - pad.right);
+    const yScale = (p: number) => pad.top + ((maxP - p) / (maxP - minP || 1)) * (h - pad.top - pad.bottom);
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Grid lines
+    ctx.strokeStyle = "rgba(255,255,255,0.03)";
+    ctx.lineWidth = 1;
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = pad.top + (i / gridLines) * (h - pad.top - pad.bottom);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(w - pad.right, y);
+      ctx.stroke();
+
+      const price = maxP - (i / gridLines) * (maxP - minP);
+      ctx.fillStyle = "#555";
+      ctx.font = "10px 'JetBrains Mono', monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(`${(price * 100).toFixed(0)}%`, pad.left - 8, y + 3);
     }
-    return data;
-  }, [priceHistory, market?.probability]);
+
+    // Gradient fill
+    const gradient = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+    gradient.addColorStop(0, "rgba(0, 255, 136, 0.12)");
+    gradient.addColorStop(1, "rgba(0, 255, 136, 0)");
+
+    ctx.beginPath();
+    ctx.moveTo(xScale(history[0].t), h - pad.bottom);
+    history.forEach((p) => ctx.lineTo(xScale(p.t), yScale(p.p)));
+    ctx.lineTo(xScale(history[history.length - 1].t), h - pad.bottom);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = "#00ff88";
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    history.forEach((p, i) => {
+      const x = xScale(p.t);
+      const y = yScale(p.p);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Glow
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(0, 255, 136, 0.3)";
+    ctx.lineWidth = 6;
+    ctx.lineJoin = "round";
+    ctx.filter = "blur(4px)";
+    history.forEach((p, i) => {
+      const x = xScale(p.t);
+      const y = yScale(p.p);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.filter = "none";
+
+    // Current price dot
+    const lastP = history[history.length - 1];
+    ctx.beginPath();
+    ctx.arc(xScale(lastP.t), yScale(lastP.p), 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#00ff88";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(xScale(lastP.t), yScale(lastP.p), 8, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0, 255, 136, 0.2)";
+    ctx.fill();
+
+    // Hovered point
+    if (hoveredIdx != null && hoveredIdx >= 0 && hoveredIdx < history.length) {
+      const hp = history[hoveredIdx];
+      const hx = xScale(hp.t);
+      const hy = yScale(hp.p);
+
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(hx, pad.top);
+      ctx.lineTo(hx, h - pad.bottom);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(pad.left, hy);
+      ctx.lineTo(w - pad.right, hy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+
+      const label = `${(hp.p * 100).toFixed(1)}% — ${new Date(hp.t * 1000).toLocaleString()}`;
+      ctx.font = "11px 'JetBrains Mono', monospace";
+      const tw = ctx.measureText(label).width + 16;
+      const tx = Math.min(hx - tw / 2, w - tw - 5);
+      const ty = hy - 30;
+      ctx.fillStyle = "rgba(0,0,0,0.85)";
+      ctx.beginPath();
+      ctx.roundRect(Math.max(5, tx), ty, tw, 22, 6);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.fillText(label, Math.max(5, tx) + tw / 2, ty + 15);
+    }
+  }, [history, hoveredIdx]);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container || history.length < 2) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pad = { left: 50, right: 10 };
+      const chartWidth = rect.width - pad.left - pad.right;
+      const ratio = (x - pad.left) / chartWidth;
+
+      if (ratio < 0 || ratio > 1) {
+        setHoveredIdx(null);
+        return;
+      }
+
+      const idx = Math.round(ratio * (history.length - 1));
+      setHoveredIdx(Math.max(0, Math.min(idx, history.length - 1)));
+    },
+    [history]
+  );
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-neon/20 bg-gradient-to-br from-gray-900 to-black p-4">
-        <div className="flex items-center justify-center py-10">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-            <RefreshCw className="w-6 h-6 text-neon" />
-          </motion.div>
-          <span className="ml-3 text-gray-400 text-sm">Loading live market data...</span>
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] p-6 min-h-[260px] flex items-center justify-center">
+        <div className="flex items-center gap-3 text-[#555] text-sm">
+          <div className="spinner" />
+          Loading chart data...
         </div>
       </div>
     );
   }
 
+  if (history.length < 2) {
+    return (
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] p-6 min-h-[260px] flex items-center justify-center">
+        <span className="text-[#555] text-sm">No chart data available</span>
+      </div>
+    );
+  }
+
+  const currentPrice = history[history.length - 1]?.p;
+  const firstPrice = history[0]?.p;
+  const priceChange = currentPrice && firstPrice ? currentPrice - firstPrice : 0;
+  const priceChangeColor = priceChange >= 0 ? "text-[#00ff88]" : "text-red-400";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="rounded-xl border border-neon/20 bg-gradient-to-br from-gray-900 to-black overflow-hidden shadow-[0_0_40px_rgba(57,255,20,0.06)]"
-    >
-      {/* Compact header row */}
-      <div className="px-3 py-2 border-b border-neon/10 flex flex-wrap items-center justify-between gap-1.5">
-        <div className="flex items-center gap-2">
-          <span className="px-1.5 py-0.5 rounded-full text-[0.55rem] bg-neon/15 text-neon border border-neon/40 uppercase tracking-widest font-semibold flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-neon animate-pulse" />
-            {dataSource === "live" ? "LIVE" : "PM"}
-          </span>
-          <AnimatedValue value={market?.probability} className="text-lg font-extrabold text-neon leading-none" suffix="%" />
-          <AnimatePresence>
-            {priceChange !== 0 && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className={`flex items-center gap-0.5 text-[10px] font-semibold ${priceChange > 0 ? "text-green-400" : "text-red-400"}`}>
-                {priceChange > 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-                {Math.abs(priceChange).toFixed(1)} pp
-              </motion.span>
-            )}
-          </AnimatePresence>
+    <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+      <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h3 className="text-sm font-semibold text-white">Price Chart</h3>
+          <span className="text-[10px] text-[#666] uppercase tracking-wider font-medium">YES Token</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-gray-500">Vol <AnimatedValue value={market?.volume24h ?? market?.volume} format={formatVolume} className="text-white font-bold text-[10px]" /></span>
-          <span className="text-[9px] text-gray-500">Liq <AnimatedValue value={market?.liquidity} format={formatVolume} className="text-white font-bold text-[10px]" /></span>
-          <button onClick={() => loadAllData(true)} disabled={isRefreshing} className="p-1 rounded hover:bg-neon/10 transition-colors disabled:opacity-50">
-            <motion.div animate={isRefreshing ? { rotate: 360 } : {}} transition={{ duration: 1, repeat: isRefreshing ? Infinity : 0, ease: "linear" }}>
-              <RefreshCw className="w-3 h-3 text-neon" />
-            </motion.div>
-          </button>
-          <a href={market?.slug ? `${POLYMARKET_BASE}/market/${market.slug}` : `${POLYMARKET_BASE}/event/will-gavin-newsom-win-the-2028-democratic-presidential-nomination-568`}
-            target="_blank" rel="noopener noreferrer" className="text-[9px] text-gray-400 hover:text-neon transition-colors">
-            <ExternalLink className="w-3 h-3" />
-          </a>
+        <div className="flex items-center gap-3">
+          {currentPrice != null && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-[#00ff88] mono">
+                {(currentPrice * 100).toFixed(1)}%
+              </span>
+              <span className={`text-xs mono ${priceChangeColor}`}>
+                {priceChange >= 0 ? "+" : ""}{(priceChange * 100).toFixed(1)}%
+              </span>
+            </div>
+          )}
+          <div className="flex gap-1 bg-white/[0.02] rounded-lg p-0.5">
+            {INTERVAL_LABELS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setInterval_(key)}
+                className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                  interval === key
+                    ? "bg-[#00ff88]/10 text-[#00ff88]"
+                    : "text-[#666] hover:text-[#999]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-
-      {error && dataSource !== "live" && (
-        <div className="mx-3 mt-1.5 p-1.5 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[10px]">
-          Could not fetch live data. Try refreshing.
-        </div>
-      )}
-
-      {/* Chart */}
-      <div className="px-3 py-2">
-        <div className="h-32 sm:h-36 md:h-40">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 5, bottom: 15 }}>
-              <defs>
-                <linearGradient id="colorProbLiveNext" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#39FF14" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#39FF14" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="time"
-                stroke="#444"
-                tick={{ fill: "#888", fontSize: 9 }}
-                axisLine={{ stroke: "#333" }}
-                tickLine={{ stroke: "#333" }}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                stroke="#444"
-                tick={{ fill: "#888", fontSize: 9 }}
-                axisLine={{ stroke: "#333" }}
-                tickLine={{ stroke: "#333" }}
-                domain={[0, Math.max(50, Math.min(100, Math.ceil((market?.probability || 41) * 1.5)))]}
-                tickFormatter={(v) => `${v}%`}
-                width={50}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="probability"
-                stroke="#39FF14"
-                strokeWidth={2}
-                fill="url(#colorProbLiveNext)"
-                dot={false}
-                activeDot={{ r: 4, fill: "#39FF14", stroke: "#000", strokeWidth: 2 }}
-                isAnimationActive={true}
-                animationDuration={300}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="mt-1 pt-1 border-t border-neon/10 flex items-center justify-between">
-          <p className="text-[9px] text-gray-500 flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-neon animate-pulse" />
-            Live · {refreshInterval / 1000}s
-          </p>
-          {lastUpdate && <p className="text-[9px] text-gray-500 font-mono">{lastUpdate.toLocaleTimeString()}</p>}
-        </div>
+      <div
+        ref={containerRef}
+        className="relative w-full h-[240px]"
+      >
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 cursor-crosshair"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHoveredIdx(null)}
+        />
       </div>
-    </motion.div>
+    </div>
   );
 }

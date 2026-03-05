@@ -1,472 +1,373 @@
 "use client";
 
-/**
- * /base-vault – Deposit/withdraw USDC.e on Polygon PoS mainnet (real funds).
- * Shows vault TVL, totalBorrowed, utilization, insurance, protocol balances.
- * Chain: Polygon PoS mainnet (137). Network guard prompts user to switch if on wrong chain.
- */
-import { useState, useEffect, useCallback } from "react";
-import { formatUnits, parseUnits } from "viem";
+import { useState, useCallback, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import TxButton from "@/components/TxButton";
-import { BASE_USDC_ADDRESS, BASE_VAULT_ADDRESS } from "@/lib/baseAddresses";
-import { baseVaultAbi, erc20Abi } from "@/lib/abi";
-import {
-  useAccount,
-  useBlockNumber,
-  useReadContract,
-  useReadContracts,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useSwitchChain,
-} from "wagmi";
-import {
-  Vault,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  RefreshCw,
-  AlertTriangle,
-  BarChart3,
-  Droplets,
-  ShieldCheck,
-  Building2,
-} from "lucide-react";
+import { useAccount, useBalance, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { polygon } from "wagmi/chains";
+import { formatUnits, parseUnits } from "viem";
+import { getContractAddresses, VAULT_ABI } from "@/lib/contracts";
 
-const POLYGON_CHAIN_ID = 137;
-const USDC_DECIMALS = 6;
-const LEGACY_BASE_VAULT_ADDRESS = "0xea6d70e05bf1b36eeb5b9c8d46048b2220fc976a";
-const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
-const VAULT_ASSET_ABI = [
-  {
-    name: "asset",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address" }],
-  },
+const USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+const USDC_E_ABI = [
+  { name: "approve", type: "function", stateMutability: "nonpayable", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }] },
+  { name: "allowance", type: "function", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
 ] as const;
 
-function fmtUSDC(value: bigint | undefined): string {
-  if (value === undefined) return "0.000000";
-  const n = Number(formatUnits(value, USDC_DECIMALS));
-  return n.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+const addresses = getContractAddresses();
+const ZERO = "0x0000000000000000000000000000000000000000";
+const hasVault = addresses.vault !== ZERO && addresses.vault.length === 42;
+
+function fmt(val: bigint | undefined, decimals = 6, dp = 2): string {
+  if (val == null) return "—";
+  return parseFloat(formatUnits(val, decimals)).toFixed(dp);
 }
 
-function parseUSDC(amount: string): bigint {
-  const num = parseFloat(amount);
-  if (isNaN(num) || num < 0) return BigInt(0);
-  try {
-    return parseUnits(num.toFixed(USDC_DECIMALS), USDC_DECIMALS);
-  } catch {
-    return BigInt(0);
-  }
-}
-
-function bpsToPercent(bps: bigint | undefined): string {
-  if (bps === undefined) return "0.00%";
-  return (Number(bps) / 100).toFixed(2) + "%";
+function fmtPct(bps: bigint | undefined): string {
+  if (bps == null) return "—";
+  return (Number(bps) / 100).toFixed(1) + "%";
 }
 
 export default function BaseVaultPage() {
   const { address, isConnected, chain } = useAccount();
-  const { switchChain } = useSwitchChain();
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
-  const [actionLabel, setActionLabel] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [pendingApprovalFor, setPendingApprovalFor] = useState<bigint>(BigInt(0));
-  const [approvedAmountLocal, setApprovedAmountLocal] = useState<bigint>(BigInt(0));
+  const [activeTab, setActiveTab] = useState<"deposit" | "withdraw">("deposit");
+  const [txStatus, setTxStatus] = useState<string>("");
 
-  const isWrongNetwork = isConnected && chain?.id !== POLYGON_CHAIN_ID;
-  const { data: latestBlock } = useBlockNumber({ chainId: POLYGON_CHAIN_ID, watch: true });
-  const isLegacyBaseVaultConfigured =
-    BASE_VAULT_ADDRESS.toLowerCase() === LEGACY_BASE_VAULT_ADDRESS;
-  const isVaultAddressInvalid = !ADDRESS_REGEX.test(BASE_VAULT_ADDRESS);
+  const isPolygon = chain?.id === polygon.id;
 
-  // ─── Vault reads (TVL, borrowed, util, insurance, protocol) ──────
+  // Balances
+  const { data: usdcBalance, refetch: refetchBalance } = useBalance({
+    address,
+    token: USDC_E as `0x${string}`,
+    chainId: polygon.id,
+  });
+
+  // Vault data
   const { data: vaultData, refetch: refetchVault } = useReadContracts({
-    contracts: [
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "totalAssets", chainId: POLYGON_CHAIN_ID },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "totalBorrowed", chainId: POLYGON_CHAIN_ID },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "utilization", chainId: POLYGON_CHAIN_ID },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "insuranceBalance", chainId: POLYGON_CHAIN_ID },
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "protocolBalance", chainId: POLYGON_CHAIN_ID },
-    ],
+    contracts: hasVault
+      ? [
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "totalAssets", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "totalBorrowed", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "utilization", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "insuranceBalance", chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "protocolBalance", chainId: polygon.id },
+        ]
+      : [],
     query: { refetchInterval: 5000 },
   });
 
-  const totalAssets    = vaultData?.[0]?.result as bigint | undefined;
-  const totalBorrowed  = vaultData?.[1]?.result as bigint | undefined;
+  // User vault shares
+  const { data: userShares } = useReadContracts({
+    contracts: hasVault && address
+      ? [
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "balanceOf", args: [address], chainId: polygon.id },
+          { address: addresses.vault, abi: VAULT_ABI, functionName: "maxWithdraw", args: [address], chainId: polygon.id },
+        ]
+      : [],
+    query: { refetchInterval: 5000 },
+  });
+
+  // Allowance
+  const { data: allowanceData, refetch: refetchAllowance } = useReadContracts({
+    contracts: address && hasVault
+      ? [{ address: USDC_E as `0x${string}`, abi: USDC_E_ABI, functionName: "allowance", args: [address, addresses.vault], chainId: polygon.id }]
+      : [],
+    query: { refetchInterval: 5000 },
+  });
+
+  const totalAssets = vaultData?.[0]?.result as bigint | undefined;
+  const totalBorrowed = vaultData?.[1]?.result as bigint | undefined;
   const utilizationBps = vaultData?.[2]?.result as bigint | undefined;
-  const insuranceBal   = vaultData?.[3]?.result as bigint | undefined;
-  const protocolBal    = vaultData?.[4]?.result as bigint | undefined;
+  const insuranceBal = vaultData?.[3]?.result as bigint | undefined;
+  const protocolBal = vaultData?.[4]?.result as bigint | undefined;
 
-  // Read the actual token accepted by the vault to avoid env mismatches.
-  const { data: vaultAssetAddress } = useReadContract({
-    address: BASE_VAULT_ADDRESS,
-    abi: VAULT_ASSET_ABI,
-    functionName: "asset",
-    chainId: POLYGON_CHAIN_ID,
-  });
-  const depositTokenAddress = (vaultAssetAddress as `0x${string}` | undefined) ?? BASE_USDC_ADDRESS;
-  const isDepositTokenMismatch =
-    (vaultAssetAddress as string | undefined)?.toLowerCase() !== undefined &&
-    (vaultAssetAddress as string).toLowerCase() !== BASE_USDC_ADDRESS.toLowerCase();
+  const shares = userShares?.[0]?.result as bigint | undefined;
+  const maxWithdraw = userShares?.[1]?.result as bigint | undefined;
+  const currentAllowance = allowanceData?.[0]?.result as bigint | undefined;
 
-  // ─── User reads ──────────────────────────────────────────────────
-  const { data: userUsdcBalance, refetch: refetchUsdc } = useReadContract({
-    address: depositTokenAddress,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: POLYGON_CHAIN_ID,
-    query: { refetchInterval: 5000 },
-  });
+  const walletBalance = usdcBalance ? parseFloat(formatUnits(usdcBalance.value, usdcBalance.decimals)) : 0;
+  const maxWithdrawNum = maxWithdraw ? parseFloat(formatUnits(maxWithdraw, 6)) : 0;
 
-  const { data: userShares, refetch: refetchShares } = useReadContract({
-    address: BASE_VAULT_ADDRESS,
-    abi: baseVaultAbi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: POLYGON_CHAIN_ID,
-    query: { refetchInterval: 5000 },
-  });
-
-  const { data: shareValue } = useReadContract({
-    address: BASE_VAULT_ADDRESS,
-    abi: baseVaultAbi,
-    functionName: "convertToAssets",
-    args: userShares !== undefined ? [userShares as bigint] : undefined,
-    chainId: POLYGON_CHAIN_ID,
-  });
-
-  const { data: usdcAllowance, refetch: refetchAllowance } = useReadContract({
-    address: depositTokenAddress,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: address ? [address, BASE_VAULT_ADDRESS] : undefined,
-    chainId: POLYGON_CHAIN_ID,
-  });
-
-  // ─── Write ───────────────────────────────────────────────────────
-  const { writeContract, isPending: isWritePending } = useWriteContract();
-  const { isLoading: isTxConfirming, isSuccess: isTxSuccess, isError: isTxError, error: txError } =
-    useWaitForTransactionReceipt({ hash: txHash, chainId: POLYGON_CHAIN_ID });
+  // Write contract hooks
+  const { writeContractAsync, isPending } = useWriteContract();
 
   const refetchAll = useCallback(() => {
+    refetchBalance();
     refetchVault();
-    refetchUsdc();
-    refetchShares();
     refetchAllowance();
-  }, [refetchVault, refetchUsdc, refetchShares, refetchAllowance]);
+  }, [refetchBalance, refetchVault, refetchAllowance]);
 
-  useEffect(() => {
-    if (isTxSuccess) {
-      // If approve tx confirmed, allow deposit flow immediately even if allowance read lags.
-      if (actionLabel.includes("Approving") && pendingApprovalFor > BigInt(0)) {
-        setApprovedAmountLocal((prev) => (prev > pendingApprovalFor ? prev : pendingApprovalFor));
-        setPendingApprovalFor(BigInt(0));
-      }
+  const handleApprove = async () => {
+    if (!address || !hasVault) return;
+    setTxStatus("Approving USDC.e...");
+    try {
+      await writeContractAsync({
+        address: USDC_E as `0x${string}`,
+        abi: USDC_E_ABI,
+        functionName: "approve",
+        args: [addresses.vault, parseUnits("1000000", 6)],
+        chainId: polygon.id,
+      });
+      setTxStatus("Approval confirmed!");
       refetchAll();
-      setTxHash(undefined);
-      setActionLabel("");
-      setErrorMessage("");
+      setTimeout(() => setTxStatus(""), 3000);
+    } catch (err) {
+      setTxStatus(`Approval failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
-  }, [isTxSuccess, refetchAll, actionLabel, pendingApprovalFor]);
+  };
 
-  // Keep wallet-sensitive reads fresh on each new block.
-  useEffect(() => {
-    if (!isConnected || !address || isWrongNetwork) return;
-    refetchVault();
-    refetchUsdc();
-    refetchAllowance();
-    refetchShares();
-  }, [latestBlock, isConnected, address, isWrongNetwork, refetchVault, refetchUsdc, refetchAllowance, refetchShares]);
+  const handleDeposit = async () => {
+    if (!address || !hasVault || !depositAmount) return;
+    const amount = parseUnits(depositAmount, 6);
 
-  // Refresh when user returns to the tab/window (common after funding from wallet app).
-  useEffect(() => {
-    const onFocus = () => refetchAll();
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") refetchAll();
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [refetchAll]);
-
-  useEffect(() => {
-    if (isTxError && txHash) {
-      setErrorMessage(txError?.message ?? "Transaction failed or reverted");
-      setActionLabel("");
-      setPendingApprovalFor(BigInt(0));
-      setTxHash(undefined);
+    // Check allowance
+    if (currentAllowance != null && currentAllowance < amount) {
+      setTxStatus("Need approval first...");
+      await handleApprove();
     }
-  }, [isTxError, txError, txHash]);
 
-  const isLoading = isWritePending || isTxConfirming;
-
-  // ─── Handlers ────────────────────────────────────────────────────
-  const handleApprove = useCallback(() => {
-    setErrorMessage("");
-    const amount = parseUSDC(depositAmount);
-    if (amount === BigInt(0)) return;
-    if (userUsdcBalance !== undefined && amount > (userUsdcBalance as bigint)) {
-      setErrorMessage("Insufficient USDC balance for this amount.");
-      return;
+    setTxStatus("Depositing...");
+    try {
+      await writeContractAsync({
+        address: addresses.vault as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: "deposit",
+        args: [amount],
+        chainId: polygon.id,
+      });
+      setTxStatus("Deposit confirmed!");
+      setDepositAmount("");
+      refetchAll();
+      setTimeout(() => setTxStatus(""), 3000);
+    } catch (err) {
+      setTxStatus(`Deposit failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
-    setActionLabel("Approving USDC...");
-    setPendingApprovalFor(amount);
-    writeContract(
-      { address: depositTokenAddress, abi: erc20Abi, functionName: "approve", args: [BASE_VAULT_ADDRESS, amount], chainId: POLYGON_CHAIN_ID },
-      {
-        onSuccess: (hash) => setTxHash(hash),
-        onError: (e) => {
-          setPendingApprovalFor(BigInt(0));
-          setActionLabel("");
-          setErrorMessage(e?.message ?? "Approval failed");
-        },
-      }
-    );
-  }, [depositAmount, writeContract, userUsdcBalance, depositTokenAddress]);
+  };
 
-  const handleDeposit = useCallback(() => {
-    setErrorMessage("");
-    const amount = parseUSDC(depositAmount);
-    if (amount === BigInt(0)) return;
-    if (userUsdcBalance !== undefined && amount > (userUsdcBalance as bigint)) {
-      setErrorMessage("Insufficient USDC balance for this amount.");
-      return;
+  const handleWithdraw = async () => {
+    if (!address || !hasVault || !withdrawAmount) return;
+    const amount = parseUnits(withdrawAmount, 6);
+    setTxStatus("Withdrawing...");
+    try {
+      await writeContractAsync({
+        address: addresses.vault as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: "withdraw",
+        args: [amount],
+        chainId: polygon.id,
+      });
+      setTxStatus("Withdrawal confirmed!");
+      setWithdrawAmount("");
+      refetchAll();
+      setTimeout(() => setTxStatus(""), 3000);
+    } catch (err) {
+      setTxStatus(`Withdrawal failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
-    setActionLabel("Depositing USDC...");
-    writeContract(
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "deposit", args: [amount], chainId: POLYGON_CHAIN_ID },
-      { onSuccess: (hash) => { setTxHash(hash); setDepositAmount(""); }, onError: (e) => { setActionLabel(""); setErrorMessage(e?.message ?? "Deposit failed"); } }
-    );
-  }, [depositAmount, writeContract, userUsdcBalance]);
+  };
 
-  const handleWithdraw = useCallback(() => {
-    setErrorMessage("");
-    const amount = parseUSDC(withdrawAmount);
-    if (amount === BigInt(0)) return;
-    setActionLabel("Withdrawing USDC...");
-    writeContract(
-      { address: BASE_VAULT_ADDRESS, abi: baseVaultAbi, functionName: "withdraw", args: [amount], chainId: POLYGON_CHAIN_ID },
-      { onSuccess: (hash) => { setTxHash(hash); setWithdrawAmount(""); }, onError: (e) => { setActionLabel(""); setErrorMessage(e?.message ?? "Withdraw failed"); } }
-    );
-  }, [withdrawAmount, writeContract]);
-
-  const depositParsed = depositAmount !== "" ? parseUSDC(depositAmount) : BigInt(0);
-  const allowanceOnchain = (usdcAllowance as bigint | undefined) ?? BigInt(0);
-  const effectiveAllowance = allowanceOnchain > approvedAmountLocal ? allowanceOnchain : approvedAmountLocal;
-  const needsApproval = depositAmount !== "" && effectiveAllowance < depositParsed;
-  const hasInsufficientUsdc =
-    depositAmount !== "" && userUsdcBalance !== undefined && depositParsed > (userUsdcBalance as bigint);
-  const maxDepositExact =
-    userUsdcBalance != null ? formatUnits(userUsdcBalance as bigint, USDC_DECIMALS) : "";
-
-  const clampDepositInput = useCallback(
-    (raw: string) => {
-      if (raw === "") return "";
-      const n = Number(raw);
-      if (!Number.isFinite(n) || n < 0) return "";
-      const parsed = parseUSDC(String(n));
-      if (userUsdcBalance != null && parsed > (userUsdcBalance as bigint)) {
-        return maxDepositExact;
-      }
-      return raw;
-    },
-    [userUsdcBalance, maxDepositExact]
-  );
-
-  const availableLiquidity =
-    totalAssets !== undefined && totalBorrowed !== undefined ? totalAssets - totalBorrowed : undefined;
+  const utilPct = utilizationBps != null ? Number(utilizationBps) / 100 : 0;
+  const utilColor = utilPct > 80 ? "text-red-400" : utilPct > 50 ? "text-[#f59e0b]" : "text-[#00ff88]";
+  const utilBarColor = utilPct > 80 ? "bg-red-400" : utilPct > 50 ? "bg-[#f59e0b]" : "bg-[#00ff88]";
 
   return (
-    <>
+    <div className="min-h-screen bg-terminal-gradient">
       <Navbar />
-      <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
-        {/* Warning */}
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
-          <p className="text-sm">
-            This vault is on <strong>Polygon PoS</strong> and uses <strong>real USDC.e</strong>. Use only small amounts for testing.
-          </p>
+      <main className="mx-auto max-w-4xl px-4 py-8">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-white mb-2">Polygon Vault</h1>
+          <p className="text-[#666] text-sm">Deposit USDC.e to earn yield from leveraged trading fees and borrow interest.</p>
         </div>
 
-        {isLegacyBaseVaultConfigured && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-200">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
-            <p className="text-sm">
-              Misconfiguration detected: <code>NEXT_PUBLIC_VAULT_ADDRESS</code> is set to the legacy Base vault.
-              Update it to your Polygon vault address in <code>frontend/.env.local</code> and restart the app.
-            </p>
-          </div>
-        )}
-        {isVaultAddressInvalid && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-200">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
-            <p className="text-sm">
-              Invalid <code>NEXT_PUBLIC_VAULT_ADDRESS</code> in <code>frontend/.env.local</code>. Make sure it is a
-              valid Polygon vault address (0x + 40 hex chars), then restart the app.
-            </p>
-          </div>
-        )}
-        {isDepositTokenMismatch && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 text-orange-200">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-400" />
-            <p className="text-sm">
-              Token config mismatch: vault accepts <code>{String(vaultAssetAddress)}</code>, while env USDC is{" "}
-              <code>{BASE_USDC_ADDRESS}</code>. Using vault token automatically for balance/approve/deposit.
-            </p>
+        {/* Network Guard */}
+        {isConnected && !isPolygon && (
+          <div className="mb-6 rounded-xl bg-[#f59e0b]/5 border border-[#f59e0b]/20 px-5 py-4 text-sm text-[#f59e0b]">
+            Please switch to Polygon network to interact with the vault.
           </div>
         )}
 
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neon/10">
-                <Vault className="h-5 w-5 text-neon" />
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Left: Vault Stats */}
+          <div className="lg:col-span-1 space-y-5">
+            {/* TVL Card */}
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5">
+                <div className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-1">Total Value Locked</div>
+                <div className="text-3xl font-bold text-white mono">${fmt(totalAssets)}</div>
               </div>
-              <h1 className="text-2xl font-bold text-white sm:text-3xl">Polygon USDC.e Vault</h1>
-            </div>
-            <p className="text-sm text-gray-400">Deposit USDC.e on Polygon to earn yield from leveraged trading</p>
-          </div>
-          <button onClick={refetchAll} className="rounded-lg p-2 text-gray-400 transition hover:bg-white/10 hover:text-white">
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
 
-        {/* Vault Stats Grid */}
-        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-4">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400"><BarChart3 className="h-3.5 w-3.5" /> TVL</div>
-            <p className="text-lg font-bold text-white">${fmtUSDC(totalAssets)}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-4">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400"><ArrowUpFromLine className="h-3.5 w-3.5" /> Borrowed</div>
-            <p className="text-lg font-bold text-white">${fmtUSDC(totalBorrowed)}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-4">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400"><Droplets className="h-3.5 w-3.5" /> Utilization</div>
-            <p className="text-lg font-bold text-white">{bpsToPercent(utilizationBps)}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-4">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400"><Droplets className="h-3.5 w-3.5" /> Available</div>
-            <p className="text-lg font-bold text-white">${fmtUSDC(availableLiquidity)}</p>
-          </div>
-        </div>
-
-        {/* Insurance + Protocol */}
-        <div className="mb-8 grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-4">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400"><ShieldCheck className="h-3.5 w-3.5" /> Insurance</div>
-            <p className="text-lg font-bold text-white">${fmtUSDC(insuranceBal)}</p>
-          </div>
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-4">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400"><Building2 className="h-3.5 w-3.5" /> Protocol</div>
-            <p className="text-lg font-bold text-white">${fmtUSDC(protocolBal)}</p>
-          </div>
-        </div>
-
-        {/* Network guard */}
-        {isWrongNetwork && (
-          <div className="mb-8 rounded-2xl border border-orange-500/40 bg-orange-500/10 p-6 text-center">
-            <p className="mb-4 text-orange-200">Please switch your wallet to Polygon PoS.</p>
-            <TxButton onClick={() => switchChain?.({ chainId: POLYGON_CHAIN_ID })} variant="primary">Switch to Polygon</TxButton>
-          </div>
-        )}
-
-        {!isConnected ? (
-          <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-12 text-center">
-            <Vault className="mx-auto mb-4 h-12 w-12 text-gray-600" />
-            <h2 className="mb-2 text-lg font-semibold text-white">Connect Your Wallet</h2>
-            <p className="text-sm text-gray-500">Connect to deposit or withdraw USDC.e on Polygon</p>
-          </div>
-        ) : !isWrongNetwork ? (
-          <div className="space-y-6">
-            {/* User balances */}
-            <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-6">
-              <h3 className="mb-4 flex items-center gap-2 font-semibold text-white">
-                <RefreshCw className="h-4 w-4 text-neon" /> Your Balances
-              </h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">USDC.e Balance</span>
-                  <span className="font-medium text-white">${fmtUSDC(userUsdcBalance as bigint | undefined)}</span>
+              {/* Utilization */}
+              <div className="px-5 py-4 border-b border-white/5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-[#888]">Utilization</span>
+                  <span className={`text-sm font-bold mono ${utilColor}`}>{fmtPct(utilizationBps)}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Vault shares (bUSDC)</span>
-                  <span className="font-medium text-white">{fmtUSDC(userShares as bigint | undefined)} bUSDC</span>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-700 ${utilBarColor}`} style={{ width: `${Math.min(utilPct, 100)}%` }} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Share value</span>
-                  <span className="font-medium text-neon">${fmtUSDC(shareValue as bigint | undefined)}</span>
+              </div>
+
+              {/* Stats */}
+              <div className="divide-y divide-white/5">
+                <div className="px-5 py-3 flex justify-between">
+                  <span className="text-xs text-[#666]">Borrowed</span>
+                  <span className="text-xs font-semibold text-white mono">${fmt(totalBorrowed)}</span>
+                </div>
+                <div className="px-5 py-3 flex justify-between">
+                  <span className="text-xs text-[#666]">Insurance</span>
+                  <span className="text-xs font-semibold text-white mono">${fmt(insuranceBal)}</span>
+                </div>
+                <div className="px-5 py-3 flex justify-between">
+                  <span className="text-xs text-[#666]">Protocol</span>
+                  <span className="text-xs font-semibold text-[#888] mono">${fmt(protocolBal)}</span>
                 </div>
               </div>
             </div>
 
-            {/* Deposit */}
-            <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-6">
-              <h3 className="mb-4 flex items-center gap-2 font-semibold text-white">
-                <ArrowDownToLine className="h-4 w-4 text-neon" /> Deposit USDC
-              </h3>
-              <div className="mb-4">
-                <div className="flex items-center gap-2 rounded-xl border border-gray-700 bg-black/40 px-4 py-3">
-                  <input type="number" placeholder="0.00" value={depositAmount} onChange={(e) => setDepositAmount(clampDepositInput(e.target.value))}
-                    className="flex-1 bg-transparent text-lg font-medium text-white outline-none placeholder:text-gray-600" />
-                  <span className="text-sm font-medium text-gray-400">USDC</span>
+            {/* User Balance Card */}
+            {isConnected && (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-1">Your Balance</div>
                 </div>
-                <button type="button" onClick={() => setDepositAmount(maxDepositExact)}
-                  className="mt-1 text-xs text-neon/70 transition hover:text-neon">Use Max Available</button>
-                <p className="mt-1 text-xs text-gray-500">Available in wallet: ${fmtUSDC(userUsdcBalance as bigint | undefined)}</p>
+                <div className="divide-y divide-white/5">
+                  <div className="px-5 py-3 flex justify-between">
+                    <span className="text-xs text-[#666]">Wallet USDC.e</span>
+                    <span className="text-xs font-semibold text-white mono">${walletBalance.toFixed(2)}</span>
+                  </div>
+                  <div className="px-5 py-3 flex justify-between">
+                    <span className="text-xs text-[#666]">Vault Shares</span>
+                    <span className="text-xs font-semibold text-white mono">{shares ? formatUnits(shares, 6) : "0"}</span>
+                  </div>
+                  <div className="px-5 py-3 flex justify-between">
+                    <span className="text-xs text-[#666]">Withdrawable</span>
+                    <span className="text-xs font-semibold text-[#00ff88] mono">${maxWithdrawNum.toFixed(2)}</span>
+                  </div>
+                </div>
               </div>
-              {needsApproval ? (
-                <TxButton onClick={handleApprove} loading={isLoading && actionLabel.includes("Approving")} disabled={isLegacyBaseVaultConfigured || isVaultAddressInvalid || hasInsufficientUsdc} className="w-full">Approve USDC</TxButton>
-              ) : (
-                <TxButton onClick={handleDeposit} loading={isLoading && actionLabel.includes("Depositing")}
-                  disabled={isLegacyBaseVaultConfigured || isVaultAddressInvalid || hasInsufficientUsdc || !depositAmount || parseFloat(depositAmount) <= 0} className="w-full">Deposit</TxButton>
-              )}
-              {hasInsufficientUsdc && (
-                <p className="mt-2 text-xs text-red-300">Insufficient USDC balance for this deposit amount.</p>
-              )}
-            </div>
+            )}
+          </div>
 
-            {/* Withdraw */}
-            <div className="rounded-2xl border border-gray-800/50 bg-gray-900/30 p-6">
-              <h3 className="mb-4 flex items-center gap-2 font-semibold text-white">
-                <ArrowUpFromLine className="h-4 w-4 text-orange-400" /> Withdraw USDC
-              </h3>
-              <div className="mb-4">
-                <div className="flex items-center gap-2 rounded-xl border border-gray-700 bg-black/40 px-4 py-3">
-                  <input type="number" placeholder="0.00" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)}
-                    className="flex-1 bg-transparent text-lg font-medium text-white outline-none placeholder:text-gray-600" />
-                  <span className="text-sm font-medium text-gray-400">USDC</span>
-                </div>
-                <button type="button" onClick={() => setWithdrawAmount(shareValue != null ? formatUnits(shareValue as bigint, USDC_DECIMALS) : "")}
-                  className="mt-1 text-xs text-orange-400/70 transition hover:text-orange-400">MAX</button>
+          {/* Right: Deposit/Withdraw */}
+          <div className="lg:col-span-2">
+            <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
+              {/* Tabs */}
+              <div className="flex border-b border-white/5">
+                <button
+                  onClick={() => setActiveTab("deposit")}
+                  className={`flex-1 py-4 text-sm font-semibold transition-all ${
+                    activeTab === "deposit"
+                      ? "text-[#00ff88] border-b-2 border-[#00ff88] bg-[#00ff88]/[0.03]"
+                      : "text-[#666] hover:text-[#999]"
+                  }`}
+                >
+                  Deposit
+                </button>
+                <button
+                  onClick={() => setActiveTab("withdraw")}
+                  className={`flex-1 py-4 text-sm font-semibold transition-all ${
+                    activeTab === "withdraw"
+                      ? "text-[#00ff88] border-b-2 border-[#00ff88] bg-[#00ff88]/[0.03]"
+                      : "text-[#666] hover:text-[#999]"
+                  }`}
+                >
+                  Withdraw
+                </button>
               </div>
-              <TxButton onClick={handleWithdraw} loading={isLoading && actionLabel.includes("Withdrawing")}
-                disabled={isLegacyBaseVaultConfigured || isVaultAddressInvalid || !withdrawAmount || parseFloat(withdrawAmount) <= 0} variant="secondary" className="w-full">Withdraw</TxButton>
+
+              <div className="p-6">
+                {activeTab === "deposit" ? (
+                  <div className="space-y-5">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium">Amount (USDC.e)</label>
+                        <button
+                          onClick={() => setDepositAmount(walletBalance.toFixed(2))}
+                          className="text-[10px] text-[#00ff88] hover:text-[#33ffaa] font-medium transition-colors"
+                        >
+                          Max: ${walletBalance.toFixed(2)}
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#555] text-sm">$</span>
+                        <input
+                          type="number"
+                          value={depositAmount}
+                          onChange={(e) => setDepositAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full input-dark pl-8 pr-4 py-3.5 text-sm mono"
+                          step="0.01"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+
+                    <TxButton
+                      onClick={handleDeposit}
+                      loading={isPending}
+                      disabled={!isConnected || !isPolygon || !depositAmount || parseFloat(depositAmount) <= 0 || parseFloat(depositAmount) > walletBalance}
+                      className="w-full"
+                    >
+                      {!isConnected ? "Connect Wallet" : !isPolygon ? "Switch to Polygon" : "Deposit USDC.e"}
+                    </TxButton>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium">Amount (USDC.e)</label>
+                        <button
+                          onClick={() => setWithdrawAmount(maxWithdrawNum.toFixed(2))}
+                          className="text-[10px] text-[#00ff88] hover:text-[#33ffaa] font-medium transition-colors"
+                        >
+                          Max: ${maxWithdrawNum.toFixed(2)}
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#555] text-sm">$</span>
+                        <input
+                          type="number"
+                          value={withdrawAmount}
+                          onChange={(e) => setWithdrawAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full input-dark pl-8 pr-4 py-3.5 text-sm mono"
+                          step="0.01"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+
+                    <TxButton
+                      onClick={handleWithdraw}
+                      loading={isPending}
+                      disabled={!isConnected || !isPolygon || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > maxWithdrawNum}
+                      variant="secondary"
+                      className="w-full"
+                    >
+                      {!isConnected ? "Connect Wallet" : !isPolygon ? "Switch to Polygon" : "Withdraw USDC.e"}
+                    </TxButton>
+                  </div>
+                )}
+
+                {/* Status Message */}
+                {txStatus && (
+                  <div className={`mt-4 rounded-lg px-4 py-2.5 text-xs border ${
+                    txStatus.includes("confirmed") || txStatus.includes("Approval confirmed")
+                      ? "bg-[#00ff88]/5 border-[#00ff88]/20 text-[#00ff88]"
+                      : txStatus.includes("failed")
+                      ? "bg-red-500/5 border-red-500/20 text-red-400"
+                      : "bg-[#3b82f6]/5 border-[#3b82f6]/20 text-[#3b82f6]"
+                  }`}>
+                    {txStatus}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        ) : null}
-
-        {/* Tx status */}
-        {(isLoading || isTxSuccess) && (
-          <div className={`mt-6 rounded-xl border p-4 text-sm ${isTxSuccess ? "border-neon/30 bg-neon/5 text-neon" : "border-yellow-500/30 bg-yellow-500/5 text-yellow-400"}`}>
-            {isTxConfirming ? `Confirming: ${actionLabel}` : isTxSuccess ? "Transaction confirmed!" : actionLabel}
-          </div>
-        )}
-
-        {errorMessage && (
-          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{errorMessage}</div>
-        )}
+        </div>
       </main>
-    </>
+    </div>
   );
 }
