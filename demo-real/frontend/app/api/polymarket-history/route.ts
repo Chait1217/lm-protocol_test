@@ -1,77 +1,60 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-/**
- * GET /api/polymarket-history?interval=1d&fidelity=60
- *
- * VERIFIED WORKING (tested 2026-03-05):
- *   GET https://clob.polymarket.com/prices-history?market={YES_TOKEN}&interval=1d&fidelity=60
- *   Response: { "history": [{ "t": 1772665221, "p": 0.385 }, ...] }
- *
- * Tested results:
- *   interval=1h  fidelity=60  → 2 points
- *   interval=1d  fidelity=60  → 25 points
- *   interval=1w  fidelity=60  → 169 points
- *   interval=max fidelity=100 → 404 points
- */
-
-const YES_TOKEN = "38397507750621893057346880033441136112987238933685677349709401910643842844855";
+const YES_TOKEN =
+  "38397507750621893057346880033441136112987238933685677349709401910643842844855";
 const CLOB = "https://clob.polymarket.com";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const interval = searchParams.get("interval") || "1d";
-  const fidelity = searchParams.get("fidelity") || "60";
+// Verified working intervals and fidelity values:
+// interval=6h, fidelity=60 → 7 points
+// interval=1d, fidelity=60 → 25 points
+// interval=1w, fidelity=60 → 169 points
+// interval=max, fidelity=100 → 403 points
 
+const VALID_INTERVALS: Record<string, number> = {
+  "6h": 60,
+  "1d": 60,
+  "1w": 60,
+  max: 100,
+};
+
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const interval = searchParams.get("interval") || "1d";
+    const fidelity = VALID_INTERVALS[interval] ?? 60;
+
     const url = `${CLOB}/prices-history?market=${YES_TOKEN}&interval=${interval}&fidelity=${fidelity}`;
-    const res = await fetch(url, { cache: "no-store" });
+
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
 
     if (!res.ok) {
-      const text = await res.text();
       return NextResponse.json(
-        { success: false, error: `CLOB returned ${res.status}: ${text}` },
+        { success: false, error: `CLOB returned ${res.status}`, history: [] },
         { status: 502 }
       );
     }
 
     const data = await res.json();
-    // Response format: { history: [{ t: number, p: number }, ...] }
-    const history = data?.history || [];
 
-    // Also fetch current midpoint to append as latest data point
-    let currentPrice: number | null = null;
-    try {
-      const midRes = await fetch(`${CLOB}/midpoint?token_id=${YES_TOKEN}`, { cache: "no-store" });
-      if (midRes.ok) {
-        const midData = await midRes.json();
-        currentPrice = midData?.mid ? parseFloat(midData.mid) : null;
-      }
-    } catch { /* ignore */ }
-
-    // Append current price as latest point if we have it
-    if (currentPrice != null) {
-      const now = Math.floor(Date.now() / 1000);
-      const lastPoint = history.length > 0 ? history[history.length - 1] : null;
-      // Only append if different from last point or more than 10s newer
-      if (!lastPoint || now - lastPoint.t > 10) {
-        history.push({ t: now, p: currentPrice });
-      }
-    }
+    // Verified response format: { history: [{ t: 1772665221, p: 0.385 }, ...] }
+    const history: { t: number; p: number }[] = data?.history ?? [];
 
     return NextResponse.json({
       success: true,
-      history,
       interval,
-      fidelity: parseInt(fidelity),
-      points: history.length,
+      fidelity,
+      count: history.length,
+      history,
     });
   } catch (err) {
-    console.error("polymarket-history error:", err);
     return NextResponse.json(
-      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
+      { success: false, error: String(err), history: [] },
       { status: 500 }
     );
   }

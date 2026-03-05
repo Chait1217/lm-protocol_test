@@ -7,29 +7,17 @@ interface TradingHeaderProps {
   bestAsk: number | null;
   oneDayChange: number;
   spread: number | null;
-  volume24hr: number | null;
+  volume24hr?: number | null;
   lastTradePrice?: number | null;
-  traderWallet?: string;
+  lastTradeSide?: string | null;
 }
 
-const MARKET_URL = "https://polymarket.com/event/will-the-iranian-regime-fall-by-june-30";
-
-function pct(v: number | null): string {
-  if (v == null) return "—";
-  return (v * 100).toFixed(1) + "%";
-}
-
-function cents(v: number | null): string {
-  if (v == null) return "—";
-  return (v * 100).toFixed(1) + "¢";
-}
-
-function fmtVol(v: number | null): string {
-  if (v == null) return "—";
-  if (v >= 1_000_000) return "$" + (v / 1_000_000).toFixed(1) + "M";
-  if (v >= 1_000) return "$" + (v / 1_000).toFixed(1) + "K";
-  return "$" + v.toFixed(0);
-}
+const POLYMARKET_URL =
+  "https://polymarket.com/event/will-the-iranian-regime-fall-by-june-30";
+const TRADER_WALLET =
+  process.env.NEXT_PUBLIC_TRADER_WALLET ||
+  "0x6CcBdc898016F2E49ada47496696d635b8D4fB31";
+const PORTFOLIO_URL = `https://polymarket.com/portfolio?address=${TRADER_WALLET}`;
 
 export default function TradingHeader({
   yesProbability,
@@ -40,88 +28,136 @@ export default function TradingHeader({
   spread,
   volume24hr,
   lastTradePrice,
-  traderWallet,
+  lastTradeSide,
 }: TradingHeaderProps) {
-  const changeColor = oneDayChange >= 0 ? "text-[#00ff88]" : "text-red-400";
-  const changeSign = oneDayChange >= 0 ? "+" : "";
-  const portfolioUrl = traderWallet
-    ? `https://polymarket.com/portfolio?address=${traderWallet}`
-    : null;
+  const changeColor =
+    oneDayChange > 0
+      ? "text-emerald-400"
+      : oneDayChange < 0
+        ? "text-red-400"
+        : "text-gray-400";
+  const changeSign = oneDayChange > 0 ? "+" : "";
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden">
-      {/* Title Row */}
-      <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse" />
-          <a
-            href={MARKET_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-semibold text-white hover:text-[#00ff88] transition-colors flex items-center gap-1.5"
-          >
-            Will the Iranian regime fall by June 30?
-            <svg className="w-3.5 h-3.5 text-[#666]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </a>
-        </div>
-        <div className="flex items-center gap-3">
-          {portfolioUrl && (
+    <div className="border-b border-emerald-900/30 bg-[#0a0a0a]/80 backdrop-blur-sm">
+      <div className="mx-auto max-w-7xl px-4 py-3">
+        {/* Market title + links */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <a
-              href={portfolioUrl}
+              href={POLYMARKET_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] text-[#00ff88] hover:text-[#33ffaa] border border-[#00ff88]/20 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1"
+              className="text-white font-semibold text-sm hover:text-emerald-400 transition-colors"
             >
-              View on Polymarket
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
+              Will the Iranian regime fall by June 30?
+              <span className="ml-1.5 text-gray-600 text-xs">↗</span>
             </a>
-          )}
-          <span className={`text-xs font-semibold mono ${changeColor}`}>
-            {changeSign}{(oneDayChange * 100).toFixed(1)}% 24h
-          </span>
-        </div>
-      </div>
-
-      {/* Data Row */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-white/5">
-        {/* YES Price */}
-        <div className="px-4 py-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#666] font-medium mb-0.5">YES</div>
-          <div className="text-sm font-bold text-[#00ff88] mono">{pct(yesProbability)}</div>
+          </div>
+          <a
+            href={PORTFOLIO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-gray-500 hover:text-emerald-400 transition-colors"
+          >
+            View on Polymarket ↗
+          </a>
         </div>
 
-        {/* NO Price */}
-        <div className="px-4 py-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#666] font-medium mb-0.5">NO</div>
-          <div className="text-sm font-bold text-red-400 mono">{pct(noProbability)}</div>
-        </div>
+        {/* Data grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          {/* YES Price */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              YES
+            </div>
+            <div className="text-emerald-400 font-bold text-lg font-mono">
+              {yesProbability != null ? `${yesProbability}%` : "—"}
+            </div>
+          </div>
 
-        {/* Best Bid */}
-        <div className="px-4 py-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#666] font-medium mb-0.5">Best Bid</div>
-          <div className="text-sm font-bold text-white mono">{cents(bestBid)}</div>
-        </div>
+          {/* NO Price */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              NO
+            </div>
+            <div className="text-red-400 font-bold text-lg font-mono">
+              {noProbability != null ? `${noProbability}%` : "—"}
+            </div>
+          </div>
 
-        {/* Best Ask */}
-        <div className="px-4 py-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#666] font-medium mb-0.5">Best Ask</div>
-          <div className="text-sm font-bold text-white mono">{cents(bestAsk)}</div>
-        </div>
+          {/* Best Bid */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              Best Bid
+            </div>
+            <div className="text-white font-semibold text-sm font-mono">
+              {bestBid != null ? `${(bestBid * 100).toFixed(1)}¢` : "—"}
+            </div>
+          </div>
 
-        {/* Spread */}
-        <div className="px-4 py-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#666] font-medium mb-0.5">Spread</div>
-          <div className="text-sm font-bold text-[#f59e0b] mono">{cents(spread)}</div>
-        </div>
+          {/* Best Ask */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              Best Ask
+            </div>
+            <div className="text-white font-semibold text-sm font-mono">
+              {bestAsk != null ? `${(bestAsk * 100).toFixed(1)}¢` : "—"}
+            </div>
+          </div>
 
-        {/* Volume */}
-        <div className="px-4 py-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#666] font-medium mb-0.5">24h Vol</div>
-          <div className="text-sm font-bold text-white mono">{fmtVol(volume24hr)}</div>
+          {/* Spread */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              Spread
+            </div>
+            <div className="text-white font-semibold text-sm font-mono">
+              {spread != null ? `${(spread * 100).toFixed(1)}¢` : "—"}
+            </div>
+          </div>
+
+          {/* 24h Change */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              24h Chg
+            </div>
+            <div className={`font-semibold text-sm font-mono ${changeColor}`}>
+              {changeSign}
+              {(oneDayChange * 100).toFixed(1)}%
+            </div>
+          </div>
+
+          {/* Volume */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              24h Vol
+            </div>
+            <div className="text-white font-semibold text-sm font-mono">
+              {volume24hr != null
+                ? `$${(volume24hr / 1000).toFixed(0)}K`
+                : "—"}
+            </div>
+          </div>
+
+          {/* Last Trade */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+              Last Trade
+            </div>
+            <div className="text-white font-semibold text-sm font-mono">
+              {lastTradePrice != null
+                ? `${(lastTradePrice * 100).toFixed(1)}¢`
+                : "—"}
+              {lastTradeSide && (
+                <span
+                  className={`ml-1 text-[10px] ${lastTradeSide === "BUY" ? "text-emerald-400" : "text-red-400"}`}
+                >
+                  {lastTradeSide}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
