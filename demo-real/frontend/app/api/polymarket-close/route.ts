@@ -1,114 +1,93 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 /**
  * POST /api/polymarket-close
  *
- * Close a position by selling shares.
- * Accepts either:
- *   - orderId (to cancel an open order first)
- *   - asset + size (to sell shares directly from a known position)
+ * Closes a REAL position on Polymarket by placing a SELL order via @polymarket/clob-client.
  *
- * Uses GTC limit sell at aggressive price, with FAK fallback.
+ * From the Polymarket docs (verified 2026-03-05):
+ *   - SELL orders: amount = number of shares to sell
+ *   - Market order (FOK): client.createMarketOrder({ tokenID, side: SELL, amount: shares, price: worstPrice })
+ *   - Limit order (GTC): client.createAndPostOrder({ tokenID, price, size: shares, side: SELL })
+ *   - Strategy: Try GTC at aggressive price first, then FAK, then FOK
+ *
+ * Accepts either:
+ *   - { asset, size, side } from positions panel (close specific position)
+ *   - { orderId, side, notional } from leverage box (close trade opened in session)
  */
 
+const YES_TOKEN = "38397507750621893057346880033441136112987238933685677349709401910643842844855";
+const NO_TOKEN  = "95949957895141858444199258452803633110472396604599808168788254125381075552218";
+const TICK_SIZE = "0.01";
+const NEG_RISK  = false;
 const CLOB_HOST = "https://clob.polymarket.com";
-const CHAIN_ID = 137;
+const CHAIN_ID  = 137;
 
-type TickSize = "0.1" | "0.01" | "0.001" | "0.0001";
-
-function toTickSize(s: string): TickSize {
-  if (s === "0.1" || s === "0.01" || s === "0.001" || s === "0.0001") return s as TickSize;
-  return "0.01";
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      wallet,
-      orderId,
-      side,
-      asset,         // token ID of the position to close
-      size,          // number of shares to sell
-      notional,
-      borrowAmount,
-      negativeRisk,
-      conditionId,
-    } = body;
-
-    if (!wallet) {
-      return NextResponse.json(
-        { success: false, error: "Missing wallet address" },
-        { status: 400 }
-      );
-    }
+    const { asset, size, side, orderId, notional } = body;
 
     const privateKey = process.env.POLYMARKET_PRIVATE_KEY;
     if (!privateKey) {
-      return NextResponse.json(
-        { success: false, error: "POLYMARKET_PRIVATE_KEY not configured" },
-        { status: 500 }
-      );
+      return NextResponse.json({ success: false, error: "POLYMARKET_PRIVATE_KEY not set" }, { status: 500 });
     }
 
-    // Determine the token ID to sell
-    const tokenId = asset || (side === "YES"
-      ? (process.env.POLYMARKET_TOKEN_YES || "38397507750621893057346880033441136112987238933685677349709401910643842844855")
-      : (process.env.POLYMARKET_TOKEN_NO || "95949957895141858444199258452803633110472396604599808168788254125381075552218"));
-
-    // Determine tick size — try to fetch from CLOB, fallback to env or 0.01
-    let tickSizeStr = process.env.POLYMARKET_TICK_SIZE || "0.01";
-    try {
-      const tickRes = await fetch(`${CLOB_HOST}/tick-size?token_id=${tokenId}`);
-      if (tickRes.ok) {
-        const tickData = await tickRes.json();
-        if (tickData.minimum_tick_size) tickSizeStr = tickData.minimum_tick_size;
-      }
-    } catch { /* use default */ }
-
-    const tickNum = parseFloat(tickSizeStr);
-    const orderTickSize = toTickSize(tickSizeStr);
-    const isNegRisk = negativeRisk ?? (process.env.POLYMARKET_NEG_RISK === "true");
-    const steps: string[] = [];
-
-    const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
+    // Dynamic imports
+    const { ClobClient, Side: ClobSide, OrderType } = await import("@polymarket/clob-client");
     const { Wallet } = await import("ethers");
 
     const signer = new Wallet(privateKey);
-    const tempClient = new ClobClient(CLOB_HOST, CHAIN_ID, signer);
-    const apiCreds = await tempClient.createOrDeriveApiKey();
 
+    // Derive API credentials
+    const tempClient = new ClobClient(CLOB_HOST, CHAIN_ID, signer);
+    let apiCreds;
+    try {
+      apiCreds = await tempClient.createOrDeriveApiKey();
+    } catch (credErr: any) {
+      return NextResponse.json({
+        success: false,
+        error: `API key derivation failed: ${credErr.message}`,
+      }, { status: 500 });
+    }
+
+    // Initialize trading client
     const client = new ClobClient(
       CLOB_HOST,
       CHAIN_ID,
       signer,
       apiCreds,
-      0,
+      0, // EOA
       signer.address,
     );
 
-    // Cancel existing order if provided
-    if (orderId) {
-      try {
-        await client.cancelOrder(orderId);
-        steps.push(`Cancelled open order: ${orderId}`);
-      } catch {
-        steps.push(`Order ${orderId} already filled/cancelled`);
-      }
-    }
+    // Determine token ID and shares to sell
+    let tokenID: string;
+    let sharesToSell: number;
 
-    // Determine shares to sell
-    let sharesToSell = size ? parseFloat(String(size)) : 0;
-
-    // If no size provided, estimate from notional
-    if (sharesToSell <= 0 && notional) {
+    if (asset) {
+      // Called from positions panel with specific asset token ID
+      tokenID = asset;
+      sharesToSell = parseFloat(size);
+    } else {
+      // Called from leverage box — determine token from side
+      tokenID = side === "YES" ? YES_TOKEN : NO_TOKEN;
+      // We need to figure out how many shares we have
+      // If notional and we know the entry price, estimate shares
+      // But better to check actual position
       try {
-        const priceRes = await fetch(`${CLOB_HOST}/price?token_id=${tokenId}&side=SELL`);
-        const priceData = await priceRes.json();
-        const sellPrice = parseFloat(priceData.price || "0.5");
-        sharesToSell = Math.floor((notional / sellPrice) * 100) / 100;
+        const posRes = await fetch(
+          `https://data-api.polymarket.com/positions?user=${signer.address}&asset=${tokenID}&sizeThreshold=0`,
+          { cache: "no-store" }
+        );
+        const positions = await posRes.json();
+        if (Array.isArray(positions) && positions.length > 0) {
+          sharesToSell = parseFloat(positions[0].size || "0");
+        } else {
+          sharesToSell = 0;
+        }
       } catch {
-        sharesToSell = Math.floor(notional * 2);
+        sharesToSell = 0;
       }
     }
 
@@ -119,94 +98,103 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get current sell price
-    let sellPrice: number;
+    // Get current bid price (what we'd get for selling)
+    let bidPrice: number;
     try {
-      const priceRes = await fetch(`${CLOB_HOST}/price?token_id=${tokenId}&side=SELL`);
+      const priceRes = await fetch(`${CLOB_HOST}/price?token_id=${tokenID}&side=BUY`, { cache: "no-store" });
       const priceData = await priceRes.json();
-      sellPrice = parseFloat(priceData.price || "0.5");
+      bidPrice = parseFloat(priceData.price);
     } catch {
-      sellPrice = 0.5;
+      bidPrice = 0.01;
     }
 
-    // Aggressive price: 5% below market, rounded to tick
-    const aggressivePrice = Math.max(
-      tickNum,
-      Math.floor((sellPrice * 0.95) / tickNum) * tickNum
-    );
+    console.log(`[CLOSE] Selling ${sharesToSell} shares of token ${tokenID.slice(0, 20)}... at bid ~${bidPrice}`);
 
-    // Round shares down to 2 decimal places
-    sharesToSell = Math.floor(sharesToSell * 100) / 100;
+    // Round shares down to avoid selling more than we have
+    const roundedShares = Math.floor(sharesToSell * 100) / 100;
 
-    steps.push(`Selling ${sharesToSell} shares @ $${aggressivePrice.toFixed(4)} (market: $${sellPrice.toFixed(4)})`);
+    // STRATEGY 1: GTC limit sell at bid price (most reliable)
+    // This places a resting order that will get filled
+    const tickNum = parseFloat(TICK_SIZE);
+    const sellPrice = Math.max(tickNum, Math.round(bidPrice / tickNum) * tickNum);
 
-    // Try GTC first, then FAK
     let closeResponse: any = null;
     let closeMethod = "";
 
+    // Try GTC limit sell first
     try {
+      console.log(`[CLOSE] Strategy 1: GTC limit SELL at ${sellPrice} for ${roundedShares} shares`);
       closeResponse = await client.createAndPostOrder(
-        { tokenID: tokenId, price: aggressivePrice, size: sharesToSell, side: Side.SELL },
-        { tickSize: orderTickSize, negRisk: isNegRisk },
+        {
+          tokenID,
+          price: sellPrice,
+          size: roundedShares,
+          side: ClobSide.SELL,
+        },
+        { tickSize: TICK_SIZE, negRisk: NEG_RISK },
         OrderType.GTC,
       );
       closeMethod = "GTC";
-      steps.push(`GTC sell order placed: ${closeResponse.orderID || "submitted"}, status: ${closeResponse.status || "pending"}`);
-    } catch (gtcErr) {
-      steps.push(`GTC sell failed: ${gtcErr instanceof Error ? gtcErr.message : "unknown"}`);
+      console.log("[CLOSE] GTC response:", JSON.stringify(closeResponse));
+    } catch (gtcErr: any) {
+      console.error("[CLOSE] GTC failed:", gtcErr.message);
+
+      // Try FAK (partial fill) as fallback
       try {
-        const signedOrder = await client.createOrder(
-          { tokenID: tokenId, price: aggressivePrice, size: sharesToSell, side: Side.SELL },
-          { tickSize: orderTickSize, negRisk: isNegRisk },
+        console.log(`[CLOSE] Strategy 2: FAK market SELL for ${roundedShares} shares`);
+        const fakOrder = await client.createMarketOrder(
+          {
+            tokenID,
+            side: ClobSide.SELL,
+            amount: roundedShares,
+            price: Math.max(tickNum, sellPrice - 0.05), // 5% slippage
+          },
+          { tickSize: TICK_SIZE, negRisk: NEG_RISK },
         );
-        closeResponse = await client.postOrder(signedOrder, OrderType.FAK);
+        closeResponse = await client.postOrder(fakOrder, OrderType.FAK);
         closeMethod = "FAK";
-        steps.push(`FAK sell order placed: ${closeResponse.orderID || "submitted"}`);
-      } catch (fakErr) {
-        steps.push(`All sell methods failed: ${fakErr instanceof Error ? fakErr.message : "unknown"}`);
-        return NextResponse.json({
-          success: false,
-          error: "Could not close position. Try again when more liquidity is available.",
-          steps,
-          details: { sharesToSell, sellPrice, aggressivePrice, tokenId },
-        }, { status: 500 });
-      }
-    }
+        console.log("[CLOSE] FAK response:", JSON.stringify(closeResponse));
+      } catch (fakErr: any) {
+        console.error("[CLOSE] FAK failed:", fakErr.message);
 
-    if (closeResponse?.status === "rejected" || closeResponse?.errorMsg) {
-      return NextResponse.json({
-        success: false,
-        error: `Close order rejected: ${closeResponse.errorMsg || "unknown"}`,
-        steps,
-      }, { status: 400 });
-    }
-
-    // Repay vault borrow if applicable
-    if (borrowAmount && borrowAmount > 0) {
-      try {
-        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/vault-repay`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet, amount: borrowAmount }),
-        });
-        steps.push(`Vault repayment initiated: $${borrowAmount.toFixed(2)}`);
-      } catch {
-        steps.push("Vault repayment handled by MarginEngine on-chain");
+        // Try FOK as last resort
+        try {
+          console.log(`[CLOSE] Strategy 3: FOK market SELL for ${roundedShares} shares`);
+          const fokOrder = await client.createMarketOrder(
+            {
+              tokenID,
+              side: ClobSide.SELL,
+              amount: roundedShares,
+              price: tickNum, // worst case price
+            },
+            { tickSize: TICK_SIZE, negRisk: NEG_RISK },
+          );
+          closeResponse = await client.postOrder(fokOrder, OrderType.FOK);
+          closeMethod = "FOK";
+          console.log("[CLOSE] FOK response:", JSON.stringify(closeResponse));
+        } catch (fokErr: any) {
+          return NextResponse.json({
+            success: false,
+            error: `All close strategies failed. GTC: ${gtcErr.message}. FAK: ${fakErr.message}. FOK: ${fokErr.message}`,
+          }, { status: 500 });
+        }
       }
     }
 
     return NextResponse.json({
       success: true,
-      closeOrderId: closeResponse?.orderID,
-      closeMethod,
-      sellPrice: aggressivePrice.toString(),
-      sharesSold: sharesToSell.toString(),
-      steps,
+      orderId: closeResponse?.orderID || null,
+      status: closeResponse?.status || "submitted",
+      method: closeMethod,
+      sharesSold: roundedShares,
+      sellPrice: sellPrice.toFixed(4),
+      tokenID,
+      message: `Position close order placed via ${closeMethod}`,
     });
   } catch (err) {
-    console.error("Close trade error:", err);
+    console.error("[CLOSE] Unexpected error:", err);
     return NextResponse.json(
-      { success: false, error: err instanceof Error ? err.message : "Internal server error" },
+      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 }
     );
   }

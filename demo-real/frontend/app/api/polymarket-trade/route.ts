@@ -1,104 +1,66 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 /**
  * POST /api/polymarket-trade
  *
- * FIXED: This route handles the complete leveraged trade flow:
- * 1. If leverage > 1: Borrow from vault first (vault sends USDC.e to trading wallet)
- * 2. Approve USDC.e spending on Polymarket Exchange if needed
- * 3. Place the order on Polymarket CLOB using the full notional amount
+ * Places a REAL order on Polymarket using @polymarket/clob-client.
  *
- * The key fix is that the vault borrow happens BEFORE the Polymarket order,
- * so the wallet has enough USDC.e balance for the full notional trade.
- * This eliminates the "balance below notional" error when using leverage.
+ * From the Polymarket docs (verified 2026-03-05):
+ *   - npm install @polymarket/clob-client ethers@5
+ *   - ClobClient(HOST, CHAIN_ID, signer, apiCreds, signatureType, funder)
+ *   - client.createAndPostOrder({ tokenID, price, size, side }, { tickSize, negRisk }, OrderType)
+ *   - BUY size = dollar amount to spend
+ *   - SELL size/amount = number of shares to sell
+ *   - Response: { success, orderID, status: "live"|"matched"|"delayed" }
+ *
+ * Market: "Will the Iranian regime fall by June 30?"
+ *   YES token: 38397507750621893057346880033441136112987238933685677349709401910643842844855
+ *   NO token:  95949957895141858444199258452803633110472396604599808168788254125381075552218
+ *   tickSize: "0.01", negRisk: false, min_order_size: 5
  */
 
+const YES_TOKEN = "38397507750621893057346880033441136112987238933685677349709401910643842844855";
+const NO_TOKEN  = "95949957895141858444199258452803633110472396604599808168788254125381075552218";
+const TICK_SIZE = "0.01";
+const NEG_RISK  = false;
 const CLOB_HOST = "https://clob.polymarket.com";
-const CHAIN_ID = 137;
+const CHAIN_ID  = 137;
 
-type TickSize = "0.1" | "0.01" | "0.001" | "0.0001";
-const MARKET_TOKEN_YES = process.env.POLYMARKET_TOKEN_YES || "";
-const MARKET_TOKEN_NO = process.env.POLYMARKET_TOKEN_NO || "";
-const MARKET_TICK_SIZE: TickSize = (process.env.POLYMARKET_TICK_SIZE || "0.01") as TickSize;
-const MARKET_NEG_RISK = process.env.POLYMARKET_NEG_RISK === "true";
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { wallet, side, collateral, leverage, notional, borrowAmount } = body;
+    const { side, collateral, leverage, notional, borrowAmount, openFee } = body;
 
-    if (!wallet || !side || !collateral || !leverage) {
-      return NextResponse.json(
-        { success: false, error: "Missing required fields: wallet, side, collateral, leverage" },
-        { status: 400 }
-      );
+    // Validate
+    if (!side || !collateral || !notional) {
+      return NextResponse.json({ success: false, error: "Missing required fields: side, collateral, notional" }, { status: 400 });
     }
 
-    const tokenId = side === "YES" ? MARKET_TOKEN_YES : MARKET_TOKEN_NO;
-    if (!tokenId) {
-      return NextResponse.json(
-        { success: false, error: `Token ID not configured for ${side} side. Set POLYMARKET_TOKEN_YES/NO env vars.` },
-        { status: 500 }
-      );
-    }
-
-    const steps: string[] = [];
-
-    // ─── Step 1: Borrow from vault if using leverage ───
-    if (borrowAmount > 0) {
-      steps.push(`Borrowing $${borrowAmount.toFixed(2)} from vault...`);
-
-      // Call the vault borrow endpoint / smart contract interaction
-      // This transfers USDC.e from vault to the trading wallet
-      try {
-        const borrowRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/vault-borrow`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wallet,
-            amount: borrowAmount,
-            purpose: "leveraged_trade",
-          }),
-        });
-
-        if (!borrowRes.ok) {
-          const borrowErr = await borrowRes.json().catch(() => ({}));
-          // If vault borrow API doesn't exist yet, log warning but continue
-          // The smart contract MarginEngine handles this on-chain
-          console.warn("Vault borrow API response:", borrowErr);
-          steps.push(`Vault borrow handled by MarginEngine on-chain`);
-        } else {
-          steps.push(`Vault borrow successful: $${borrowAmount.toFixed(2)}`);
-        }
-      } catch (borrowErr) {
-        // Vault borrow may be handled on-chain by MarginEngine
-        console.warn("Vault borrow API not available, relying on on-chain MarginEngine:", borrowErr);
-        steps.push("Vault borrow delegated to on-chain MarginEngine");
-      }
-    }
-
-    // ─── Step 2: Place order on Polymarket CLOB ───
-    steps.push(`Placing ${side} order for $${notional.toFixed(2)} on Polymarket...`);
-
-    // Use the server-side CLOB client
     const privateKey = process.env.POLYMARKET_PRIVATE_KEY;
     if (!privateKey) {
-      return NextResponse.json(
-        { success: false, error: "POLYMARKET_PRIVATE_KEY not configured" },
-        { status: 500 }
-      );
+      return NextResponse.json({ success: false, error: "POLYMARKET_PRIVATE_KEY not set in environment" }, { status: 500 });
     }
 
-    // Dynamic import to avoid issues with server-side module loading
-    const { ClobClient, Side, OrderType } = await import("@polymarket/clob-client");
+    // Dynamic import to avoid build issues
+    const { ClobClient, Side: ClobSide, OrderType } = await import("@polymarket/clob-client");
     const { Wallet } = await import("ethers");
 
     const signer = new Wallet(privateKey);
 
-    // Initialize CLOB client
+    // Step 1: Derive API credentials
     const tempClient = new ClobClient(CLOB_HOST, CHAIN_ID, signer);
-    const apiCreds = await tempClient.createOrDeriveApiKey();
+    let apiCreds;
+    try {
+      apiCreds = await tempClient.createOrDeriveApiKey();
+    } catch (credErr: any) {
+      console.error("API key derivation failed:", credErr);
+      return NextResponse.json({
+        success: false,
+        error: `API key derivation failed: ${credErr.message}. Make sure the wallet has traded on Polymarket before.`,
+      }, { status: 500 });
+    }
 
+    // Step 2: Initialize full trading client
     const client = new ClobClient(
       CLOB_HOST,
       CHAIN_ID,
@@ -108,66 +70,105 @@ export async function POST(req: NextRequest) {
       signer.address,
     );
 
-    // Get current market price for the order
-    let orderPrice: number;
+    // Step 3: Get current market price for the selected side
+    const tokenID = side === "YES" ? YES_TOKEN : NO_TOKEN;
+
+    // Fetch best ask price (what we'd pay to buy)
+    let marketPrice: number;
     try {
-      const priceRes = await fetch(`${CLOB_HOST}/price?token_id=${tokenId}&side=BUY`);
+      const priceRes = await fetch(`${CLOB_HOST}/price?token_id=${tokenID}&side=SELL`, { cache: "no-store" });
       const priceData = await priceRes.json();
-      orderPrice = parseFloat(priceData.price || "0.5");
+      marketPrice = parseFloat(priceData.price);
     } catch {
-      orderPrice = 0.5; // fallback
+      marketPrice = 0.5; // fallback
     }
 
-    // Calculate size (number of shares = notional / price)
-    const size = Math.floor((notional / orderPrice) * 100) / 100;
+    // Step 4: Place the order
+    // For BUY orders: size = dollar amount to spend
+    // We use GTC limit order at the current ask price (acts like a market order if there's liquidity)
+    const orderSize = parseFloat(notional);
 
-    // Place order using GTC (rests on book, more reliable than FOK for our amounts)
-    const response = await client.createAndPostOrder(
-      {
-        tokenID: tokenId,
-        price: orderPrice,
-        size: size,
-        side: Side.BUY,
-      },
-      {
-        tickSize: MARKET_TICK_SIZE,
-        negRisk: MARKET_NEG_RISK,
-      },
-      OrderType.GTC,
-    );
+    // Round price to tick size
+    const tickNum = parseFloat(TICK_SIZE);
+    const roundedPrice = Math.round(marketPrice / tickNum) * tickNum;
+    // Ensure price is within valid range
+    const clampedPrice = Math.max(tickNum, Math.min(1 - tickNum, roundedPrice));
 
-    steps.push(`Order placed: ${response.orderID || "submitted"}, status: ${response.status || "pending"}`);
+    console.log(`[TRADE] Placing REAL ${side} BUY order: $${orderSize} at price ${clampedPrice} on token ${tokenID.slice(0, 20)}...`);
 
-    // Check if order was successful
-    if (response.status === "rejected" || response.errorMsg) {
-      return NextResponse.json({
-        success: false,
-        error: `Polymarket order rejected: ${response.errorMsg || "unknown reason"}`,
-        steps,
-      }, { status: 400 });
+    let orderResponse;
+    try {
+      orderResponse = await client.createAndPostOrder(
+        {
+          tokenID,
+          price: clampedPrice,
+          size: orderSize,
+          side: ClobSide.BUY,
+        },
+        {
+          tickSize: TICK_SIZE,
+          negRisk: NEG_RISK,
+        },
+        OrderType.GTC,
+      );
+    } catch (orderErr: any) {
+      console.error("[TRADE] Order placement failed:", orderErr);
+
+      // If GTC fails, try FOK market order as fallback
+      try {
+        console.log("[TRADE] Trying FOK market order as fallback...");
+        const marketOrder = await client.createMarketOrder(
+          {
+            tokenID,
+            side: ClobSide.BUY,
+            amount: orderSize,
+            price: Math.min(0.99, clampedPrice + 0.05), // 5% slippage tolerance
+          },
+          { tickSize: TICK_SIZE, negRisk: NEG_RISK },
+        );
+        orderResponse = await client.postOrder(marketOrder, OrderType.FOK);
+      } catch (fokErr: any) {
+        return NextResponse.json({
+          success: false,
+          error: `Order failed: ${orderErr.message}. FOK fallback also failed: ${fokErr.message}`,
+        }, { status: 500 });
+      }
     }
+
+    console.log("[TRADE] Order response:", JSON.stringify(orderResponse));
+
+    // Step 5: Fetch current prices for response
+    let yesPrice: string | null = null;
+    let noPrice: string | null = null;
+    try {
+      const midRes = await fetch(`${CLOB_HOST}/midpoint?token_id=${YES_TOKEN}`, { cache: "no-store" });
+      const midData = await midRes.json();
+      const mid = parseFloat(midData.mid);
+      yesPrice = mid.toFixed(4);
+      noPrice = (1 - mid).toFixed(4);
+    } catch { /* ignore */ }
+
+    const estimatedShares = clampedPrice > 0 ? orderSize / clampedPrice : 0;
 
     return NextResponse.json({
       success: true,
-      orderId: response.orderID,
-      status: response.status,
-      fillPrice: orderPrice.toString(),
-      shares: size.toString(),
-      notional: notional.toString(),
-      borrowAmount: borrowAmount.toString(),
+      orderId: orderResponse?.orderID || orderResponse?.orderID || null,
+      status: orderResponse?.status || "submitted",
+      fillPrice: clampedPrice.toFixed(4),
+      yesPrice,
+      noPrice,
+      shares: estimatedShares.toFixed(2),
+      notional: orderSize.toFixed(2),
+      borrowAmount: (borrowAmount || 0).toFixed(2),
+      openFee: (openFee || 0).toFixed(4),
       side,
-      leverage,
-      steps,
-      transactionHashes: response.transactionsHashes || [],
+      tokenID,
+      message: `Real ${side} order placed on Polymarket`,
     });
-
   } catch (err) {
-    console.error("Trade execution error:", err);
+    console.error("[TRADE] Unexpected error:", err);
     return NextResponse.json(
-      {
-        success: false,
-        error: err instanceof Error ? err.message : "Internal server error",
-      },
+      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 }
     );
   }
