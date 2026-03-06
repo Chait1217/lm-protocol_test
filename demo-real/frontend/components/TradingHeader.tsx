@@ -1,6 +1,6 @@
 "use client";
 
-import { MARKET_CONFIG } from "@/lib/polymarketConfig";
+import { DEFAULT_MARKET_SLUG, DEFAULT_MARKET_TITLE } from "@/lib/polymarketConfig";
 
 interface TradingHeaderProps {
   yesProbability: number | null;
@@ -14,7 +14,7 @@ interface TradingHeaderProps {
   traderWallet?: string;
 }
 
-const MARKET_URL = `https://polymarket.com/event/${MARKET_CONFIG.slug}`;
+const MARKET_URL = `https://polymarket.com/event/${DEFAULT_MARKET_SLUG}`;
 
 function pct(v: number | null): string {
   if (v == null) return "—";
@@ -62,7 +62,7 @@ export default function TradingHeader({
             rel="noopener noreferrer"
             className="text-sm font-semibold text-white hover:text-[#00ff88] transition-colors flex items-center gap-1.5"
           >
-            {MARKET_CONFIG.displayTitle}
+            {DEFAULT_MARKET_TITLE}
             <svg className="w-3.5 h-3.5 text-[#666]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>

@@ -5,8 +5,8 @@ import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import TradingHeader from "@/components/TradingHeader";
 import VaultMetricsPanel from "@/components/VaultMetricsPanel";
-import { getContractAddresses, VAULT_ABI, MARGIN_ENGINE_ABI } from "@/lib/contracts";
-import { MARKET_CONFIG } from "@/lib/polymarketConfig";
+import { getContractAddresses, VAULT_ABI } from "@/lib/contracts";
+import { DEFAULT_MARKET_TITLE, DEFAULT_MARKET_SLUG, FALLBACK_CLOB_TOKEN_IDS } from "@/lib/polymarketConfig";
 import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { polygon } from "wagmi/chains";
 
@@ -16,7 +16,7 @@ const chartLoading = () => (
   </div>
 );
 const PolymarketLiveChart = dynamic(() => import("@/components/PolymarketLiveChart"), { ssr: false, loading: chartLoading });
-const PolymarketLeverageBox = dynamic(() => import("@/components/PolymarketLeverageBox"), {
+const RealPolymarketTrade = dynamic(() => import("@/components/RealPolymarketTrade"), {
   ssr: false,
   loading: () => <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] p-8 animate-pulse min-h-[300px]" />,
 });
@@ -89,6 +89,126 @@ function useHeaderMarket(interval = 1000) {
   return data;
 }
 
+type MarketData = {
+  yesProbability: number | null;
+  noProbability: number | null;
+  bestBid: number | null;
+  bestAsk: number | null;
+  oneDayChange: number;
+  spread: number | null;
+  volume24hr: number | null;
+  lastTradePrice: number | null;
+};
+
+function TradeDemoContent({
+  market,
+  refetchVault,
+  vaultData,
+}: {
+  market: MarketData;
+  refetchVault: () => void;
+  vaultData: readonly { result?: unknown }[] | undefined;
+}) {
+  const [side, setSide] = useState<"YES" | "NO">("YES");
+  const [collateral, setCollateral] = useState("");
+  const [leverage, setLeverage] = useState(2);
+
+  const collateralNum = parseFloat(collateral) || 0;
+  const entryPrice =
+    side === "YES"
+      ? (market.bestAsk ?? market.yesProbability ?? 0.5)
+      : market.bestBid != null
+        ? 1 - market.bestBid
+        : (market.noProbability ?? 0.5);
+
+  const realMarket = {
+    title: DEFAULT_MARKET_TITLE,
+    slug: DEFAULT_MARKET_SLUG,
+    bestBid: market.bestBid ?? null,
+    bestAsk: market.bestAsk ?? null,
+    clobTokenIds: FALLBACK_CLOB_TOKEN_IDS,
+  };
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-6 mt-6">
+      {/* Left column: Chart + Trade Box */}
+      <div className="lg:col-span-2 space-y-6">
+        <PolymarketLiveChart />
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0a0a] overflow-hidden p-5 space-y-5">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-2 block">Direction</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setSide("YES")}
+                className={`py-3 rounded-xl text-sm font-semibold transition-all ${
+                  side === "YES"
+                    ? "bg-[#00ff88]/12 text-[#00ff88] border border-[#00ff88]/30"
+                    : "bg-white/[0.02] text-[#666] border border-white/5 hover:bg-white/[0.06]"
+                }`}
+              >
+                YES {market.yesProbability != null ? `${(market.yesProbability * 100).toFixed(1)}¢` : ""}
+              </button>
+              <button
+                onClick={() => setSide("NO")}
+                className={`py-3 rounded-xl text-sm font-semibold transition-all ${
+                  side === "NO"
+                    ? "bg-red-500/12 text-red-400 border border-red-500/30"
+                    : "bg-white/[0.02] text-[#666] border border-white/5 hover:bg-white/[0.06]"
+                }`}
+              >
+                NO {market.noProbability != null ? `${(market.noProbability * 100).toFixed(1)}¢` : ""}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-2 block">Collateral (USDC.e)</label>
+            <input
+              type="number"
+              value={collateral}
+              onChange={(e) => setCollateral(e.target.value)}
+              placeholder="0.00"
+              className="w-full input-dark pl-4 pr-4 py-3 text-sm mono"
+              step="0.01"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-[#666] font-medium mb-2 block">Leverage</label>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              step={0.5}
+              value={leverage}
+              onChange={(e) => setLeverage(parseFloat(e.target.value))}
+              className="w-full h-1.5 rounded-full appearance-none bg-white/5"
+            />
+            <div className="text-sm font-bold text-[#00ff88] mono mt-1">{leverage}x</div>
+          </div>
+          <RealPolymarketTrade
+            market={realMarket}
+            selectedOutcome={side}
+            collateral={collateralNum}
+            leverage={leverage}
+            entryPrice={entryPrice}
+            onSuccess={refetchVault}
+          />
+        </div>
+      </div>
+
+      {/* Right column: Vault + Positions */}
+      <div className="space-y-6">
+        <VaultMetricsPanel
+          totalAssets={vaultData?.[0]?.result as bigint | undefined}
+          totalBorrowed={vaultData?.[1]?.result as bigint | undefined}
+          utilizationBps={vaultData?.[2]?.result as bigint | undefined}
+        />
+        <PolymarketPositionVerify />
+      </div>
+    </div>
+  );
+}
+
 export default function TradeDemoPage() {
   const { address } = useAccount();
   const market = useHeaderMarket(1000); // 1 second refresh
@@ -122,23 +242,7 @@ export default function TradeDemoPage() {
           traderWallet={address ?? process.env.NEXT_PUBLIC_POLYMARKET_TRADING_ADDRESS ?? undefined}
         />
 
-        <div className="grid lg:grid-cols-3 gap-6 mt-6">
-          {/* Left column: Chart + Trade Box */}
-          <div className="lg:col-span-2 space-y-6">
-            <PolymarketLiveChart />
-            <PolymarketLeverageBox onVaultRefetch={refetchVault} />
-          </div>
-
-          {/* Right column: Vault + Positions */}
-          <div className="space-y-6">
-            <VaultMetricsPanel
-              totalAssets={vaultData?.[0]?.result as bigint | undefined}
-              totalBorrowed={vaultData?.[1]?.result as bigint | undefined}
-              utilizationBps={vaultData?.[2]?.result as bigint | undefined}
-            />
-            <PolymarketPositionVerify />
-          </div>
-        </div>
+        <TradeDemoContent market={market} refetchVault={refetchVault} vaultData={vaultData} />
       </main>
     </div>
   );

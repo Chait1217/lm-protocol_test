@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "next dev -p 3007",
     "dev:nowatch:3012": "NEXT_DISABLE_FILE_WATCHING=1 next dev -p 3012",
     "build": "next build",
     "start": "next start",

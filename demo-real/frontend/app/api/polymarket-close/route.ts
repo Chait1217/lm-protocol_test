@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
-import { MARKET_CONFIG } from "@/lib/polymarketConfig";
+import {
+  POLYMARKET_YES_TOKEN,
+  POLYMARKET_NO_TOKEN,
+  POLYMARKET_CLOB_API,
+  POLYMARKET_DATA_API,
+  POLYMARKET_TICK_SIZE,
+  POLYMARKET_NEG_RISK,
+  POLYGON_CHAIN_ID,
+} from "@/lib/polymarketConfig";
 
 /**
- * POST /api/polymarket-close
- *
- * Closes a REAL position on Polymarket by placing a SELL order via @polymarket/clob-client.
- * Uses server wallet (POLYMARKET_PRIVATE_KEY). Market config from MARKET_CONFIG.
- *
- * Accepts:
- *   - { asset, size, side } — from positions panel (close specific position)
- *   - { user, asset, size, side } — user address for position lookup when asset not provided
+ * POST /api/polymarket-close (server wallet - kept for backward compat; UI uses browser signer)
+ * Accepts: { asset, size, side } or { user, asset, size, side }
  */
 
-const { yesTokenId, noTokenId, tickSize: _tickSize, negRisk, clobUrl, chainId, dataApiUrl } = MARKET_CONFIG;
-const tickSize = _tickSize as "0.1" | "0.01" | "0.001" | "0.0001";
+const yesTokenId = POLYMARKET_YES_TOKEN;
+const noTokenId = POLYMARKET_NO_TOKEN;
+const clobUrl = POLYMARKET_CLOB_API;
+const dataApiUrl = POLYMARKET_DATA_API;
+const chainId = POLYGON_CHAIN_ID;
+const negRisk = POLYMARKET_NEG_RISK;
+const tickSize = POLYMARKET_TICK_SIZE as "0.1" | "0.01" | "0.001" | "0.0001";
 
 export async function POST(req: Request) {
   try {
