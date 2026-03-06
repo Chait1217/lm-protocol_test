@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { MARKET_CONFIG } from "@/lib/polymarketConfig";
 
-const YES_TOKEN =
-  "38397507750621893057346880033441136112987238933685677349709401910643842844855";
-const CLOB = "https://clob.polymarket.com";
-const GAMMA = "https://gamma-api.polymarket.com";
-const CONDITION_ID = "0x9352c559e9648ab4cab236087b64ca85c5b7123a4c7d9d7d4efde4a39c18056f";
+const { yesTokenId, clobUrl, gammaUrl, conditionId } = MARKET_CONFIG;
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,8 +38,8 @@ export async function GET(req: NextRequest) {
     const fidelity = VALID_INTERVALS[interval] ?? 60;
 
     // Strategy 1: CLOB prices-history (verified working)
-    const clobUrl = `${CLOB}/prices-history?market=${YES_TOKEN}&interval=${interval}&fidelity=${fidelity}`;
-    const clobData = await safeFetch(clobUrl);
+    const url = `${clobUrl}/prices-history?market=${yesTokenId}&interval=${interval}&fidelity=${fidelity}`;
+    const clobData = await safeFetch(url);
 
     if (clobData?.history && Array.isArray(clobData.history) && clobData.history.length > 0) {
       const res = NextResponse.json({
@@ -69,8 +66,8 @@ export async function GET(req: NextRequest) {
       max: 90 * 86400,
     };
     const startTs = now - (intervalMap[interval] || 86400);
-    const gammaUrl = `${GAMMA}/timeseries?conditionId=${CONDITION_ID.replace("0x", "")}&startTs=${startTs}&endTs=${now}&fidelity=${fidelity}`;
-    const gammaData = await safeFetch(gammaUrl);
+    const gammaTsUrl = `${gammaUrl}/timeseries?conditionId=${conditionId.replace("0x", "")}&startTs=${startTs}&endTs=${now}&fidelity=${fidelity}`;
+    const gammaData = await safeFetch(gammaTsUrl);
 
     if (Array.isArray(gammaData) && gammaData.length > 0) {
       // Gamma returns [{t: timestamp, p: price}] or [{timestamp, price}]
@@ -95,7 +92,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Strategy 3: Generate synthetic data from current price
-    const midData = await safeFetch(`${CLOB}/midpoint?token_id=${YES_TOKEN}`, 3000);
+    const midData = await safeFetch(`${clobUrl}/midpoint?token_id=${yesTokenId}`, 3000);
     const currentPrice = midData?.mid ? parseFloat(midData.mid) : 0.385;
 
     function seededRandom(seed: number): number {

@@ -1,25 +1,14 @@
 import { NextResponse } from "next/server";
+import { MARKET_CONFIG } from "@/lib/polymarketConfig";
 
 /**
  * GET /api/polymarket-live
  *
- * Fetches REAL-TIME market data by calling the CLOB API directly.
- * 
- * VERIFIED WORKING ENDPOINTS (tested 2026-03-05):
- *   GET https://clob.polymarket.com/price?token_id={TOKEN}&side=BUY   → {"price":"0.38"}
- *   GET https://clob.polymarket.com/price?token_id={TOKEN}&side=SELL  → {"price":"0.39"}
- *   GET https://clob.polymarket.com/midpoint?token_id={TOKEN}         → {"mid":"0.385"}
- *   GET https://clob.polymarket.com/spread?token_id={TOKEN}           → {"spread":"0.01"}
- *   GET https://clob.polymarket.com/last-trade-price?token_id={TOKEN} → {"price":"0.39","side":"BUY"}
- *
- * Also fetches volume from Gamma API (cached, less critical).
+ * Fetches REAL-TIME market data by calling the CLOB API.
+ * Uses unified MARKET_CONFIG.
  */
 
-const CLOB = "https://clob.polymarket.com";
-const GAMMA = "https://gamma-api.polymarket.com";
-
-const YES_TOKEN = "38397507750621893057346880033441136112987238933685677349709401910643842844855";
-const MARKET_SLUG = "will-the-iranian-regime-fall-by-june-30";
+const { yesTokenId, clobUrl, gammaUrl, slug } = MARKET_CONFIG;
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -34,12 +23,12 @@ export async function GET() {
   try {
     // Fetch all CLOB data in parallel for speed
     const [bidData, askData, midData, spreadData, lastTradeData, gammaData] = await Promise.all([
-      fetchJson(`${CLOB}/price?token_id=${YES_TOKEN}&side=BUY`),
-      fetchJson(`${CLOB}/price?token_id=${YES_TOKEN}&side=SELL`),
-      fetchJson(`${CLOB}/midpoint?token_id=${YES_TOKEN}`),
-      fetchJson(`${CLOB}/spread?token_id=${YES_TOKEN}`),
-      fetchJson(`${CLOB}/last-trade-price?token_id=${YES_TOKEN}`),
-      fetchJson(`${GAMMA}/markets?slug=${MARKET_SLUG}`),
+      fetchJson(`${clobUrl}/price?token_id=${yesTokenId}&side=BUY`),
+      fetchJson(`${clobUrl}/price?token_id=${yesTokenId}&side=SELL`),
+      fetchJson(`${clobUrl}/midpoint?token_id=${yesTokenId}`),
+      fetchJson(`${clobUrl}/spread?token_id=${yesTokenId}`),
+      fetchJson(`${clobUrl}/last-trade-price?token_id=${yesTokenId}`),
+      fetchJson(`${gammaUrl}/markets?slug=${slug}`),
     ]);
 
     // Parse CLOB responses — all return string values

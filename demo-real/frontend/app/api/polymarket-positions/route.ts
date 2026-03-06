@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { MARKET_CONFIG } from "@/lib/polymarketConfig";
 
-const DATA_API = "https://data-api.polymarket.com";
+const DATA_API = MARKET_CONFIG.dataApiUrl;
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

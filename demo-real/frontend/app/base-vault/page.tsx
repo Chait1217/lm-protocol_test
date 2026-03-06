@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Navbar from "@/components/Navbar";
 import TxButton from "@/components/TxButton";
 import { useAccount, useBalance, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -105,55 +105,100 @@ export default function BaseVaultPage() {
     refetchAllowance();
   }, [refetchBalance, refetchVault, refetchAllowance]);
 
-  const handleApprove = async () => {
+  const [approvalTxHash, setApprovalTxHash] = useState<`0x${string}` | undefined>();
+  const pendingDepositAmount = useRef<string | null>(null);
+  const { isSuccess: isApprovalConfirmed } = useWaitForTransactionReceipt({
+    hash: approvalTxHash,
+    chainId: polygon.id,
+  });
+
+  const doDeposit = useCallback(
+    async (amountRaw: string) => {
+      if (!address || !hasVault) return;
+      const amt = parseFloat(amountRaw);
+      if (isNaN(amt) || amt <= 0) return;
+      const amount = parseUnits(amountRaw, 6);
+      setTxStatus("Depositing…");
+      try {
+        await writeContractAsync({
+          address: addresses.vault as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: "deposit",
+          args: [amount],
+          chainId: polygon.id,
+        });
+        setTxStatus("Deposit confirmed!");
+        setDepositAmount("");
+        refetchAll();
+        setTimeout(() => setTxStatus(""), 3000);
+      } catch (err) {
+        setTxStatus(`Deposit failed: ${err instanceof Error ? err.message : "unknown"}`);
+      }
+    },
+    [address, hasVault, writeContractAsync, refetchAll]
+  );
+
+  const handleApprove = useCallback(async () => {
     if (!address || !hasVault) return;
-    setTxStatus("Approving USDC.e...");
+    setTxStatus("Approving USDC.e…");
     try {
-      await writeContractAsync({
+      const hash = await writeContractAsync({
         address: USDC_E as `0x${string}`,
         abi: USDC_E_ABI,
         functionName: "approve",
         args: [addresses.vault, parseUnits("1000000", 6)],
         chainId: polygon.id,
       });
-      setTxStatus("Approval confirmed!");
-      refetchAll();
-      setTimeout(() => setTxStatus(""), 3000);
+      setApprovalTxHash(hash);
     } catch (err) {
+      setApprovalTxHash(undefined);
       setTxStatus(`Approval failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
-  };
+  }, [address, hasVault, writeContractAsync]);
 
-  const handleDeposit = async () => {
+  const handleDeposit = useCallback(async () => {
     if (!address || !hasVault || !depositAmount) return;
+    const amt = parseFloat(depositAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setTxStatus("Enter a valid amount");
+      return;
+    }
     const amount = parseUnits(depositAmount, 6);
 
-    // Check allowance
     if (currentAllowance != null && currentAllowance < amount) {
-      setTxStatus("Need approval first...");
+      pendingDepositAmount.current = depositAmount;
+      setTxStatus("Approving USDC.e…");
       await handleApprove();
+      return;
     }
 
-    setTxStatus("Depositing...");
-    try {
-      await writeContractAsync({
-        address: addresses.vault as `0x${string}`,
-        abi: VAULT_ABI,
-        functionName: "deposit",
-        args: [amount],
-        chainId: polygon.id,
-      });
-      setTxStatus("Deposit confirmed!");
-      setDepositAmount("");
-      refetchAll();
-      setTimeout(() => setTxStatus(""), 3000);
-    } catch (err) {
-      setTxStatus(`Deposit failed: ${err instanceof Error ? err.message : "unknown"}`);
+    await doDeposit(depositAmount);
+  }, [address, hasVault, depositAmount, currentAllowance, handleApprove, doDeposit]);
+
+  // When approval confirms, refetch allowance and auto-trigger deposit
+  useEffect(() => {
+    if (isApprovalConfirmed && approvalTxHash) {
+      setApprovalTxHash(undefined);
+      refetchAllowance();
+      const pending = pendingDepositAmount.current;
+      pendingDepositAmount.current = null;
+      if (pending) {
+        setTxStatus("Approval confirmed. Depositing…");
+        doDeposit(pending);
+      } else {
+        setTxStatus("Approval confirmed!");
+        setTimeout(() => setTxStatus(""), 3000);
+      }
     }
-  };
+  }, [isApprovalConfirmed, approvalTxHash, refetchAllowance, doDeposit]);
 
   const handleWithdraw = async () => {
     if (!address || !hasVault || !withdrawAmount) return;
+    const amt = parseFloat(withdrawAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setTxStatus("Enter a valid amount");
+      return;
+    }
     const assets = parseUnits(withdrawAmount, 6);
     setTxStatus("Submitting withdraw...");
     try {
@@ -179,12 +224,14 @@ export default function BaseVaultPage() {
 
   useEffect(() => {
     if (isWithdrawConfirmed) {
+      setWithdrawTxHash(undefined);
       setTxStatus("Withdraw confirmed!");
       setWithdrawAmount("");
       refetchAll();
       setTimeout(() => setTxStatus(""), 3000);
     }
     if (isWithdrawFailed) {
+      setWithdrawTxHash(undefined);
       setTxStatus("Withdraw transaction reverted on-chain.");
     }
   }, [isWithdrawConfirmed, isWithdrawFailed, refetchAll]);
@@ -328,8 +375,8 @@ export default function BaseVaultPage() {
 
                     <TxButton
                       onClick={handleDeposit}
-                      loading={isPending}
-                      disabled={!isConnected || !isPolygon || !depositAmount || parseFloat(depositAmount) <= 0 || parseFloat(depositAmount) > walletBalance}
+                      loading={isPending || !!approvalTxHash}
+                      disabled={!isConnected || !isPolygon || !depositAmount || parseFloat(depositAmount) <= 0 || parseFloat(depositAmount) > walletBalance || !!approvalTxHash}
                       className="w-full"
                     >
                       {!isConnected ? "Connect Wallet" : !isPolygon ? "Switch to Polygon" : "Deposit USDC.e"}
@@ -363,8 +410,8 @@ export default function BaseVaultPage() {
 
                     <TxButton
                       onClick={handleWithdraw}
-                      loading={isPending}
-                      disabled={!isConnected || !isPolygon || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > maxWithdrawNum}
+                      loading={isPending || !!withdrawTxHash}
+                      disabled={!isConnected || !isPolygon || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > maxWithdrawNum || !!withdrawTxHash}
                       variant="secondary"
                       className="w-full"
                     >

@@ -1,179 +1,159 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { MARKET_CONFIG } from "@/lib/polymarketConfig";
 
-const YES_TOKEN =
-  "38397507750621893057346880033441136112987238933685677349709401910643842844855";
-const NO_TOKEN =
-  "95949957895141858444199258452803633110472396604599808168788254125381075552218";
-const CLOB_URL = "https://clob.polymarket.com";
-const TICK_SIZE = "0.01";
-const TICK_NUM = 0.01;
-const NEG_RISK = false;
+/**
+ * POST /api/polymarket-trade
+ *
+ * Places a REAL order on Polymarket using @polymarket/clob-client.
+ * Uses server wallet (POLYMARKET_PRIVATE_KEY). Market config from MARKET_CONFIG.
+ */
 
-export const dynamic = "force-dynamic";
+const { yesTokenId, noTokenId, negRisk, clobUrl, chainId } = MARKET_CONFIG;
+const tickSize = MARKET_CONFIG.tickSize as "0.1" | "0.01" | "0.001" | "0.0001";
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { side, amount } = body; // side = "YES" | "NO", amount = notional in USD
+    const { side, collateral, leverage, notional, borrowAmount, openFee } = body;
 
-    if (!side || !amount) {
-      return NextResponse.json(
-        { success: false, error: "Missing side or amount" },
-        { status: 400 }
-      );
+    // Validate
+    if (!side || !collateral || !notional) {
+      return NextResponse.json({ success: false, error: "Missing required fields: side, collateral, notional" }, { status: 400 });
     }
 
-    const pk = process.env.POLYMARKET_PRIVATE_KEY;
-    if (!pk) {
-      return NextResponse.json(
-        { success: false, error: "POLYMARKET_PRIVATE_KEY not set in .env.local" },
-        { status: 500 }
-      );
+    const privateKey = process.env.POLYMARKET_PRIVATE_KEY;
+    if (!privateKey) {
+      return NextResponse.json({ success: false, error: "POLYMARKET_PRIVATE_KEY not set in environment" }, { status: 500 });
     }
 
-    // Dynamic require to avoid Next.js bundling issues
-    const { ClobClient } = require("@polymarket/clob-client");
-    const { ethers } = require("ethers");
+    // Dynamic import to avoid build issues
+    const { ClobClient, Side: ClobSide, OrderType } = await import("@polymarket/clob-client");
+    const { Wallet } = await import("ethers");
 
-    const tokenID = side === "YES" ? YES_TOKEN : NO_TOKEN;
-    const notional = parseFloat(amount);
+    const signer = new Wallet(privateKey);
 
-    if (isNaN(notional) || notional < 0.5) {
-      return NextResponse.json(
-        { success: false, error: "Amount must be at least $0.50" },
-        { status: 400 }
-      );
-    }
-
-    // Step 1: Get current market price from CLOB
-    let marketAsk = 0.5;
-    try {
-      const priceRes = await fetch(
-        `${CLOB_URL}/price?token_id=${tokenID}&side=sell`,
-        { cache: "no-store" }
-      );
-      const priceData = await priceRes.json();
-      if (priceData?.price) marketAsk = parseFloat(priceData.price);
-    } catch {
-      // Use default
-    }
-
-    // Step 2: Create wallet signer
-    const wallet = new ethers.Wallet(pk);
-    console.log("[polymarket-trade] Wallet address:", wallet.address);
-
-    // Step 3: Create CLOB client and derive API credentials
-    const tempClient = new ClobClient(CLOB_URL, 137, wallet);
+    // Step 1: Derive API credentials
+    const tempClient = new ClobClient(clobUrl, chainId, signer);
     let apiCreds;
     try {
       apiCreds = await tempClient.createOrDeriveApiKey();
     } catch (credErr: any) {
-      console.error("[polymarket-trade] API key derivation failed:", credErr?.message);
-      return NextResponse.json(
-        { success: false, error: `API key derivation failed: ${credErr?.message}` },
-        { status: 500 }
-      );
+      console.error("API key derivation failed:", credErr);
+      return NextResponse.json({
+        success: false,
+        error: `API key derivation failed: ${credErr.message}. Make sure the wallet has traded on Polymarket before.`,
+      }, { status: 500 });
     }
 
-    // Step 4: Create authenticated client
-    const client = new ClobClient(CLOB_URL, 137, wallet, apiCreds);
+    // Step 2: Initialize full trading client
+    const client = new ClobClient(
+      clobUrl,
+      chainId,
+      signer,
+      apiCreds,
+      0, // EOA signature type
+      signer.address,
+    );
 
-    // Step 5: Calculate order parameters
-    // Round price to tick size
-    const rawPrice = marketAsk;
-    const roundedPrice = Math.round(rawPrice / TICK_NUM) * TICK_NUM;
-    const clampedPrice = Math.max(TICK_NUM, Math.min(1 - TICK_NUM, roundedPrice));
-    // Size = notional / price, rounded to 2 decimal places
-    const rawSize = notional / clampedPrice;
-    const size = Math.round(rawSize * 100) / 100;
+    // Step 3: Get current market price for the selected side
+    const tokenID = side === "YES" ? yesTokenId : noTokenId;
 
-    if (size < 1) {
-      return NextResponse.json(
-        { success: false, error: `Calculated size too small: ${size}. Increase amount.` },
-        { status: 400 }
-      );
-    }
-
-    console.log("[polymarket-trade] Order params:", {
-      tokenID: tokenID.slice(0, 20) + "...",
-      side,
-      price: clampedPrice,
-      size,
-      notional: (size * clampedPrice).toFixed(2),
-      negRisk: NEG_RISK,
-    });
-
-    // Step 6: Create and post order
-    let orderResult: any = null;
-    let method = "GTC";
-
+    // Fetch best ask price (what we'd pay to buy)
+    let marketPrice: number;
     try {
-      // Use createAndPostOrder for simplicity — it handles signing internally
-      orderResult = await client.createAndPostOrder({
-        tokenID,
-        price: clampedPrice,
-        size,
-        side: "BUY",
-        feeRateBps: 0,
-        nonce: 0,
-      });
-      console.log("[polymarket-trade] GTC order result:", JSON.stringify(orderResult));
-    } catch (gtcErr: any) {
-      console.error("[polymarket-trade] createAndPostOrder failed:", gtcErr?.message);
+      const priceRes = await fetch(`${clobUrl}/price?token_id=${tokenID}&side=SELL`, { cache: "no-store" });
+      const priceData = await priceRes.json();
+      marketPrice = parseFloat(priceData.price);
+    } catch {
+      marketPrice = 0.5; // fallback
+    }
 
-      // Fallback: try with createOrder + postOrder separately
-      try {
-        method = "GTC-manual";
-        const signedOrder = await client.createOrder({
+    // Step 4: Place the order
+    // For BUY orders: size = dollar amount to spend
+    // We use GTC limit order at the current ask price (acts like a market order if there's liquidity)
+    const orderSize = parseFloat(notional);
+
+    // Round price to tick size
+    const tickNum = parseFloat(tickSize);
+    const roundedPrice = Math.round(marketPrice / tickNum) * tickNum;
+    // Ensure price is within valid range
+    const clampedPrice = Math.max(tickNum, Math.min(1 - tickNum, roundedPrice));
+
+    console.log(`[TRADE] Placing REAL ${side} BUY order: $${orderSize} at price ${clampedPrice} on token ${tokenID.slice(0, 20)}...`);
+
+    let orderResponse;
+    try {
+      orderResponse = await client.createAndPostOrder(
+        {
           tokenID,
           price: clampedPrice,
-          size,
-          side: "BUY",
-        }, { tickSize: TICK_SIZE, negRisk: NEG_RISK });
+          size: orderSize,
+          side: ClobSide.BUY,
+        },
+        {
+          tickSize,
+          negRisk,
+        },
+        OrderType.GTC,
+      );
+    } catch (orderErr: any) {
+      console.error("[TRADE] Order placement failed:", orderErr);
 
-        const { OrderType } = require("@polymarket/clob-client");
-        orderResult = await client.postOrder(signedOrder, OrderType.GTC);
-        console.log("[polymarket-trade] Manual GTC result:", JSON.stringify(orderResult));
-      } catch (manualErr: any) {
-        console.error("[polymarket-trade] Manual order also failed:", manualErr?.message);
-        return NextResponse.json(
+      // If GTC fails, try FOK market order as fallback
+      try {
+        console.log("[TRADE] Trying FOK market order as fallback...");
+        const marketOrder = await client.createMarketOrder(
           {
-            success: false,
-            error: `Order placement failed: ${manualErr?.message || gtcErr?.message}`,
-            debug: {
-              wallet: wallet.address,
-              tokenID: tokenID.slice(0, 20) + "...",
-              price: clampedPrice,
-              size,
-            },
+            tokenID,
+            side: ClobSide.BUY,
+            amount: orderSize,
+            price: Math.min(0.99, clampedPrice + 0.05), // 5% slippage tolerance
           },
-          { status: 500 }
+          { tickSize, negRisk },
         );
+        orderResponse = await client.postOrder(marketOrder, OrderType.FOK);
+      } catch (fokErr: any) {
+        return NextResponse.json({
+          success: false,
+          error: `Order failed: ${orderErr.message}. FOK fallback also failed: ${fokErr.message}`,
+        }, { status: 500 });
       }
     }
 
-    // Extract order ID from various possible response formats
-    const orderId = orderResult?.orderID
-      || orderResult?.orderIds?.[0]
-      || orderResult?.id
-      || "submitted";
+    console.log("[TRADE] Order response:", JSON.stringify(orderResponse));
+
+    // Step 5: Fetch current prices for response
+    let yesPrice: string | null = null;
+    let noPrice: string | null = null;
+    try {
+      const midRes = await fetch(`${clobUrl}/midpoint?token_id=${yesTokenId}`, { cache: "no-store" });
+      const midData = await midRes.json();
+      const mid = parseFloat(midData.mid);
+      yesPrice = mid.toFixed(4);
+      noPrice = (1 - mid).toFixed(4);
+    } catch { /* ignore */ }
+
+    const estimatedShares = clampedPrice > 0 ? orderSize / clampedPrice : 0;
 
     return NextResponse.json({
       success: true,
-      method,
-      orderId,
-      status: orderResult?.status || "LIVE",
+      orderId: orderResponse?.orderID || orderResponse?.orderID || null,
+      status: orderResponse?.status || "submitted",
+      fillPrice: clampedPrice.toFixed(4),
+      yesPrice,
+      noPrice,
+      shares: estimatedShares.toFixed(2),
+      notional: orderSize.toFixed(2),
+      borrowAmount: (borrowAmount || 0).toFixed(2),
+      openFee: (openFee || 0).toFixed(4),
       side,
-      tokenID: tokenID.slice(0, 20) + "...",
-      price: clampedPrice,
-      size,
-      notional: (size * clampedPrice).toFixed(2),
-      wallet: wallet.address,
+      tokenID,
+      message: `Real ${side} order placed on Polymarket`,
     });
-  } catch (err: any) {
-    console.error("[polymarket-trade] Route error:", err);
+  } catch (err) {
+    console.error("[TRADE] Unexpected error:", err);
     return NextResponse.json(
-      { success: false, error: err?.message || String(err) },
+      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 }
     );
   }
