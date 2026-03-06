@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
     const clobUrl = `${CLOB}/prices-history?market=${YES_TOKEN}&interval=${interval}&fidelity=${fidelity}`;
     const clobData = await safeFetch(clobUrl);
 
-    if (clobData?.history && Array.isArray(clobData.history) && clobData.history.length > 2) {
-      return NextResponse.json({
+    if (clobData?.history && Array.isArray(clobData.history) && clobData.history.length > 0) {
+      const res = NextResponse.json({
         success: true,
         source: "clob",
         interval,
@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
         count: clobData.history.length,
         history: clobData.history,
       });
+      res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      res.headers.set("Pragma", "no-cache");
+      res.headers.set("Expires", "0");
+      return res;
     }
 
     // Strategy 2: Gamma API timeseries as fallback
@@ -76,13 +80,17 @@ export async function GET(req: NextRequest) {
       })).filter((d: any) => d.t > 0 && d.p > 0);
 
       if (history.length > 0) {
-        return NextResponse.json({
+        const gammaResponse = NextResponse.json({
           success: true,
           source: "gamma",
           interval,
           count: history.length,
           history,
         });
+        gammaResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        gammaResponse.headers.set("Pragma", "no-cache");
+        gammaResponse.headers.set("Expires", "0");
+        return gammaResponse;
       }
     }
 
@@ -90,30 +98,41 @@ export async function GET(req: NextRequest) {
     const midData = await safeFetch(`${CLOB}/midpoint?token_id=${YES_TOKEN}`, 3000);
     const currentPrice = midData?.mid ? parseFloat(midData.mid) : 0.385;
 
+    function seededRandom(seed: number): number {
+      const x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    }
+
     const points = 24;
     const stepSec = (intervalMap[interval] || 86400) / points;
     const syntheticHistory = [];
     for (let i = 0; i <= points; i++) {
-      const noise = (Math.random() - 0.5) * 0.02;
+      const noise = (seededRandom(i * 137 + (now % 3600)) - 0.5) * 0.02;
       syntheticHistory.push({
         t: Math.floor(now - (points - i) * stepSec),
         p: Math.max(0.01, Math.min(0.99, currentPrice + noise * (1 - i / points))),
       });
     }
-    // Set last point to exact current price
-    syntheticHistory[syntheticHistory.length - 1].p = currentPrice;
 
-    return NextResponse.json({
+    const synthResponse = NextResponse.json({
       success: true,
       source: "synthetic",
       interval,
       count: syntheticHistory.length,
       history: syntheticHistory,
     });
+    synthResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    synthResponse.headers.set("Pragma", "no-cache");
+    synthResponse.headers.set("Expires", "0");
+    return synthResponse;
   } catch (err) {
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       { success: false, error: String(err), history: [] },
       { status: 500 }
     );
+    errorResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    errorResponse.headers.set("Pragma", "no-cache");
+    errorResponse.headers.set("Expires", "0");
+    return errorResponse;
   }
 }

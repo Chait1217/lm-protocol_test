@@ -134,6 +134,15 @@ export default function VaultMetricsPanel(props: VaultMetricsPanelProps) {
 
   const { writeContractAsync, isPending } = useWriteContract();
 
+  function isUserRejection(err: any): boolean {
+    const msg = (err?.message || err?.shortMessage || "").toLowerCase();
+    return (
+      msg.includes("user rejected") ||
+      msg.includes("user denied") ||
+      msg.includes("rejected the request")
+    );
+  }
+
   const handleWithdraw = useCallback(async () => {
     if (!address || !hasVault) return;
     setWithdrawError(null);
@@ -152,25 +161,9 @@ export default function VaultMetricsPanel(props: VaultMetricsPanelProps) {
 
     const assets = parseUnits(amount.toFixed(6), 6);
 
-    // Strategy 1: Try 1-arg withdraw(usdcAmount) with separate ABI
-    try {
-      await writeContractAsync({
-        address: addresses.vault as `0x${string}`,
-        abi: VAULT_WITHDRAW_1ARG,
-        functionName: "withdraw",
-        args: [assets],
-        chainId: polygon.id,
-      });
-      setWithdrawSuccess(true);
-      setWithdrawAmount("");
-      refetchMaxW();
-      setTimeout(() => setWithdrawSuccess(false), 5000);
-      return;
-    } catch (err1) {
-      console.warn("[VaultMetrics] 1-arg withdraw failed:", err1);
-    }
+    let lastError = "";
 
-    // Strategy 2: Try 3-arg withdraw(assets, receiver, owner)
+    // Strategy 1: Try ERC-4626 3-arg withdraw(assets, receiver, owner) FIRST
     try {
       await writeContractAsync({
         address: addresses.vault as `0x${string}`,
@@ -184,8 +177,36 @@ export default function VaultMetricsPanel(props: VaultMetricsPanelProps) {
       refetchMaxW();
       setTimeout(() => setWithdrawSuccess(false), 5000);
       return;
-    } catch (err2) {
-      console.warn("[VaultMetrics] 3-arg withdraw failed:", err2);
+    } catch (err1: any) {
+      if (isUserRejection(err1)) {
+        setWithdrawError("Transaction rejected. Please approve the transaction in your wallet.");
+        return;
+      }
+      lastError = err1?.shortMessage || err1?.message || "3-arg withdraw failed";
+      console.warn("[VaultMetrics] 3-arg withdraw failed:", lastError);
+    }
+
+    // Strategy 2: Try custom 1-arg withdraw(usdcAmount)
+    try {
+      await writeContractAsync({
+        address: addresses.vault as `0x${string}`,
+        abi: VAULT_WITHDRAW_1ARG,
+        functionName: "withdraw",
+        args: [assets],
+        chainId: polygon.id,
+      });
+      setWithdrawSuccess(true);
+      setWithdrawAmount("");
+      refetchMaxW();
+      setTimeout(() => setWithdrawSuccess(false), 5000);
+      return;
+    } catch (err2: any) {
+      if (isUserRejection(err2)) {
+        setWithdrawError("Transaction rejected.");
+        return;
+      }
+      lastError = err2?.shortMessage || err2?.message || "1-arg withdraw failed";
+      console.warn("[VaultMetrics] 1-arg withdraw failed:", lastError);
     }
 
     // Strategy 3: Fallback to redeem
@@ -204,11 +225,20 @@ export default function VaultMetricsPanel(props: VaultMetricsPanelProps) {
         setTimeout(() => setWithdrawSuccess(false), 5000);
         return;
       }
-    } catch (err3) {
-      console.error("[VaultMetrics] redeem failed:", err3);
+    } catch (err3: any) {
+      if (isUserRejection(err3)) {
+        setWithdrawError("Transaction rejected.");
+        return;
+      }
+      lastError = err3?.shortMessage || err3?.message || "redeem failed";
+      console.error("[VaultMetrics] redeem failed:", lastError);
     }
 
-    setWithdrawError("All withdraw methods failed. The vault may have insufficient idle liquidity.");
+    setWithdrawError(
+      lastError
+        ? `Withdraw failed: ${lastError}`
+        : "All withdraw methods failed. The vault contract may not support this operation, or there is insufficient idle liquidity."
+    );
   }, [address, withdrawAmount, maxWithdrawNum, maxRedeemRaw, writeContractAsync, refetchMaxW]);
 
   if (!hasVault) return null;

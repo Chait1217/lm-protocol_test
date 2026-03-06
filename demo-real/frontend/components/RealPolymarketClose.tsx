@@ -19,6 +19,7 @@ import {
   splitFee,
   type FeeSplit,
 } from "@/lib/lendingPool";
+import { usePolymarketSafe } from "@/hooks/usePolymarketSafe";
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -247,6 +248,8 @@ export default function RealPolymarketClose({
   }
 
   /* ── Step 1: Post GTC limit sell on Polymarket (Polygon) ── */
+  const { funderAddress, signatureType } = usePolymarketSafe();
+
   const sellOnPolymarket = useCallback(async (): Promise<boolean> => {
     if (!tokenId) throw new Error("Missing token ID for Polymarket sell");
     if (typeof window === "undefined" || !window.ethereum) throw new Error("No wallet found");
@@ -256,17 +259,23 @@ export default function RealPolymarketClose({
     const { ethers } = await import("ethers");
     const { ClobClient, Side, OrderType, AssetType } = await import("@polymarket/clob-client");
 
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const signer = provider.getSigner();
+    const isEthersV6 = typeof (ethers as any).BrowserProvider !== "undefined";
+    const provider = isEthersV6
+      ? new (ethers as any).BrowserProvider(window.ethereum)
+      : new ethers.providers.Web3Provider(window.ethereum);
+    const signer = isEthersV6
+      ? await (provider as any).getSigner()
+      : (provider as any).getSigner();
     const walletAddress = await signer.getAddress();
     if (address && walletAddress.toLowerCase() !== address.toLowerCase()) {
       throw new Error("Connected wallet does not match active wallet.");
     }
 
     const host = POLYMARKET_CLOB_API;
-    const baseClient = new ClobClient(host, 137, signer);
+    const funder = funderAddress || walletAddress;
+    const baseClient = new ClobClient(host, 137, signer, undefined, signatureType, funder);
     const creds = await baseClient.createOrDeriveApiKey();
-    const client = new ClobClient(host, 137, signer, creds, 0, walletAddress);
+    const client = new ClobClient(host, 137, signer, creds, signatureType, funder);
 
     // Ensure CTF approvals so sells can transfer outcome tokens.
     // Standard (non-negRisk) market uses main CTF Exchange; negRisk uses Neg Risk Exchange + Adapter.
@@ -347,11 +356,16 @@ export default function RealPolymarketClose({
 
     // CLOB SELL orders require size in shares (outcome tokens), not USDC.
     // Use position size from API when present (Polymarket returns shares); else notional/price.
-    const sizeInShares =
+    const estimatedShares =
       sizeFromPositionsApi != null && sizeFromPositionsApi > 0
         ? sizeFromPositionsApi
-        : Number((notionalUsdc / limitPrice).toFixed(6));
-    const size = Math.max(0.001, Number(sizeInShares.toFixed(6)));
+        : Number(
+            ((notionalUsdc * 0.996) / Math.max(limitPrice, 0.01)).toFixed(6)
+          );
+    const size = Math.max(
+      0.001,
+      Math.floor(estimatedShares * 1_000_000) / 1_000_000
+    );
 
     const resp = await client.createAndPostOrder(
       { tokenID: tokenId, price: limitPrice, size, side: Side.SELL },
@@ -417,7 +431,7 @@ export default function RealPolymarketClose({
     }));
 
     return filledNow;
-  }, [tokenId, notionalUsdc, tickSize, negRisk, previewExitPrice, address]);
+  }, [tokenId, notionalUsdc, tickSize, negRisk, previewExitPrice, address, funderAddress, signatureType]);
 
   /* ── Step 2: Close position on Polygon vault (oracle-driven) ── */
   const closeOnVault = useCallback(async () => {

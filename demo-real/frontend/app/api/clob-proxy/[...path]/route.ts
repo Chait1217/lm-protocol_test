@@ -151,9 +151,9 @@ async function proxyToClob(
 
 async function handleRequest(
   req: NextRequest,
-  ctx: { params: { path: string[] } }
+  ctx: { params: Promise<{ path: string[] }> }
 ) {
-  const { params } = ctx;
+  const params = await ctx.params;
   const subpath = "/" + params.path.join("/");
   const search = req.nextUrl.search;
   const fullPath = subpath + search;
@@ -204,28 +204,28 @@ async function handleRequest(
 
 export async function GET(
   req: NextRequest,
-  ctx: { params: { path: string[] } }
+  ctx: { params: Promise<{ path: string[] }> }
 ) {
   return handleRequest(req, ctx);
 }
 
 export async function POST(
   req: NextRequest,
-  ctx: { params: { path: string[] } }
+  ctx: { params: Promise<{ path: string[] }> }
 ) {
   return handleRequest(req, ctx);
 }
 
 export async function PUT(
   req: NextRequest,
-  ctx: { params: { path: string[] } }
+  ctx: { params: Promise<{ path: string[] }> }
 ) {
   return handleRequest(req, ctx);
 }
 
 export async function DELETE(
   req: NextRequest,
-  ctx: { params: { path: string[] } }
+  ctx: { params: Promise<{ path: string[] }> }
 ) {
   return handleRequest(req, ctx);
 }

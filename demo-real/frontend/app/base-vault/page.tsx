@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import TxButton from "@/components/TxButton";
-import { useAccount, useBalance, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, useBalance, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { polygon } from "wagmi/chains";
 import { formatUnits, parseUnits } from "viem";
 import { getContractAddresses, VAULT_ABI } from "@/lib/contracts";
@@ -12,47 +12,6 @@ const USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
 const USDC_E_ABI = [
   { name: "approve", type: "function", stateMutability: "nonpayable", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }] },
   { name: "allowance", type: "function", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
-] as const;
-
-// Separate ABI for the 1-arg withdraw to avoid overload confusion
-const VAULT_WITHDRAW_1ARG_ABI = [
-  {
-    name: "withdraw",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "usdcAmount", type: "uint256" }],
-    outputs: [{ name: "shares", type: "uint256" }],
-  },
-] as const;
-
-// Separate ABI for the 3-arg withdraw (ERC-4626 style)
-const VAULT_WITHDRAW_3ARG_ABI = [
-  {
-    name: "withdraw",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "assets", type: "uint256" },
-      { name: "receiver", type: "address" },
-      { name: "owner", type: "address" },
-    ],
-    outputs: [{ name: "shares", type: "uint256" }],
-  },
-] as const;
-
-// Separate ABI for redeem (fallback)
-const VAULT_REDEEM_ABI = [
-  {
-    name: "redeem",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "shares", type: "uint256" },
-      { name: "receiver", type: "address" },
-      { name: "owner", type: "address" },
-    ],
-    outputs: [{ name: "assets", type: "uint256" }],
-  },
 ] as const;
 
 const addresses = getContractAddresses();
@@ -105,7 +64,6 @@ export default function BaseVaultPage() {
       ? [
           { address: addresses.vault, abi: VAULT_ABI, functionName: "balanceOf", args: [address], chainId: polygon.id },
           { address: addresses.vault, abi: VAULT_ABI, functionName: "maxWithdraw", args: [address], chainId: polygon.id },
-          { address: addresses.vault, abi: VAULT_ABI, functionName: "maxRedeem", args: [address], chainId: polygon.id },
         ]
       : [],
     query: { refetchInterval: 5000 },
@@ -127,7 +85,6 @@ export default function BaseVaultPage() {
 
   const shares = userShares?.[0]?.result as bigint | undefined;
   const maxWithdraw = userShares?.[1]?.result as bigint | undefined;
-  const maxRedeem = userShares?.[2]?.result as bigint | undefined;
   const currentAllowance = allowanceData?.[0]?.result as bigint | undefined;
 
   const walletBalance = usdcBalance ? parseFloat(formatUnits(usdcBalance.value, usdcBalance.decimals)) : 0;
@@ -135,6 +92,12 @@ export default function BaseVaultPage() {
 
   // Write contract hooks
   const { writeContractAsync, isPending } = useWriteContract();
+  const [withdrawTxHash, setWithdrawTxHash] = useState<`0x${string}` | undefined>();
+  const {
+    isLoading: isWithdrawConfirming,
+    isSuccess: isWithdrawConfirmed,
+    isError: isWithdrawFailed,
+  } = useWaitForTransactionReceipt({ hash: withdrawTxHash, chainId: polygon.id });
 
   const refetchAll = useCallback(() => {
     refetchBalance();
@@ -191,72 +154,40 @@ export default function BaseVaultPage() {
 
   const handleWithdraw = async () => {
     if (!address || !hasVault || !withdrawAmount) return;
-    const amount = parseUnits(withdrawAmount, 6);
-    setTxStatus("Withdrawing...");
-
-    // Strategy 1: Try 1-arg withdraw(usdcAmount) — uses separate ABI to avoid overload confusion
+    const assets = parseUnits(withdrawAmount, 6);
+    setTxStatus("Submitting withdraw...");
     try {
-      await writeContractAsync({
+      const hash = await writeContractAsync({
         address: addresses.vault as `0x${string}`,
-        abi: VAULT_WITHDRAW_1ARG_ABI,
+        abi: VAULT_ABI,
         functionName: "withdraw",
-        args: [amount],
+        args: [assets, address, address],
         chainId: polygon.id,
       });
-      setTxStatus("Withdrawal confirmed!");
-      setWithdrawAmount("");
-      refetchAll();
-      setTimeout(() => setTxStatus(""), 3000);
-      return;
-    } catch (err1) {
-      console.warn("[vault] 1-arg withdraw failed, trying 3-arg:", err1);
+      setWithdrawTxHash(hash);
+      setTxStatus("Withdraw submitted, waiting for confirmation...");
+    } catch (err) {
+      const msg =
+        err && typeof err === "object" && "shortMessage" in err
+          ? String((err as any).shortMessage)
+          : err instanceof Error
+          ? err.message
+          : "Unknown error";
+      setTxStatus(`Withdraw failed: ${msg}`);
     }
-
-    // Strategy 2: Try 3-arg withdraw(assets, receiver, owner)
-    try {
-      setTxStatus("Trying alternative withdraw method...");
-      await writeContractAsync({
-        address: addresses.vault as `0x${string}`,
-        abi: VAULT_WITHDRAW_3ARG_ABI,
-        functionName: "withdraw",
-        args: [amount, address, address],
-        chainId: polygon.id,
-      });
-      setTxStatus("Withdrawal confirmed!");
-      setWithdrawAmount("");
-      refetchAll();
-      setTimeout(() => setTxStatus(""), 3000);
-      return;
-    } catch (err2) {
-      console.warn("[vault] 3-arg withdraw failed, trying redeem:", err2);
-    }
-
-    // Strategy 3: Fallback to redeem(shares, receiver, owner)
-    // Convert amount to shares using convertToShares or use maxRedeem
-    try {
-      setTxStatus("Trying redeem fallback...");
-      if (maxRedeem && maxRedeem > BigInt(0)) {
-        // If user wants to withdraw all, use maxRedeem
-        const redeemShares = amount >= (maxWithdraw || BigInt(0)) ? maxRedeem : amount;
-        await writeContractAsync({
-          address: addresses.vault as `0x${string}`,
-          abi: VAULT_REDEEM_ABI,
-          functionName: "redeem",
-          args: [redeemShares, address, address],
-          chainId: polygon.id,
-        });
-        setTxStatus("Withdrawal (via redeem) confirmed!");
-        setWithdrawAmount("");
-        refetchAll();
-        setTimeout(() => setTxStatus(""), 3000);
-        return;
-      }
-    } catch (err3) {
-      console.error("[vault] redeem also failed:", err3);
-    }
-
-    setTxStatus("Withdrawal failed: All methods failed. The vault may have insufficient idle liquidity (funds are borrowed). Try a smaller amount.");
   };
+
+  useEffect(() => {
+    if (isWithdrawConfirmed) {
+      setTxStatus("Withdraw confirmed!");
+      setWithdrawAmount("");
+      refetchAll();
+      setTimeout(() => setTxStatus(""), 3000);
+    }
+    if (isWithdrawFailed) {
+      setTxStatus("Withdraw transaction reverted on-chain.");
+    }
+  }, [isWithdrawConfirmed, isWithdrawFailed, refetchAll]);
 
   const utilPct = utilizationBps != null ? Number(utilizationBps) / 100 : 0;
   const utilColor = utilPct > 80 ? "text-red-400" : utilPct > 50 ? "text-[#f59e0b]" : "text-[#00ff88]";
@@ -305,12 +236,6 @@ export default function BaseVaultPage() {
                 <div className="px-5 py-3 flex justify-between">
                   <span className="text-xs text-[#666]">Borrowed</span>
                   <span className="text-xs font-semibold text-white mono">${fmt(totalBorrowed)}</span>
-                </div>
-                <div className="px-5 py-3 flex justify-between">
-                  <span className="text-xs text-[#666]">Available</span>
-                  <span className="text-xs font-semibold text-[#00ff88] mono">
-                    ${totalAssets != null && totalBorrowed != null ? fmt(totalAssets - totalBorrowed) : "—"}
-                  </span>
                 </div>
                 <div className="px-5 py-3 flex justify-between">
                   <span className="text-xs text-[#666]">Insurance</span>
@@ -451,7 +376,7 @@ export default function BaseVaultPage() {
                 {/* Status Message */}
                 {txStatus && (
                   <div className={`mt-4 rounded-lg px-4 py-2.5 text-xs border ${
-                    txStatus.includes("confirmed")
+                    txStatus.includes("confirmed") || txStatus.includes("Approval confirmed")
                       ? "bg-[#00ff88]/5 border-[#00ff88]/20 text-[#00ff88]"
                       : txStatus.includes("failed")
                       ? "bg-red-500/5 border-red-500/20 text-red-400"

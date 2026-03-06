@@ -419,7 +419,7 @@ export default function RealPolymarketTrade({ market, selectedOutcome, collatera
       setStep("done");
       return false;
     }
-  }, []);
+  }, [addresses.marginEngine, addresses.marketId]);
 
   /* ── Step 1: Open position on Polygon vault (borrow) ── */
   const startBorrow = useCallback(async () => {

@@ -13,13 +13,13 @@ export default function TradeDemoPage() {
       <Navbar />
       <main className="mx-auto max-w-7xl px-4 py-6 space-y-6">
         {/* Market Header — refreshes every 1s */}
-        <TradingHeader refreshMs={1000} />
+        <TradingHeader />
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left column: Chart + Positions */}
           <div className="lg:col-span-2 space-y-6">
             {/* Live Chart — refreshes every 5s (chart data doesn't change as fast) */}
-            <PolymarketLiveChart refreshMs={5000} />
+            <PolymarketLiveChart />
 
             {/* Open Positions */}
             <PolymarketPositionVerify />

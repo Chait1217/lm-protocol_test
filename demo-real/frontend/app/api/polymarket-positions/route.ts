@@ -1,14 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const WALLET = "0x6CcBdc898016F2E49ada47496696d635b8D4fB31";
 const DATA_API = "https://data-api.polymarket.com";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const url = `${DATA_API}/positions?user=${WALLET}&sizeThreshold=0&limit=50`;
+    const { searchParams } = new URL(req.url);
+    const wallet = searchParams.get("user") || searchParams.get("wallet");
+
+    if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      const res = NextResponse.json(
+        { success: false, error: "Missing or invalid wallet address. Pass ?user=0x..." },
+        { status: 400 }
+      );
+      res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      res.headers.set("Pragma", "no-cache");
+      res.headers.set("Expires", "0");
+      return res;
+    }
+
+    const url = `${DATA_API}/positions?user=${wallet}&sizeThreshold=0&limit=50`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
 
@@ -21,18 +34,26 @@ export async function GET() {
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      return NextResponse.json(
+      const errorResponse = NextResponse.json(
         { success: false, error: `Data API returned ${res.status}: ${text.slice(0, 200)}` },
         { status: 502 }
       );
+      errorResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      errorResponse.headers.set("Pragma", "no-cache");
+      errorResponse.headers.set("Expires", "0");
+      return errorResponse;
     }
 
     const raw = await res.json();
     if (!Array.isArray(raw)) {
-      return NextResponse.json(
+      const badFormat = NextResponse.json(
         { success: false, error: "Unexpected response format", positions: [] },
         { status: 502 }
       );
+      badFormat.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      badFormat.headers.set("Pragma", "no-cache");
+      badFormat.headers.set("Expires", "0");
+      return badFormat;
     }
 
     // Filter positions with size > 0.001
@@ -57,15 +78,23 @@ export async function GET() {
         oppositeAsset: p.oppositeAsset || "",
       }));
 
-    return NextResponse.json({
+    const okResponse = NextResponse.json({
       success: true,
       count: positions.length,
       positions,
     });
+    okResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    okResponse.headers.set("Pragma", "no-cache");
+    okResponse.headers.set("Expires", "0");
+    return okResponse;
   } catch (err: any) {
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       { success: false, error: err?.message || String(err), positions: [] },
       { status: 500 }
     );
+    errorResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    errorResponse.headers.set("Pragma", "no-cache");
+    errorResponse.headers.set("Expires", "0");
+    return errorResponse;
   }
 }

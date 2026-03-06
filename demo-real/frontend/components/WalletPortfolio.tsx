@@ -1,6 +1,7 @@
 "use client";
 
 import { useAccount, useBalance, useReadContract } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { getContractAddresses, MOCK_USDC_ABI, VAULT_ABI } from "@/lib/contracts";
 import { formatUSDC } from "@/lib/utils";
 import { Wallet, Coins, Landmark, CircleDollarSign } from "lucide-react";
@@ -24,6 +25,7 @@ export default function WalletPortfolio() {
     abi: MOCK_USDC_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    chainId: polygon.id,
   });
 
   // Vault shares value
@@ -32,6 +34,7 @@ export default function WalletPortfolio() {
     abi: VAULT_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
+    chainId: polygon.id,
   });
 
   const { data: vaultShareValue } = useReadContract({
@@ -39,6 +42,7 @@ export default function WalletPortfolio() {
     abi: VAULT_ABI,
     functionName: "convertToAssets",
     args: vaultShares ? [vaultShares as bigint] : undefined,
+    chainId: polygon.id,
   });
 
   if (!isConnected) return null;

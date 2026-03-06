@@ -1,129 +1,93 @@
 import { NextResponse } from "next/server";
 
-// ── Token IDs for "Will the Iranian regime fall by June 30?" ──
-const YES_TOKEN =
-  "38397507750621893057346880033441136112987238933685677349709401910643842844855";
-const NO_TOKEN =
-  "95949957895141858444199258452803633110472396604599808168788254125381075552218";
+/**
+ * GET /api/polymarket-live
+ *
+ * Fetches REAL-TIME market data by calling the CLOB API directly.
+ * 
+ * VERIFIED WORKING ENDPOINTS (tested 2026-03-05):
+ *   GET https://clob.polymarket.com/price?token_id={TOKEN}&side=BUY   → {"price":"0.38"}
+ *   GET https://clob.polymarket.com/price?token_id={TOKEN}&side=SELL  → {"price":"0.39"}
+ *   GET https://clob.polymarket.com/midpoint?token_id={TOKEN}         → {"mid":"0.385"}
+ *   GET https://clob.polymarket.com/spread?token_id={TOKEN}           → {"spread":"0.01"}
+ *   GET https://clob.polymarket.com/last-trade-price?token_id={TOKEN} → {"price":"0.39","side":"BUY"}
+ *
+ * Also fetches volume from Gamma API (cached, less critical).
+ */
+
 const CLOB = "https://clob.polymarket.com";
 const GAMMA = "https://gamma-api.polymarket.com";
-const GAMMA_SLUG = "will-the-iranian-regime-fall-by-june-30";
+
+const YES_TOKEN = "38397507750621893057346880033441136112987238933685677349709401910643842844855";
+const MARKET_SLUG = "will-the-iranian-regime-fall-by-june-30";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-async function safeFetch(url: string, timeoutMs = 4000): Promise<any> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchJson(url: string): Promise<any> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
 }
 
 export async function GET() {
   try {
-    // Fetch BOTH YES and NO token data from CLOB in parallel
-    const [
-      yesBidData, yesAskData, yesMidData, yesSpreadData, yesLastData,
-      noBidData, noAskData, noMidData,
-      gammaData,
-    ] = await Promise.all([
-      // YES token
-      safeFetch(`${CLOB}/price?token_id=${YES_TOKEN}&side=buy`),
-      safeFetch(`${CLOB}/price?token_id=${YES_TOKEN}&side=sell`),
-      safeFetch(`${CLOB}/midpoint?token_id=${YES_TOKEN}`),
-      safeFetch(`${CLOB}/spread?token_id=${YES_TOKEN}`),
-      safeFetch(`${CLOB}/last-trade-price?token_id=${YES_TOKEN}`),
-      // NO token
-      safeFetch(`${CLOB}/price?token_id=${NO_TOKEN}&side=buy`),
-      safeFetch(`${CLOB}/price?token_id=${NO_TOKEN}&side=sell`),
-      safeFetch(`${CLOB}/midpoint?token_id=${NO_TOKEN}`),
-      // Gamma for 24h volume only
-      safeFetch(`${GAMMA}/markets?slug=${GAMMA_SLUG}`),
+    // Fetch all CLOB data in parallel for speed
+    const [bidData, askData, midData, spreadData, lastTradeData, gammaData] = await Promise.all([
+      fetchJson(`${CLOB}/price?token_id=${YES_TOKEN}&side=BUY`),
+      fetchJson(`${CLOB}/price?token_id=${YES_TOKEN}&side=SELL`),
+      fetchJson(`${CLOB}/midpoint?token_id=${YES_TOKEN}`),
+      fetchJson(`${CLOB}/spread?token_id=${YES_TOKEN}`),
+      fetchJson(`${CLOB}/last-trade-price?token_id=${YES_TOKEN}`),
+      fetchJson(`${GAMMA}/markets?slug=${MARKET_SLUG}`),
     ]);
 
-    // Parse YES CLOB responses
-    const yesBestBid = yesBidData?.price ? parseFloat(yesBidData.price) : null;
-    const yesBestAsk = yesAskData?.price ? parseFloat(yesAskData.price) : null;
-    const yesMidpoint = yesMidData?.mid ? parseFloat(yesMidData.mid) : null;
-    const yesSpread = yesSpreadData?.spread ? parseFloat(yesSpreadData.spread) : null;
-    const yesLastPrice = yesLastData?.price ? parseFloat(yesLastData.price) : null;
-    const yesLastSide: string | null = yesLastData?.side ?? null;
+    // Parse CLOB responses — all return string values
+    const bestBid = bidData?.price ? parseFloat(bidData.price) : null;
+    const bestAsk = askData?.price ? parseFloat(askData.price) : null;
+    const midpoint = midData?.mid ? parseFloat(midData.mid) : null;
+    const spread = spreadData?.spread ? parseFloat(spreadData.spread) : null;
+    const lastTradePrice = lastTradeData?.price ? parseFloat(lastTradeData.price) : null;
 
-    // Parse NO CLOB responses
-    const noBestBid = noBidData?.price ? parseFloat(noBidData.price) : null;
-    const noBestAsk = noAskData?.price ? parseFloat(noAskData.price) : null;
-    const noMidpoint = noMidData?.mid ? parseFloat(noMidData.mid) : null;
+    // YES price = midpoint (or best bid if midpoint unavailable)
+    const yesPrice = midpoint ?? bestBid ?? lastTradePrice ?? null;
+    const noPrice = yesPrice != null ? 1 - yesPrice : null;
 
-    // YES price: prefer midpoint, fallback to average of bid/ask, fallback to last trade
-    const yesPrice = yesMidpoint
-      ?? (yesBestBid != null && yesBestAsk != null ? (yesBestBid + yesBestAsk) / 2 : null)
-      ?? yesLastPrice
-      ?? null;
+    // Gamma data for volume and 24h change (less critical, can be stale)
+    const gamma = Array.isArray(gammaData) ? gammaData[0] : gammaData;
+    const volume24hr = gamma?.volume24hr ? parseFloat(String(gamma.volume24hr)) : null;
+    const oneDayPriceChange = gamma?.oneDayPriceChange ? parseFloat(String(gamma.oneDayPriceChange)) : 0;
 
-    // NO price: prefer NO midpoint, fallback to 1 - yesPrice
-    const noPrice = noMidpoint
-      ?? (noBestBid != null && noBestAsk != null ? (noBestBid + noBestAsk) / 2 : null)
-      ?? (yesPrice != null ? 1 - yesPrice : null);
-
-    // Calculate spreads from bid/ask
-    const yesSpreadCalc = yesSpread
-      ?? (yesBestBid != null && yesBestAsk != null ? yesBestAsk - yesBestBid : null);
-    const noSpreadCalc = noBestBid != null && noBestAsk != null
-      ? noBestAsk - noBestBid
-      : null;
-
-    // Gamma data for volume
-    const gammaMarket = Array.isArray(gammaData) ? gammaData[0] : gammaData;
-    const volume24hr = gammaMarket?.volume24hr
-      ? parseFloat(String(gammaMarket.volume24hr))
-      : null;
-    const oneDayPriceChange = gammaMarket?.oneDayPriceChange
-      ? parseFloat(String(gammaMarket.oneDayPriceChange))
-      : 0;
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       market: {
-        // YES data
         yesPrice,
-        yesBestBid: yesBestBid,
-        yesBestAsk: yesBestAsk,
-        yesMidpoint,
-        yesSpread: yesSpreadCalc,
-        // NO data
         noPrice,
-        noBestBid: noBestBid,
-        noBestAsk: noBestAsk,
-        noMidpoint,
-        noSpread: noSpreadCalc,
-        // Legacy fields (for backward compat)
-        bestBid: yesBestBid,
-        bestAsk: yesBestAsk,
-        midpoint: yesMidpoint,
-        spread: yesSpreadCalc,
-        // Trade info
-        lastTradePrice: yesLastPrice,
-        lastTradeSide: yesLastSide,
+        bestBid,
+        bestAsk,
+        midpoint,
+        spread,
+        lastTradePrice,
+        lastTradeSide: lastTradeData?.side || null,
         volume24hr,
         oneDayPriceChange,
+        // Keep outcomePrices for backward compat
         outcomePrices: [yesPrice, noPrice],
       },
     });
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    response.headers.set("Pragma", "no-cache");
+    response.headers.set("Expires", "0");
+    return response;
   } catch (err) {
-    return NextResponse.json(
-      { success: false, error: String(err) },
+    console.error("polymarket-live error:", err);
+    const errorResponse = NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 }
     );
+    errorResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    errorResponse.headers.set("Pragma", "no-cache");
+    errorResponse.headers.set("Expires", "0");
+    return errorResponse;
   }
 }

@@ -34,8 +34,8 @@ export function usePolymarketSafe() {
 
   const hasBuilderCreds = !!(
     process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_API_KEY &&
-    process.env.POLYMARKET_BUILDER_SECRET &&
-    process.env.POLYMARKET_BUILDER_PASSPHRASE
+    process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_SECRET &&
+    process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_PASSPHRASE
   );
 
   const resolveSafe = useCallback(async () => {
@@ -49,8 +49,8 @@ export function usePolymarketSafe() {
       const { RelayClient } = await import("@polymarket/builder-relayer-client");
       const { BuilderConfig } = await import("@polymarket/builder-signing-sdk");
       const key = process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_API_KEY!;
-      const secret = process.env.POLYMARKET_BUILDER_SECRET!;
-      const passphrase = process.env.POLYMARKET_BUILDER_PASSPHRASE!;
+      const secret = process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_SECRET!;
+      const passphrase = process.env.NEXT_PUBLIC_POLYMARKET_BUILDER_PASSPHRASE!;
       const builderConfig = new BuilderConfig({
         localBuilderCreds: { key, secret, passphrase },
       });

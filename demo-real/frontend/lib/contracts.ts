@@ -61,7 +61,7 @@ export const USDC_ABI = [
 export const MOCK_USDC_ABI = USDC_ABI;
 
 export const VAULT_ABI = [
-  // Deposit / Withdraw
+  // Deposit
   {
     name: "deposit",
     type: "function",
@@ -69,13 +69,7 @@ export const VAULT_ABI = [
     inputs: [{ name: "usdcAmount", type: "uint256" }],
     outputs: [{ name: "shares", type: "uint256" }],
   },
-  {
-    name: "withdraw",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "usdcAmount", type: "uint256" }],
-    outputs: [{ name: "shares", type: "uint256" }],
-  },
+  // Withdraw — ERC-4626 standard (3-arg)
   {
     name: "withdraw",
     type: "function",
