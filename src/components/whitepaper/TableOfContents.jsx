@@ -7,7 +7,6 @@ const SECTIONS = [
   { id: "problem", label: "The Problem & Opportunity" },
   { id: "solution", label: "The Solution: LM Infrastructure" },
   { id: "business", label: "Business Model & Revenue" },
-  { id: "tokenomics", label: "Tokenomics (LMP)" },
   { id: "roadmap", label: "Roadmap (2026)" },
   { id: "scenarios", label: "Performance Scenarios" },
   { id: "risks", label: "Risk Mitigation" },

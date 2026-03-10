@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useConnect, useConnectors, useEnsAvatar, useEnsName } from "wagmi";
@@ -216,6 +216,107 @@ const MarketTicker = () => {
             })}
           </motion.div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// 4 random live Polymarket bets (title + YES/NO quotes)
+const RandomPolymarketGrid = () => {
+  const [cards, setCards] = useState([]);
+
+  const fetchRandomMarkets = useCallback(async () => {
+    try {
+      const res = await fetch(`${POLYMARKET_APIS.GAMMA}/markets?active=true&limit=40`);
+      const data = await res.json();
+      const markets = Array.isArray(data) ? data : data.markets || data.data || [];
+      const filtered = markets.filter(
+        (m) =>
+          m.active &&
+          !m.closed &&
+          !m.archived &&
+          (m.volumeNum || 0) > 0
+      );
+      if (filtered.length === 0) return;
+      // Shuffle and take 4
+      const shuffled = [...filtered].sort(() => Math.random() - 0.5).slice(0, 4);
+      const mapped = shuffled.map((m) => {
+        const basePrice =
+          m.lastTradePrice ??
+          (Array.isArray(m.outcomes) && m.outcomes.length > 0 ? m.outcomes[0].price : null);
+        const yesPrice = typeof basePrice === "number" ? basePrice : null;
+        const noPrice = yesPrice != null ? 1 - yesPrice : null;
+        const yesPct = yesPrice != null ? Math.round(yesPrice * 1000) / 10 : null;
+        const noPct = noPrice != null ? Math.round(noPrice * 1000) / 10 : yesPct != null ? Math.round((100 - yesPct) * 10) / 10 : null;
+        const url = m.slug
+          ? `https://polymarket.com/market/${m.slug}`
+          : `https://polymarket.com/search?term=${encodeURIComponent(m.question || m.slug || "")}`;
+        return {
+          id: m.conditionId || m.id,
+          title: m.question || m.slug || "Polymarket Market",
+          yesPct,
+          noPct,
+          url,
+        };
+      });
+      setCards(mapped);
+    } catch (e) {
+      console.error("Failed to fetch random Polymarket bets", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRandomMarkets();
+    const id = setInterval(fetchRandomMarkets, 8000);
+    return () => clearInterval(id);
+  }, [fetchRandomMarkets]);
+
+  const baseCards =
+    cards.length > 0
+      ? cards
+      : trendingPolymarketMarkets.slice(0, 4).map((m) => {
+          const raw = typeof m.odds === "string" ? parseFloat(m.odds) : NaN;
+          const yesPct = Number.isFinite(raw) ? raw : null;
+          const noPct = Number.isFinite(raw) ? Math.max(0, 100 - raw) : null;
+          const url = m.title
+            ? `https://polymarket.com/search?term=${encodeURIComponent(m.title)}`
+            : "https://polymarket.com";
+          return {
+            id: m.id,
+            title: m.title,
+            yesPct,
+            noPct,
+            url,
+          };
+        });
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
+      <h2 className="text-sm sm:text-base font-semibold text-gray-300 mb-2">
+        Live Polymarket Bets
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {baseCards.map((c) => (
+          <a
+            key={c.id}
+            href={c.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-[#00FF99]/20 bg-black/60 p-3 hover:border-[#00FF99]/50 hover:bg-black transition-colors"
+          >
+            <p className="text-xs sm:text-sm text-white font-semibold mb-2 line-clamp-3">
+              {c.title}
+            </p>
+            <div className="flex items-center justify-between text-[10px] sm:text-xs">
+              <span className="text-[#00FF99] font-mono">
+                YES {c.yesPct != null ? `${c.yesPct.toFixed(1)}%` : "--"}
+              </span>
+              <span className="text-red-400 font-mono">
+                NO {c.noPct != null ? `${c.noPct.toFixed(1)}%` : "--"}
+              </span>
+            </div>
+          </a>
+        ))}
       </div>
     </div>
   );
@@ -1043,6 +1144,9 @@ const MarketPage = ({ setCurrentPage, onAccessAlphaClick }) => {
         </div>
       </div>
 
+      {/* 4 random live Polymarket bets above the main integration */}
+      <RandomPolymarketGrid />
+
       {/* Bloc marché principal – Live Polymarket Integration (compact) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-4 sm:mt-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
@@ -1144,12 +1248,12 @@ const interestSplitData = [
 ];
 const openFeeSplitData = [
   { name: "LPs 50%: $10", value: 50, color: "#00FF99" },
-  { name: "$LMP Buyback 30%: $6", value: 30, color: "#22D3EE" },
+  { name: "Insurance 30%: $6", value: 30, color: "#22D3EE" },
   { name: "Treasury 20%: $4", value: 20, color: "#F59E0B" },
 ];
 const liquidationFeeSplitData = [
   { name: "LPs 50%: $25", value: 50, color: "#00FF99" },
-  { name: "$LMP Buyback 30%: $15", value: 30, color: "#22D3EE" },
+  { name: "Insurance 30%: $15", value: 30, color: "#22D3EE" },
   { name: "Treasury 20%: $10", value: 20, color: "#F59E0B" },
 ];
 
@@ -1230,53 +1334,7 @@ const ProtocolPage = () => {
             </div>
           </div>
         </div>
-        <div className="bg-gradient-to-br from-gray-900 to-black p-4 sm:p-6 md:p-10 rounded-2xl border border-[#00FF99]/20 mb-10 sm:mb-16 overflow-x-hidden">
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-4 sm:mb-6 md:mb-8 text-center">$LMP Tokenomics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-            <div>
-              <h3 className="text-[#00FF99] font-bold text-xl mb-4">Utility</h3>
-              <ul className="space-y-3">
-                {[
-                  "Access to exclusive and early markets",
-                  "Increased max leverage up to 7.5x (vs 5x regular)",
-                  "Reduced borrow and mirroring costs by up to 50%",
-                  "Priority execution queue for faster fills and lower slippage",
-                  "Reduced liquidation buffer (25% vs 30%)",
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-3 text-gray-300">
-                    <Circle className="w-2 h-2 mt-2 text-[#00FF99] fill-current" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-[#00FF99] font-bold text-xl mb-4">Distribution</h3>
-              <div className="space-y-4">
-                {[
-                  { label: "Liquidity Pool", pct: 45, cls: "bg-[#00FF99]" },
-                  { label: "veVirtual Airdrop", pct: 2, cls: "bg-[#00FF99]/90" },
-                  { label: "Virtuals Ecosystem Airdrop", pct: 3, cls: "bg-[#00FF99]/70" },
-                  { label: "Automated Capital Formation", pct: 25, cls: "bg-[#00FF99]/50" },
-                  { label: "Team", pct: 25, cls: "bg-[#00FF99]/30" },
-                ].map((row) => (
-                  <div key={row.label}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-300">{row.label}</span>
-                      <span className="text-white font-bold">{row.pct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden mt-2">
-                      <div className={`h-full ${row.cls}`} style={{ width: `${row.pct}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="mt-6 p-4 bg-[#00FF99]/5 border border-[#00FF99]/20 rounded-lg text-center">
-            <p className="text-gray-300">Launching on <span className="text-[#00FF99] font-bold">Virtuals Protocol</span></p>
-          </div>
-        </div>
+        {/* $LMP Tokenomics section hidden for now */}
         <div className="overflow-visible">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-8 sm:mb-12 text-center">Roadmap</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 overflow-visible">

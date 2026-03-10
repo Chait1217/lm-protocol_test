@@ -200,7 +200,7 @@ export default function WhitepaperPage() {
                 </div>
 
                 {/* 4.3 Revenue Distribution */}
-                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Revenue Distribution (Real Yield + $LMP Flywheel)</h3>
+                <h3 className="text-lg font-semibold text-[#00FF99] mb-3">Revenue Distribution (Real Yield + Insurance Buffer)</h3>
                 <p className="text-gray-300 leading-relaxed mb-4">Every net profit dollar:</p>
                 <div className="grid gap-3 mb-8">
                   <div className="flex items-center justify-between p-4 rounded-xl bg-[#00FF99]/5 border border-[#00FF99]/20">
@@ -208,8 +208,8 @@ export default function WhitepaperPage() {
                     <span className="text-gray-400 text-sm">USDC yield</span>
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
-                    <span className="text-cyan-400 font-bold text-lg">30% → $LMP Buyback</span>
-                    <span className="text-gray-400 text-sm">Constant demand</span>
+                    <span className="text-cyan-400 font-bold text-lg">30% → Insurance</span>
+                    <span className="text-gray-400 text-sm">Risk buffer &amp; safeguards</span>
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
                     <span className="text-amber-400 font-bold text-lg">20% → Treasury</span>
@@ -226,7 +226,7 @@ export default function WhitepaperPage() {
                         <th className="text-left py-3 px-3 text-gray-400 font-medium">Fee Source</th>
                         <th className="text-left py-3 px-3 text-gray-400 font-medium">Rate</th>
                         <th className="text-right py-3 px-3 text-[#00FF99] font-medium">LP 50%</th>
-                        <th className="text-right py-3 px-3 text-cyan-400 font-medium">$LMP 30%</th>
+                        <th className="text-right py-3 px-3 text-cyan-400 font-medium">Insurance 30%</th>
                         <th className="text-right py-3 px-3 text-amber-400 font-medium">Treasury 20%</th>
                       </tr>
                     </thead>
@@ -257,61 +257,14 @@ export default function WhitepaperPage() {
                 </div>
               </Section>
 
-              {/* Tokenomics */}
-              <Section id="tokenomics" onVisible={setActiveSection}>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 pb-2 border-b border-[#00FF99]/20">
-                  5. Tokenomics (LMP)
-                </h2>
-
-                <h3 className="text-lg font-semibold text-[#00FF99] mb-4">$LMP Tokenomics Distribution</h3>
-                <div className="space-y-4 mb-8">
-                  {[
-                    { label: "Liquidity Pool", pct: 45 },
-                    { label: "veVirtual Airdrop", pct: 2 },
-                    { label: "Virtuals Ecosystem Airdrop", pct: 3 },
-                    { label: "Automated Capital Formation", pct: 25 },
-                    { label: "Team", pct: 25 },
-                  ].map((row) => (
-                    <div key={row.label}>
-                      <div className="flex justify-between items-center text-gray-300">
-                        <span>{row.label}</span>
-                        <span className="text-white font-bold">{row.pct}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden mt-2">
-                        <div className="h-full bg-[#00FF99]/70 rounded-full" style={{ width: `${row.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <h3 className="text-lg font-semibold text-[#00FF99] mb-4">$LMP Staker Advantages</h3>
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">Access to exclusive and early markets</span>
-                    <span className="text-gray-400 text-sm">Early access</span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">Value capture via buyback & distribute / burn</span>
-                    <span className="text-gray-400 text-sm">Revenue buys back $LMP—burned or distributed</span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">7.5x Max Leverage</span>
-                    <span className="text-gray-400 text-sm">vs 5x regular</span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">Up to 50% Fee Discounts</span>
-                    <span className="text-gray-400 text-sm">Borrow + mirroring costs</span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">Priority Execution Queue</span>
-                    <span className="text-gray-400 text-sm">Faster fills, less slippage</span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-gray-900/60 border border-[#00FF99]/10">
-                    <span className="text-white font-semibold">Reduced Liquidation Buffer</span>
-                    <span className="text-gray-400 text-sm">25% vs 30%</span>
-                  </div>
-                </div>
-              </Section>
+              {/* Tokenomics (hidden) */}
+              {false && (
+                <Section id="tokenomics" onVisible={setActiveSection}>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 pb-2 border-b border-[#00FF99]/20">
+                    5. Tokenomics (LMP)
+                  </h2>
+                </Section>
+              )}
 
               {/* Roadmap */}
               <Section id="roadmap" onVisible={setActiveSection}>
